@@ -5,7 +5,7 @@ fn it_works(){
     use chrono::TimeZone;
     use semilattice_script::*;
 
-    let dir="./yg-test/";
+    let dir="./ss-test/";
     if std::path::Path::new(dir).exists(){
         std::fs::remove_dir_all(dir).unwrap();
         std::fs::create_dir_all(dir).unwrap();

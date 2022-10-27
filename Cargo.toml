@@ -5,7 +5,10 @@ edition = "2018"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+description = "You can read and write data using XML and output various structured documents.You can also program using javascript(v8)."
+
+repository = "https://github.com/OdenShirataki/semilattice-script"
 
 license = "MIT/Apache-2.0"
 
@@ -19,20 +22,4 @@ v8="0.54"
 rustc-hash = { version = "1.0", default-features = false }
 rand="0.8"
 
-[dependencies.semilattice-database]
-path = "../semilattice-database"
-
-[dependencies.avltriee]
-path = "../avltriee"
-
-[dependencies.file_mmap]
-path = "../file_mmap"
-
-[dependencies.idx_sized]
-path = "../idx_sized"
-
-[dependencies.various_data_file]
-path = "../various_data_file"
-
-[dependencies.idx_binary]
-path = "../idx_binary"
+semilattice-database={path="../semilattice-database" , version="0.27"}
