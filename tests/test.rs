@@ -68,7 +68,7 @@ fn it_works(){
     </ss>"#);
     println!("{}",r);
 
-    //use javasecript
+    //use javascript
     let r=ss.exec(r#"<ss>
         <ss:script>
             const ymd=function(){

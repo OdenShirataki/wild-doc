@@ -146,14 +146,13 @@ impl Script{
                                         ,std::str::from_utf8(collection_name)
                                     ){
                                         if let Some(collection_id)=self.database.clone().borrow().collection_id(collection_name){
-                                            let condition=search::make_conditions(&attr,reader);
+                                            let condition=search::make_conditions(self,&attr,reader);
                                             search_map.insert(name.to_owned(),(collection_id,condition));
                                         }
                                     }
                                 }
                             }
                             ,b"ss:result"=>{
-                                println!("search");
                                 let attr=xml_util::attr2hash_map(&e);
                                 if let (
                                     Some(var)

@@ -6,13 +6,16 @@ use quick_xml::{
 use semilattice_database::{
     Activity
     ,Condition
+    ,CollectionRow
     ,search
 };
 
 use crate::xml_util::{self, XmlAttr};
 
-pub(super) fn make_conditions(attr:&XmlAttr,reader: &mut Reader<&[u8]>)->Vec<Condition>{
-    let mut conditions=condition_loop(reader);
+use super::Script;
+
+pub(super) fn make_conditions(script:&Script,attr:&XmlAttr,reader: &mut Reader<&[u8]>)->Vec<Condition>{
+    let mut conditions=condition_loop(script,reader);
 
     let activity=attr.get("activity").map_or(
         Some(Activity::Active)
@@ -66,7 +69,7 @@ pub(super) fn make_conditions(attr:&XmlAttr,reader: &mut Reader<&[u8]>)->Vec<Con
     conditions
 }
 
-fn condition_loop(reader: &mut Reader<&[u8]>)->Vec<Condition>{
+fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>)->Vec<Condition>{
     let mut conditions=Vec::new();
     loop{
         if let Ok(next)=reader.read_event(){
@@ -86,16 +89,54 @@ fn condition_loop(reader: &mut Reader<&[u8]>)->Vec<Condition>{
                             reader.read_to_end(e.name()).unwrap();
                         }
                         ,b"narrow"=>{
-                            conditions.push(Condition::Narrow(condition_loop(reader)));
+                            conditions.push(Condition::Narrow(condition_loop(script,reader)));
                         }
                         ,b"wide"=>{
-                            conditions.push(Condition::Wide(condition_loop(reader)));
+                            conditions.push(Condition::Wide(condition_loop(script,reader)));
                         }
                         ,b"depend"=>{
-                            /*
-                            conditions.push(Condition::Depend(
-
-                            )); */
+                            let attrs=xml_util::attr2hash_map(e);
+                            if let (
+                                Some(row)
+                                ,Some(collection_name)
+                            )=(
+                                attrs.get("row")
+                                ,attrs.get("collection")
+                            ){
+                                if let (
+                                    Ok(row)
+                                    ,Ok(collection_name)
+                                )=(
+                                    std::str::from_utf8(row)
+                                    ,std::str::from_utf8(collection_name)
+                                ){
+                                    if let (
+                                        Ok(row)
+                                        ,Some(collection_id)
+                                    )=(
+                                        row.parse()
+                                        ,script.database.clone().borrow().collection_id(collection_name)
+                                    ){
+                                        let key:&str=if let Some(key)=attrs.get("key"){
+                                            if let Ok(key)=std::str::from_utf8(key){
+                                                key
+                                            }else{
+                                                ""
+                                            }
+                                        }else{
+                                            ""
+                                        };
+                                        conditions.push(Condition::Depend(
+                                            search::Depend::new(
+                                                key,CollectionRow::new(
+                                                    collection_id
+                                                    ,row
+                                                )
+                                            )
+                                        ));
+                                    }
+                                }
+                            }
                             //reader.read_to_end(e.name()).unwrap();
                             //TODO:依存関係を指定しての検索。versatile-dataとは別系統の条件が必要になる。semilatticeに実装しなければならない
                         }
