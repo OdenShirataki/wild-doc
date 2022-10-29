@@ -12,9 +12,6 @@ if std::path::Path::new(dir).exists(){
 }else{
     std::fs::create_dir_all(dir).unwrap();
 }
-
-let mut ss=SemilatticeScript::new(dir).unwrap();
-
 let mut ss=SemilatticeScript::new(dir).unwrap();
 
 //update data.
@@ -41,11 +38,11 @@ let r=ss.exec(r#"<ss>
     </ss:search>
     <ss:result var="q" search="p">
         <div>
-            find <ss:print value="ss.v('q').length" /> persons.
+            find <ss:print ss:value="ss.v('q').length" /> persons.
         </div>
         <ul>
             <ss:for var="r" index="i" in="ss.v('q')"><li>
-                <ss:print value="ss.v('r').row" /> : <ss:print value="ss.v('r').field('name')" /> : <ss:print value="ss.v('r').field('country')" />
+                <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
             </li></ss:for>
         </ul>
     </ss:result>
@@ -59,11 +56,11 @@ let r=ss.exec(r#"<ss>
     </ss:search>
     <ss:result var="q" search="p">
         <div>
-            find <ss:print value="ss.v('q').length" /> persons from the US.
+            find <ss:print ss:value="ss.v('q').length" /> persons from the US.
         </div>
         <ul>
             <ss:for var="r" index="i" in="ss.v('q')"><li>
-                <ss:print value="ss.v('r').row" /> : <ss:print value="ss.v('r').field('name')" /> : <ss:print value="ss.v('r').field('country')" />
+                <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
             </li></ss:for>
         </ul>
     </ss:result>
@@ -80,18 +77,48 @@ let r=ss.exec(r#"<ss>
         const uk="UK";
     </ss:script>
     <ss:search name="p" collection="person">
-        <field name="country" method="match" value="uk" />
+        <field name="country" method="match" ss:value="uk" />
     </ss:search>
     <ss:result var="q" search="p">
         <div>
-            <ss:print value="ymd()" />
+            <ss:print ss:value="ymd()" />
         </div>
         <div>
-            find <ss:print value="ss.v('q').length" /> persons from the <ss:print value="uk" />.
+            find <ss:print ss:value="ss.v('q').length" /> persons from the <ss:print ss:value="uk" />.
         </div>
         <ul>
             <ss:for var="r" index="i" in="ss.v('q')"><li>
-                <ss:print value="ss.v('r').row" /> : <ss:print value="ss.v('r').field('name')" /> : <ss:print value="ss.v('r').field('country')" />
+                <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
+            </li></ss:for>
+        </ul>
+    </ss:result>
+</ss>"#);
+println!("{}",r);
+
+//search in update section.
+ss.exec(r#"<ss><ss:session name="hoge">
+    <ss:update commit="1">
+        <ss:search name="person" collection="person"></ss:search>
+        <ss:result var="q" search="person">
+            <ss:for var="r" index="i" in="ss.v('q')">
+                hoge:<ss:print ss:value="ss.v('r').row" />
+                <collection name="person" ss:row="ss.v('r').row">
+                    <field name="name">Renamed <ss:print ss:value="ss.v('r').field('name')" /></field>
+                    <field name="country"><ss:print ss:value="ss.v('r').field('country')" /></field>
+                </collection>
+            </ss:for>
+        </ss:result>
+    </ss:update>
+</ss:session></ss>"#);
+let r=ss.exec(r#"<ss>
+    <ss:search name="p" collection="person"></ss:search>
+    <ss:result var="q" search="p">
+        <div>
+            find <ss:print ss:value="ss.v('q').length" /> persons.
+        </div>
+        <ul>
+            <ss:for var="r" index="i" in="ss.v('q')"><li>
+                <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
             </li></ss:for>
         </ul>
     </ss:result>

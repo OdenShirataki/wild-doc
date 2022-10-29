@@ -93,18 +93,8 @@ impl Script{
                         let name=e.name();
                         match name.as_ref(){
                             b"ss:session"=>{
-                                let session_name=match e.try_get_attribute(b"name"){
-                                    Ok(Some(ref value))=>{
-                                        match std::str::from_utf8(value.value.as_ref()){
-                                            Ok(session_name)=>{
-                                                crate::eval_result(scope,&session_name)
-                                            }
-                                            ,_=>"".to_string()
-                                        }
-                                    }
-                                    ,_=>"".to_string()
-                                }.trim().to_owned();
-                                
+                                let attr=xml_util::attr2hash_map(&e);
+                                let session_name=crate::attr_parse_or_static(scope,&attr,"name");
                                 if let Ok(mut session)=Session::new(&self.database.clone().borrow(),&session_name){
                                     if session_name!=""{
                                         if let Ok(Some(value))=e.try_get_attribute(b"initialize"){
@@ -113,22 +103,16 @@ impl Script{
                                             }
                                         }
                                     }
-                                    println!("session:{}",session_name);
                                     self.sessions.push(session);
                                 }else{
                                     xml_util::outer(&next,reader);
                                 }
                             }
                             ,b"ss:update"=>{
-                                let mut with_commit=false;
-                                if let Ok(Some(ref commit))=e.try_get_attribute(b"commit"){
-                                    if let Ok(commit)=std::str::from_utf8(&commit.value){
-                                        with_commit=crate::eval_result(scope,commit)=="1";
-                                    }
-                                }
+                                let attr=xml_util::attr2hash_map(&e);
+                                let with_commit=crate::attr_parse_or_static(scope,&attr,"commit")=="1";
                                 
                                 let inner_xml=self.parse(scope,reader,"ss:update");
-                                println!("inner_xml:{}",inner_xml);
                                 let mut inner_reader=Reader::from_str(&inner_xml);
                                 inner_reader.expand_empty_elements(true);
                                 let updates=update::make_update_struct(self,&mut inner_reader,scope);
@@ -144,102 +128,76 @@ impl Script{
                             }
                             ,b"ss:search"=>{
                                 let attr=xml_util::attr2hash_map(&e);
-                                if let (
-                                    Some(name)
-                                    ,Some(collection_name)
-                                )=(
-                                    attr.get("name")
-                                    ,attr.get("collection")
-                                ){
-                                    if let (
-                                        Ok(name)
-                                        ,Ok(collection_name)
-                                    )=(
-                                        std::str::from_utf8(name)
-                                        ,std::str::from_utf8(collection_name)
-                                    ){
-                                        let name=crate::eval_result(scope,name);
-                                        let collection_name=crate::eval_result(scope,collection_name);
-                                        if let Some(collection_id)=self.database.clone().borrow().collection_id(&collection_name){
-                                            let condition=search::make_conditions(self,&attr,reader,scope);
-                                            search_map.insert(name.to_owned(),(collection_id,condition));
-                                        }
+                                let name=crate::attr_parse_or_static(scope,&attr,"name");
+                                let collection_name=crate::attr_parse_or_static(scope,&attr,"collection");
+                                
+                                if name!="" && collection_name!=""{
+                                    if let Some(collection_id)=self.database.clone().borrow().collection_id(&collection_name){
+                                        let condition=search::make_conditions(self,&attr,reader,scope);
+                                        search_map.insert(name.to_owned(),(collection_id,condition));
                                     }
                                 }
                             }
                             ,b"ss:result"=>{
                                 let attr=xml_util::attr2hash_map(&e);
-                                if let (
-                                    Some(var)
-                                    ,Some(search)
-                                )=(
-                                    attr.get("var")
-                                    ,attr.get("search")
-                                ){
-                                    if let (
-                                        Ok(var)
-                                        ,Ok(search)
-                                    )=(
-                                        std::str::from_utf8(var)
-                                        ,std::str::from_utf8(search)
-                                    ){
-                                        let search=crate::eval_result(scope,search);
-                                        if let Some((collection_id,conditions))=search_map.get(&search){
-                                            let collection_id=*collection_id;
-                                            if let Some(collection)=self.database.clone().borrow().collection(collection_id){
-                                                let mut search=self.database.clone().borrow().search(collection);
-                                                for c in conditions{
-                                                    search=search.search(c.clone());
-                                                }
-                                                let rowset=self.database.clone().borrow().result(&search);
-                                                let context=scope.get_current_context();
-                                                let global=context.global(scope);
-                                                if let (
-                                                    Some(str_collection_id)
-                                                    ,Some(v8str_session_key)
-                                                    ,Some(v8str_func_field)
-                                                    ,Some(v8str_row)
-                                                    ,Some(v8str_ss)
-                                                    ,Some(v8str_stack)
-                                                    ,Some(var)
-                                                    ,Some(v8func_field)
-                                                )=(
-                                                    v8::String::new(scope,"collection_id")
-                                                    ,v8::String::new(scope,"session_key")
-                                                    ,v8::String::new(scope,"field")
-                                                    ,v8::String::new(scope,"row")
-                                                    ,v8::String::new(scope,"ss")
-                                                    ,v8::String::new(scope,"stack")
-                                                    ,v8::String::new(scope,&var)
-                                                    ,v8::Function::new(scope,field)
-                                                ){
-                                                    if let Some(ss)=global.get(scope,v8str_ss.into()){
-                                                        if let Ok(ss)=v8::Local::<v8::Object>::try_from(ss){
-                                                            if let Some(stack)=ss.get(scope,v8str_stack.into()){
-                                                                if let Ok(stack)=v8::Local::<v8::Array>::try_from(stack){
+                                let search=crate::attr_parse_or_static(scope,&attr,"search");
+                                let var=crate::attr_parse_or_static(scope,&attr,"var");
+                                if search!="" && var!=""{
+                                    if let Some((collection_id,conditions))=search_map.get(&search){
+                                        let collection_id=*collection_id;
+                                        if let Some(collection)=self.database.clone().borrow().collection(collection_id){
+                                            let mut search=self.database.clone().borrow().search(collection);
+                                            for c in conditions{
+                                                search=search.search(c.clone());
+                                            }
+                                            let rowset=self.database.clone().borrow().result(&search);
+                                            let context=scope.get_current_context();
+                                            let global=context.global(scope);
+                                            if let (
+                                                Some(str_collection_id)
+                                                ,Some(v8str_session_key)
+                                                ,Some(v8str_func_field)
+                                                ,Some(v8str_row)
+                                                ,Some(v8str_ss)
+                                                ,Some(v8str_stack)
+                                                ,Some(var)
+                                                ,Some(v8func_field)
+                                            )=(
+                                                v8::String::new(scope,"collection_id")
+                                                ,v8::String::new(scope,"session_key")
+                                                ,v8::String::new(scope,"field")
+                                                ,v8::String::new(scope,"row")
+                                                ,v8::String::new(scope,"ss")
+                                                ,v8::String::new(scope,"stack")
+                                                ,v8::String::new(scope,&var)
+                                                ,v8::Function::new(scope,field)
+                                            ){
+                                                if let Some(ss)=global.get(scope,v8str_ss.into()){
+                                                    if let Ok(ss)=v8::Local::<v8::Object>::try_from(ss){
+                                                        if let Some(stack)=ss.get(scope,v8str_stack.into()){
+                                                            if let Ok(stack)=v8::Local::<v8::Array>::try_from(stack){
+                                                                let obj=v8::Object::new(scope);
+                                                                let return_obj=v8::Array::new(scope,0); 
+                                                                let mut i=0;
+                                                                for d in rowset{
                                                                     let obj=v8::Object::new(scope);
-                                                                    let return_obj=v8::Array::new(scope,0); 
-                                                                    let mut i=0;
-                                                                    for d in rowset{
-                                                                        let obj=v8::Object::new(scope);
-                                                                        let row=v8::Integer::new(scope, d as i32);
-                                                                        let collection_id=v8::Integer::new(scope,collection_id as i32);
-                                                                        obj.set(scope,v8str_row.into(),row.into());
-                                                                        obj.set(scope,v8str_func_field.into(),v8func_field.into());
-                                                                        obj.set(scope,str_collection_id.into(),collection_id.into());
-                                                                        if let Some(session_key)=obj.get(scope,v8str_session_key.into()){ 
-                                                                            obj.set(
-                                                                                scope
-                                                                                ,v8str_session_key.into()
-                                                                                ,session_key.into()
-                                                                            );
-                                                                        }
-                                                                        return_obj.set_index(scope,i,obj.into());
-                                                                        i+=1;
+                                                                    let row=v8::Integer::new(scope, d as i32);
+                                                                    let collection_id=v8::Integer::new(scope,collection_id as i32);
+                                                                    obj.set(scope,v8str_row.into(),row.into());
+                                                                    obj.set(scope,v8str_func_field.into(),v8func_field.into());
+                                                                    obj.set(scope,str_collection_id.into(),collection_id.into());
+                                                                    if let Some(session_key)=obj.get(scope,v8str_session_key.into()){ 
+                                                                        obj.set(
+                                                                            scope
+                                                                            ,v8str_session_key.into()
+                                                                            ,session_key.into()
+                                                                        );
                                                                     }
-                                                                    obj.set(scope,var.into(),return_obj.into());
-                                                                    stack.set_index(scope,stack.length(),obj.into());
+                                                                    return_obj.set_index(scope,i,obj.into());
+                                                                    i+=1;
                                                                 }
+                                                                obj.set(scope,var.into(),return_obj.into());
+                                                                stack.set_index(scope,stack.length(),obj.into());
                                                             }
                                                         }
                                                     }
@@ -269,13 +227,15 @@ impl Script{
                                 ;
                             }
                             ,b"ss:print"=>{
-                                r+=&process::print(e,scope);
+                                let attr=xml_util::attr2hash_map(&e);
+                                r+=&crate::attr_parse_or_static(scope,&attr,"value");
                             }
                             ,b"ss:case"=>{
                                 r+=&process::case(self,&e,&xml_util::outer(&next,reader),scope);
                             }
                             ,b"ss:for"=>{
-                                r+=&process::r#for(self,&e,&xml_util::outer(&next,reader),scope);
+                                let outer=xml_util::outer(&next,reader);
+                                r+=&process::r#for(self,&e,&outer,scope);
                             }
                             /*
                             ,b"ss:include"=>{

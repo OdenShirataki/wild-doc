@@ -13,21 +13,6 @@ use crate::xml_util;
 
 use super::Script;
 
-pub(super) fn print(e:&BytesStart,scope: &mut v8::HandleScope)->String{
-    let mut r=String::new();
-    if let Ok(Some(value))=e.try_get_attribute(b"value"){
-        if let Ok(code)=std::str::from_utf8(&value.value){
-            if let Some(result)=v8::String::new(scope,&code)
-                .and_then(|code|v8::Script::compile(scope, code, None))
-                .and_then(|v|v.run(scope))
-                .and_then(|v|v.to_string(scope))
-            {
-                r.push_str(&result.to_rust_string_lossy(scope));
-            }
-        }
-    }
-    r
-}
 pub(super) fn case(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope)->String{
     let mut r=String::new();
     if let Ok(Some(value))=e.try_get_attribute(b"value"){
@@ -139,7 +124,7 @@ pub(super) fn r#for(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8
                                         .and_then(|code|v8::Script::compile(scope, code, None))
                                         .and_then(|v|v.run(scope))
                                     ;
-                                    r+=&script.parse(scope,&mut ev,"");
+                                    r+=&script.parse(scope,&mut ev,"ss:for");
                                     v8::String::new(scope,"ss.stack.pop()")
                                         .and_then(|code|v8::Script::compile(scope, code, None))
                                         .and_then(|v|v.run(scope))
@@ -205,7 +190,7 @@ pub(super) fn html(name:&[u8],e:&BytesStart,scope: &mut v8::HandleScope)->String
                 if let Ok(attr_key)=std::str::from_utf8(attr.key.as_ref()){
                     let is_ss=attr_key.starts_with("ss:");
                     let attr_key=if is_ss{
-                        attr_key.split_at(4).1
+                        attr_key.split_at(3).1
                     }else{
                         attr_key
                     };

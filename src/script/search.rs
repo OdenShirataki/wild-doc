@@ -95,49 +95,27 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
                             conditions.push(Condition::Wide(condition_loop(script,reader,scope)));
                         }
                         ,b"depend"=>{
-                            let attrs=xml_util::attr2hash_map(e);
-                            if let (
-                                Some(row)
-                                ,Some(collection_name)
-                            )=(
-                                attrs.get("row")
-                                ,attrs.get("collection")
-                            ){
+                            let attr=xml_util::attr2hash_map(e);
+                            let row=crate::attr_parse_or_static(scope,&attr,"row");
+                            let collection_name=crate::attr_parse_or_static(scope,&attr,"collection");
+                            
+                            if row!="" && collection_name!=""{
                                 if let (
                                     Ok(row)
-                                    ,Ok(collection_name)
+                                    ,Some(collection_id)
                                 )=(
-                                    std::str::from_utf8(row)
-                                    ,std::str::from_utf8(collection_name)
+                                    row.parse::<u32>()
+                                    ,script.database.clone().borrow().collection_id(&collection_name)
                                 ){
-                                    let row=crate::eval_result(scope,row);
-                                    let collection_name=crate::eval_result(scope,collection_name);
-
-                                    if let (
-                                        Ok(row)
-                                        ,Some(collection_id)
-                                    )=(
-                                        row.parse::<u32>()
-                                        ,script.database.clone().borrow().collection_id(&collection_name)
-                                    ){
-                                        let key=crate::eval_result(scope,if let Some(key)=attrs.get("key"){
-                                            if let Ok(key)=std::str::from_utf8(key){
-                                                key
-                                            }else{
-                                                ""
-                                            }
-                                        }else{
-                                            ""
-                                        });
-                                        conditions.push(Condition::Depend(
-                                            search::Depend::new(
-                                                key,CollectionRow::new(
-                                                    collection_id
-                                                    ,row
-                                                )
+                                    let key=crate::attr_parse_or_static(scope,&attr,"key");
+                                    conditions.push(Condition::Depend(
+                                        search::Depend::new(
+                                            key,CollectionRow::new(
+                                                collection_id
+                                                ,row
                                             )
-                                        ));
-                                    }
+                                        )
+                                    ));
                                 }
                             }
                         }
@@ -158,114 +136,82 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
     }
     conditions
 }
-fn condition_row<'a>(e:XmlAttr,scope: &mut v8::HandleScope)->Option<Condition>{
-    if let (
-        Some(method)
-        ,Some(value)
-    )=(
-        e.get("method")
-        ,e.get("value")
-    ){
-        if let (
-            Ok(method)
-            ,Ok(value)
-        )=(
-            std::str::from_utf8(method)
-            ,std::str::from_utf8(value)
-        ){
-            let method=crate::eval_result(scope,method);
-            let value=crate::eval_result(scope,value);
-            match &*method{
-                "in"=>{
-                    let mut v=Vec::<isize>::new();
-                    for s in value.split(','){
-                        if let Ok(i)=s.parse::<isize>(){
-                            v.push(i);
-                        }
-                    }
-                    if v.len()>0{
-                        return Some(Condition::Row(search::Number::In(v)));
+fn condition_row<'a>(attr:XmlAttr,scope: &mut v8::HandleScope)->Option<Condition>{
+    let method=crate::attr_parse_or_static(scope,&attr,"method");
+    let value=crate::attr_parse_or_static(scope,&attr,"value");
+    if value!=""{
+        match &*method{
+            "in"=>{
+                let mut v=Vec::<isize>::new();
+                for s in value.split(','){
+                    if let Ok(i)=s.parse::<isize>(){
+                        v.push(i);
                     }
                 }
-                ,"min"=>{
-                    if let Ok(v)=value.parse::<isize>(){
-                        return Some(Condition::Row(search::Number::Min(v)));
-                    }
+                if v.len()>0{
+                    return Some(Condition::Row(search::Number::In(v)));
                 }
-                ,"max"=>{
-                    if let Ok(v)=value.parse::<isize>(){
-                        return Some(Condition::Row(search::Number::Max(v)));
-                    }
-                }
-                ,"range"=>{
-                    let s: Vec<&str>=value.split("..").collect();
-                    if s.len()==2{
-                        if let (
-                            Ok(min),Ok(max)
-                        )=(
-                            s[0].parse::<u32>()
-                            ,s[1].parse::<u32>()
-                        ){
-                            return Some(Condition::Row(search::Number::Range((min as isize)..=(max as isize))));
-                        }
-                        
-                    }
-                }
-                ,_ =>{}
             }
+            ,"min"=>{
+                if let Ok(v)=value.parse::<isize>(){
+                    return Some(Condition::Row(search::Number::Min(v)));
+                }
+            }
+            ,"max"=>{
+                if let Ok(v)=value.parse::<isize>(){
+                    return Some(Condition::Row(search::Number::Max(v)));
+                }
+            }
+            ,"range"=>{
+                let s: Vec<&str>=value.split("..").collect();
+                if s.len()==2{
+                    if let (
+                        Ok(min),Ok(max)
+                    )=(
+                        s[0].parse::<u32>()
+                        ,s[1].parse::<u32>()
+                    ){
+                        return Some(Condition::Row(search::Number::Range((min as isize)..=(max as isize))));
+                    }
+                    
+                }
+            }
+            ,_ =>{}
         }
     }
     None
 }
-fn condition_field<'a>(e:XmlAttr,scope: &mut v8::HandleScope)->Option<Condition>{
-    if let (
-        Some(name)
-        ,Some(method)
-        ,Some(value)
-    )=(
-        e.get("name")
-        ,e.get("method")
-        ,e.get("value")
-    ){
-        if let (
-            Ok(name)
-            ,Ok(method)
-            ,Ok(value)
-        )=(
-            std::str::from_utf8(name)
-            ,std::str::from_utf8(method)
-            ,std::str::from_utf8(value)
-        ){
-            let name=crate::eval_result(scope,name);
-            let method=crate::eval_result(scope,method);
-            let value=crate::eval_result(scope,value);
-            
-            let method_pair:Vec<&str>=method.split('!').collect();
-            let len=method_pair.len();
-            let i=len-1;
-            //let not=len>1;
+fn condition_field<'a>(attr:XmlAttr,scope: &mut v8::HandleScope)->Option<Condition>{
+    let name=crate::attr_parse_or_static(scope,&attr,"name");
+    let method=crate::attr_parse_or_static(scope,&attr,"method");
+    let value=crate::attr_parse_or_static(scope,&attr,"value");
+    
+    if name!="" && method!="" && value!=""{
+        let method_pair:Vec<&str>=method.split('!').collect();
+        let len=method_pair.len();
+        let i=len-1;
+        //let not=len>1;
 
-            if let Some(method)=match method_pair[i]{
-                "match"=>Some(search::Field::Match(value.as_bytes().to_vec()))
-                ,"min"=>Some(search::Field::Min(value.as_bytes().to_vec()))
-                ,"max"=>Some(search::Field::Max(value.as_bytes().to_vec()))
-                ,"partial"=>Some(search::Field::Partial(value.to_string()))
-                ,"forward"=>Some(search::Field::Forward(value.to_string()))
-                ,"backward"=>Some(search::Field::Backward(value.to_string()))
-                ,"range"=>{
-                    let s: Vec<&str>=value.split("..").collect();
-                    if s.len()==2{
-                        Some(search::Field::Range(s[0].as_bytes().to_vec(),s[1].as_bytes().to_vec()))
-                    }else{
-                        None
-                    }
+        if let Some(method)=match method_pair[i]{
+            "match"=>Some(search::Field::Match(value.as_bytes().to_vec()))
+            ,"min"=>Some(search::Field::Min(value.as_bytes().to_vec()))
+            ,"max"=>Some(search::Field::Max(value.as_bytes().to_vec()))
+            ,"partial"=>Some(search::Field::Partial(value.to_string()))
+            ,"forward"=>Some(search::Field::Forward(value.to_string()))
+            ,"backward"=>Some(search::Field::Backward(value.to_string()))
+            ,"range"=>{
+                let s: Vec<&str>=value.split("..").collect();
+                if s.len()==2{
+                    Some(search::Field::Range(s[0].as_bytes().to_vec(),s[1].as_bytes().to_vec()))
+                }else{
+                    None
                 }
-                ,_=>None
-            }{
-                return Some(
-                    Condition::Field(name.to_string(),method)
-                );
             }
+            ,_=>None
+        }{
+            return Some(
+                Condition::Field(name.to_string(),method)
+            );
         }
     }
     None
