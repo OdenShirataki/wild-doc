@@ -21,7 +21,6 @@ impl SemilatticeScript{
         })
     }
 
-    
     pub fn exec(&mut self,qml:&str)->String{
         let mut reader=Reader::from_str(qml.trim());
         reader.expand_empty_elements(true);
@@ -38,5 +37,26 @@ impl SemilatticeScript{
                 ,_=>{}
             }
         }
+    }
+}
+
+fn eval<'s>(scope: &mut v8::HandleScope<'s>,code: &str) -> Option<v8::Local<'s, v8::Value>> {
+    let scope = &mut v8::EscapableHandleScope::new(scope);
+    let source = v8::String::new(scope, code).unwrap();
+    let script = v8::Script::compile(scope, source, None).unwrap();
+    let r = script.run(scope);
+    r.map(|v| scope.escape(v))
+}
+
+fn eval_result<'s>(scope:&mut v8::HandleScope<'s>,value:&str)->String{
+    let script="try{".to_owned()+value+"}catch(e){'"+value+"';}";
+    if let Some(v8_value)=v8::String::new(scope,&script)
+        .and_then(|code|v8::Script::compile(scope, code, None))
+        .and_then(|v|v.run(scope))
+        .and_then(|v|v.to_string(scope))
+    {
+        v8_value.to_rust_string_lossy(scope)
+    }else{
+        value.to_string()
     }
 }

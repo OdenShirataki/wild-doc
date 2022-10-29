@@ -87,7 +87,7 @@ let r=ss.exec(r#"<ss>
             <ss:print value="ymd()" />
         </div>
         <div>
-            find <ss:print value="ss.v('q').length" /> persons from the US.
+            find <ss:print value="ss.v('q').length" /> persons from the <ss:print value="uk" />.
         </div>
         <ul>
             <ss:for var="r" index="i" in="ss.v('q')"><li>

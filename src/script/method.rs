@@ -2,17 +2,6 @@ use std::{convert::TryFrom, rc::Rc, cell::RefCell};
 
 use semilattice_database::Database;
 
-pub fn eval<'s>(
-    scope: &mut v8::HandleScope<'s>,
-    code: &str,
-) -> Option<v8::Local<'s, v8::Value>> {
-    let scope = &mut v8::EscapableHandleScope::new(scope);
-    let source = v8::String::new(scope, code).unwrap();
-    let script = v8::Script::compile(scope, source, None).unwrap();
-    let r = script.run(scope);
-    r.map(|v| scope.escape(v))
-}
-
 pub fn v(
     scope: &mut v8::HandleScope
     ,args: v8::FunctionCallbackArguments
@@ -84,13 +73,13 @@ pub fn field(
                             rv.set(v8::Integer::new(scope,data.activity(main_row) as i32).into());
                         }
                         ,"_term_begin"=>{
-                            rv.set(eval(scope,&data.term_begin(main_row).to_string()).unwrap());
+                            rv.set(crate::eval(scope,&data.term_begin(main_row).to_string()).unwrap());
                         }
                         ,"_term_end"=>{
-                            rv.set(eval(scope,&data.term_end(main_row).to_string()).unwrap());
+                            rv.set(crate::eval(scope,&data.term_end(main_row).to_string()).unwrap());
                         }
                         ,"_last_updated"=>{
-                            rv.set(eval(scope,&data.last_updated(main_row).to_string()).unwrap());
+                            rv.set(crate::eval(scope,&data.last_updated(main_row).to_string()).unwrap());
                         }
                         ,"_uuid"=>{
                         if let Some(str)=v8::String::new(scope,&data.uuid_str(main_row)){

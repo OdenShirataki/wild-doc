@@ -12,7 +12,7 @@ use semilattice_database::{
 
 use crate::xml_util::{self, XmlAttr};
 
-use super::{Script, method::eval};
+use super::Script;
 
 pub(super) fn make_conditions(script:&Script,attr:&XmlAttr,reader: &mut Reader<&[u8]>,scope: &mut v8::HandleScope)->Vec<Condition>{
     let mut conditions=condition_loop(script,reader,scope);
@@ -83,7 +83,7 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
                             reader.read_to_end(e.name()).unwrap();
                         }
                         ,b"row"=>{
-                            if let Some(c)=condition_row(xml_util::attr2hash_map(&e)){
+                            if let Some(c)=condition_row(xml_util::attr2hash_map(&e),scope){
                                 conditions.push(c);
                             }
                             reader.read_to_end(e.name()).unwrap();
@@ -110,14 +110,17 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
                                     std::str::from_utf8(row)
                                     ,std::str::from_utf8(collection_name)
                                 ){
+                                    let row=crate::eval_result(scope,row);
+                                    let collection_name=crate::eval_result(scope,collection_name);
+
                                     if let (
                                         Ok(row)
                                         ,Some(collection_id)
                                     )=(
-                                        row.parse()
-                                        ,script.database.clone().borrow().collection_id(collection_name)
+                                        row.parse::<u32>()
+                                        ,script.database.clone().borrow().collection_id(&collection_name)
                                     ){
-                                        let key:&str=if let Some(key)=attrs.get("key"){
+                                        let key=crate::eval_result(scope,if let Some(key)=attrs.get("key"){
                                             if let Ok(key)=std::str::from_utf8(key){
                                                 key
                                             }else{
@@ -125,7 +128,7 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
                                             }
                                         }else{
                                             ""
-                                        };
+                                        });
                                         conditions.push(Condition::Depend(
                                             search::Depend::new(
                                                 key,CollectionRow::new(
@@ -137,8 +140,6 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
                                     }
                                 }
                             }
-                            //reader.read_to_end(e.name()).unwrap();
-                            //TODO:依存関係を指定しての検索。versatile-dataとは別系統の条件が必要になる。semilatticeに実装しなければならない
                         }
                         ,_=>{}
                     }
@@ -157,7 +158,7 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
     }
     conditions
 }
-fn condition_row<'a>(e:XmlAttr)->Option<Condition>{
+fn condition_row<'a>(e:XmlAttr,scope: &mut v8::HandleScope)->Option<Condition>{
     if let (
         Some(method)
         ,Some(value)
@@ -172,7 +173,9 @@ fn condition_row<'a>(e:XmlAttr)->Option<Condition>{
             std::str::from_utf8(method)
             ,std::str::from_utf8(value)
         ){
-            match method{
+            let method=crate::eval_result(scope,method);
+            let value=crate::eval_result(scope,value);
+            match &*method{
                 "in"=>{
                     let mut v=Vec::<isize>::new();
                     for s in value.split(','){
@@ -233,15 +236,10 @@ fn condition_field<'a>(e:XmlAttr,scope: &mut v8::HandleScope)->Option<Condition>
             ,std::str::from_utf8(method)
             ,std::str::from_utf8(value)
         ){
-            let value=if let Some(value)=v8::String::new(scope,&value)
-                .and_then(|code|v8::Script::compile(scope, code, None))
-                .and_then(|v|v.run(scope))
-                .and_then(|v|v.to_string(scope))
-            {
-                value.to_rust_string_lossy(scope)
-            }else{
-                value.to_string()
-            };
+            let name=crate::eval_result(scope,name);
+            let method=crate::eval_result(scope,method);
+            let value=crate::eval_result(scope,value);
+            
             let method_pair:Vec<&str>=method.split('!').collect();
             let len=method_pair.len();
             let i=len-1;
