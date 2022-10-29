@@ -6,9 +6,7 @@ use quick_xml::{
     ,events::Event
 };
 use semilattice_database::{
-    Database
-    ,Session
-    ,Record
+    Record
     ,Pend
     ,Activity
     ,Term
@@ -18,9 +16,10 @@ use semilattice_database::{
 
 use crate::xml_util;
 
+use super::Script;
+
 pub fn make_update_struct(
-    database:&mut Database
-    ,session:&mut Session
+    script:&mut Script
     ,reader:&mut Reader<&[u8]>
     ,scope: &mut v8::HandleScope
 )->Vec<Record>{
@@ -46,7 +45,7 @@ pub fn make_update_struct(
                                             }
                                         }else if e.name().as_ref()==b"pends"{
                                             let inner_xml=xml_util::inner(reader);
-                                            let pends_tmp=make_update_struct(database,session,&mut Reader::from_str(&inner_xml),scope);
+                                            let pends_tmp=make_update_struct(script,&mut Reader::from_str(&inner_xml),scope);
                                             if let Ok(Some(key))=e.try_get_attribute("key"){
                                                 if let Ok(key)=std::str::from_utf8(&key.value){
                                                     let key=crate::eval_result(scope,key);
@@ -127,7 +126,7 @@ pub fn make_update_struct(
                             }else{
                                 false
                             }; */
-                            let collection_id=database.collection_id_or_create(collection_name).unwrap();
+                            let collection_id=script.database.clone().borrow_mut().collection_id_or_create(collection_name).unwrap();
                             let mut f=Vec::new();
                             for (key,value) in fields{
                                 f.push(KeyValue::new(key,value))

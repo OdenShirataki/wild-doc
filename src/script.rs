@@ -77,12 +77,13 @@ impl Script{
             ret=self.parse(
                 scope
                 ,reader
+                ,"ss"
             );
         }
         ret
     }
 
-    pub fn parse(&mut self,scope: &mut v8::HandleScope,reader: &mut Reader<&[u8]>)->String{
+    pub fn parse(&mut self,scope: &mut v8::HandleScope,reader: &mut Reader<&[u8]>,break_tag:&str)->String{
         let mut search_map=HashMap::new();
         let mut r=String::new();
         loop{
@@ -95,12 +96,15 @@ impl Script{
                                 let session_name=match e.try_get_attribute(b"name"){
                                     Ok(Some(ref value))=>{
                                         match std::str::from_utf8(value.value.as_ref()){
-                                            Ok(session_name)=>session_name
-                                            ,_=>""
+                                            Ok(session_name)=>{
+                                                crate::eval_result(scope,&session_name)
+                                            }
+                                            ,_=>"".to_string()
                                         }
                                     }
-                                    ,_=>""
+                                    ,_=>"".to_string()
                                 }.trim().to_owned();
+                                
                                 if let Ok(mut session)=Session::new(&self.database.clone().borrow(),&session_name){
                                     if session_name!=""{
                                         if let Ok(Some(value))=e.try_get_attribute(b"initialize"){
@@ -109,27 +113,33 @@ impl Script{
                                             }
                                         }
                                     }
+                                    println!("session:{}",session_name);
                                     self.sessions.push(session);
                                 }else{
                                     xml_util::outer(&next,reader);
                                 }
                             }
                             ,b"ss:update"=>{
+                                let mut with_commit=false;
+                                if let Ok(Some(ref commit))=e.try_get_attribute(b"commit"){
+                                    if let Ok(commit)=std::str::from_utf8(&commit.value){
+                                        with_commit=crate::eval_result(scope,commit)=="1";
+                                    }
+                                }
+                                
+                                let inner_xml=self.parse(scope,reader,"ss:update");
+                                println!("inner_xml:{}",inner_xml);
+                                let mut inner_reader=Reader::from_str(&inner_xml);
+                                inner_reader.expand_empty_elements(true);
+                                let updates=update::make_update_struct(self,&mut inner_reader,scope);
+
                                 if let Some(session)=self.sessions.last_mut(){
                                     if !session.is_blank(){
-                                        let updates=update::make_update_struct(&mut self.database.clone().borrow_mut(),session,reader,scope);
                                         self.database.clone().borrow_mut().update(session,updates);
-                                        if let Ok(Some(ref commit))=e.try_get_attribute(b"commit"){
-                                            if let Ok(commit)=std::str::from_utf8(&commit.value){
-                                                let commit=crate::eval_result(scope,commit);
-                                                if commit=="1"{
-                                                    self.database.clone().borrow_mut().commit(session);
-                                                }
-                                            }
+                                        if with_commit{
+                                            self.database.clone().borrow_mut().commit(session);
                                         }
                                     }
-                                }else{
-                                    xml_util::outer(&next,reader);
                                 }
                             }
                             ,b"ss:search"=>{
@@ -205,37 +215,36 @@ impl Script{
                                                 ){
                                                     if let Some(ss)=global.get(scope,v8str_ss.into()){
                                                         if let Ok(ss)=v8::Local::<v8::Object>::try_from(ss){
-                                                          if let Some(stack)=ss.get(scope,v8str_stack.into()){
-                                                            if let Ok(stack)=v8::Local::<v8::Array>::try_from(stack){
-                                                              let obj=v8::Object::new(scope);
-                                                              let return_obj=v8::Array::new(scope,0); 
-                                                              let mut i=0;
-                                                              for d in rowset{
-                                                                let obj=v8::Object::new(scope);
-                                                                let row=v8::Integer::new(scope, d as i32);
-                                                                let collection_id=v8::Integer::new(scope,collection_id as i32);
-                                                                obj.set(scope,v8str_row.into(),row.into());
-                                                                obj.set(scope,v8str_func_field.into(),v8func_field.into());
-                                                                obj.set(scope,str_collection_id.into(),collection_id.into());
-                                                                if let Some(session_key)=obj.get(scope,v8str_session_key.into()){ 
-                                                                  obj.set(
-                                                                    scope
-                                                                    ,v8str_session_key.into()
-                                                                    ,session_key.into()
-                                                                  );
+                                                            if let Some(stack)=ss.get(scope,v8str_stack.into()){
+                                                                if let Ok(stack)=v8::Local::<v8::Array>::try_from(stack){
+                                                                    let obj=v8::Object::new(scope);
+                                                                    let return_obj=v8::Array::new(scope,0); 
+                                                                    let mut i=0;
+                                                                    for d in rowset{
+                                                                        let obj=v8::Object::new(scope);
+                                                                        let row=v8::Integer::new(scope, d as i32);
+                                                                        let collection_id=v8::Integer::new(scope,collection_id as i32);
+                                                                        obj.set(scope,v8str_row.into(),row.into());
+                                                                        obj.set(scope,v8str_func_field.into(),v8func_field.into());
+                                                                        obj.set(scope,str_collection_id.into(),collection_id.into());
+                                                                        if let Some(session_key)=obj.get(scope,v8str_session_key.into()){ 
+                                                                            obj.set(
+                                                                                scope
+                                                                                ,v8str_session_key.into()
+                                                                                ,session_key.into()
+                                                                            );
+                                                                        }
+                                                                        return_obj.set_index(scope,i,obj.into());
+                                                                        i+=1;
+                                                                    }
+                                                                    obj.set(scope,var.into(),return_obj.into());
+                                                                    stack.set_index(scope,stack.length(),obj.into());
                                                                 }
-                                                                return_obj.set_index(scope,i,obj.into());
-                                                                i+=1;
-                                                              }
-                                                              obj.set(scope,var.into(),return_obj.into());
-                                                              stack.set_index(scope,stack.length(),obj.into());
                                                             }
-                                                          }
                                                         }
                                                     }
                                                 }
                                             }
-                                            
                                         }
                                     }
                                 }
@@ -248,7 +257,6 @@ impl Script{
                                         .and_then(|v|v.run(scope)))
                                     ;
                                 }
-                                r+=&self.parse(scope,reader);
                             }
                             ,b"ss:script"=>{
                                 v8::String::new(scope,&match reader.read_event(){
@@ -285,7 +293,7 @@ impl Script{
                     ,Event::End(e)=>{
                         let name=e.name();
                         let name=name.as_ref();
-                        if name==b"ss"{
+                        if name==b"ss" || name==break_tag.as_bytes(){
                             break;
                         }else{
                             if name.starts_with(b"ss:"){
@@ -296,8 +304,6 @@ impl Script{
                                     ;
                                 }else if name==b"ss:session"{
                                     self.sessions.pop();
-                                }else if name==b"ss:select"{
-                                    return r;
                                 }
                             }else{
                                 r.push_str("</");

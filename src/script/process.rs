@@ -55,7 +55,7 @@ pub(super) fn case(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8:
                                                         match event_reader_inner.read_event(){
                                                             Ok(Event::Start(e))=>{
                                                                 if e.name().as_ref()==b"ss:else"{
-                                                                    r+=&script.parse(scope,&mut event_reader_inner);
+                                                                    r+=&script.parse(scope,&mut event_reader_inner,"");
                                                                     break;
                                                                 }
                                                             }
@@ -78,7 +78,7 @@ pub(super) fn case(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8:
                                                                     match event_reader_inner.read_event(){
                                                                         Ok(Event::Start(e))=>{
                                                                             if e.name().as_ref()==b"ss:when"{
-                                                                                r+=&script.parse(scope,&mut event_reader_inner);
+                                                                                r+=&script.parse(scope,&mut event_reader_inner,"");
                                                                                 break 'case;
                                                                             }
                                                                         }
@@ -139,7 +139,7 @@ pub(super) fn r#for(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8
                                         .and_then(|code|v8::Script::compile(scope, code, None))
                                         .and_then(|v|v.run(scope))
                                     ;
-                                    r+=&script.parse(scope,&mut ev);
+                                    r+=&script.parse(scope,&mut ev,"");
                                     v8::String::new(scope,"ss.stack.pop()")
                                         .and_then(|code|v8::Script::compile(scope, code, None))
                                         .and_then(|v|v.run(scope))
