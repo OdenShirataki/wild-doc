@@ -61,22 +61,8 @@ pub fn make_update_struct(
                                 }
                             }
                             let attr=xml_util::attr2hash_map(&e);
-
-                            let row=if let Some(row)=attr.get("ss:row"){
-                                if let Ok(row)=std::str::from_utf8(row){
-                                    row.parse().unwrap_or(0)
-                                }else{
-                                    0
-                                }
-                            }else if let Some(row)=attr.get("row"){
-                                if let Ok(row)=std::str::from_utf8(row){
-                                    row.parse().unwrap_or(0)
-                                }else{
-                                    0
-                                }
-                            }else{
-                                0
-                            };
+                            let row=crate::attr_parse_or_static(scope,&attr,"row").parse().unwrap_or(0);
+                            
                             let activity=crate::attr_parse_or_static(scope,&attr,"activity");
                             let activity=match &*activity{
                                 "inactive"=>Activity::Inactive

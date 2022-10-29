@@ -15,80 +15,70 @@ use super::Script;
 
 pub(super) fn case(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope)->String{
     let mut r=String::new();
-    if let Ok(Some(value))=e.try_get_attribute(b"value"){
-        if let Some(cmp_value)=std::str::from_utf8(&value.value).ok()
-            .and_then(|code|v8::String::new(scope,code))
-            .and_then(|code|v8::Script::compile(scope, code, None))
-            .and_then(|v|v.run(scope))
-        {
-            let mut event_reader=Reader::from_str(&xml_str.trim());
-            event_reader.expand_empty_elements(true);
-            loop{
-                match event_reader.read_event(){
-                    Ok(Event::Start(e))=>{
-                        if e.name().as_ref()==b"ss:case"{
-                            'case:loop{
-                                if let Ok(next)=event_reader.read_event(){
-                                    match next{
-                                        Event::Start(ref e)=>{
-                                            match e.name().as_ref(){
-                                                b"ss:else"=>{
+    let attr=xml_util::attr2hash_map(&e);
+    let cmp_value=crate::attr_parse_or_static(scope,&attr,"value");
+    if cmp_value!=""{
+        let mut event_reader=Reader::from_str(&xml_str.trim());
+        event_reader.expand_empty_elements(true);
+        loop{
+            match event_reader.read_event(){
+                Ok(Event::Start(e))=>{
+                    if e.name().as_ref()==b"ss:case"{
+                        'case:loop{
+                            if let Ok(next)=event_reader.read_event(){
+                                match next{
+                                    Event::Start(ref e)=>{
+                                        match e.name().as_ref(){
+                                            b"ss:else"=>{
+                                                let xml_str=xml_util::outer(&next,&mut event_reader);
+                                                let mut event_reader_inner=Reader::from_str(&xml_str.trim());
+                                                event_reader_inner.expand_empty_elements(true);
+                                                loop{
+                                                    match event_reader_inner.read_event(){
+                                                        Ok(Event::Start(e))=>{
+                                                            if e.name().as_ref()==b"ss:else"{
+                                                                r+=&script.parse(scope,&mut event_reader_inner,"");
+                                                                break;
+                                                            }
+                                                        }
+                                                        ,_=>{}
+                                                    }
+                                                }
+                                            }
+                                            ,b"ss:when"=>{
+                                                let attr=xml_util::attr2hash_map(&e);
+                                                let wv=crate::attr_parse_or_static(scope,&attr,"value");
+                                                if wv==cmp_value{
                                                     let xml_str=xml_util::outer(&next,&mut event_reader);
                                                     let mut event_reader_inner=Reader::from_str(&xml_str.trim());
                                                     event_reader_inner.expand_empty_elements(true);
                                                     loop{
                                                         match event_reader_inner.read_event(){
                                                             Ok(Event::Start(e))=>{
-                                                                if e.name().as_ref()==b"ss:else"{
+                                                                if e.name().as_ref()==b"ss:when"{
                                                                     r+=&script.parse(scope,&mut event_reader_inner,"");
-                                                                    break;
+                                                                    break 'case;
                                                                 }
                                                             }
                                                             ,_=>{}
                                                         }
                                                     }
                                                 }
-                                                ,b"ss:when"=>{
-                                                    if let Ok(Some(value))=e.try_get_attribute(b"value"){
-                                                        if let Some(wv)=std::str::from_utf8(&value.value).ok()
-                                                            .and_then(|code|v8::String::new(scope,code))
-                                                            .and_then(|code|v8::Script::compile(scope, code, None))
-                                                            .and_then(|v|v.run(scope))
-                                                        {
-                                                            if wv==cmp_value{
-                                                                let xml_str=xml_util::outer(&next,&mut event_reader);
-                                                                let mut event_reader_inner=Reader::from_str(&xml_str.trim());
-                                                                event_reader_inner.expand_empty_elements(true);
-                                                                loop{
-                                                                    match event_reader_inner.read_event(){
-                                                                        Ok(Event::Start(e))=>{
-                                                                            if e.name().as_ref()==b"ss:when"{
-                                                                                r+=&script.parse(scope,&mut event_reader_inner,"");
-                                                                                break 'case;
-                                                                            }
-                                                                        }
-                                                                        ,_=>{}
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                ,_=>{}
                                             }
+                                            ,_=>{}
                                         }
-                                        ,Event::Eof=>{
-                                            break;
-                                        }
-                                        ,_=>{}
                                     }
+                                    ,Event::Eof=>{
+                                        break;
+                                    }
+                                    ,_=>{}
                                 }
                             }
-                            break;
                         }
+                        break;
                     }
-                    ,_=>{}
                 }
+                ,_=>{}
             }
         }
     }
@@ -96,43 +86,47 @@ pub(super) fn case(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8:
 }
 pub(super) fn r#for(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope)->String{
     let mut r=String::new();
-    if let (Ok(Some(var)),Ok(Some(arr)))=(e.try_get_attribute(b"var"),e.try_get_attribute(b"in")){
-        if let (Ok(arr),Ok(var))=(std::str::from_utf8(&arr.value),std::str::from_utf8(&var.value)){
-            if let Some(rs)=v8::String::new(scope,&arr)
-                .and_then(|code|v8::Script::compile(scope,code, None))
-                .and_then(|code|code.run(scope))
-                .and_then(|v|v8::Local::<v8::Array>::try_from(v).ok())
-            {
-                let length=rs.length();
-                for i in 0..length {
-                    let mut ev=Reader::from_str(&xml_str);
-                    ev.expand_empty_elements(true);
-                    loop{
-                        match ev.read_event(){
-                            Ok(Event::Start(e))=>{
-                                if e.name().as_ref()==b"ss:for"{
-                                    v8::String::new(
-                                        scope
-                                        ,&("ss.stack.push({".to_owned()+&var.to_string()+":"+arr+"["+&i.to_string()+"]"+&(
-                                        if let Ok(Some(index))=e.try_get_attribute(b"index"){
-                                            std::str::from_utf8(&index.value).map_or("".to_string(),|v|",".to_owned()+v+":"+&i.to_string())
-                                        }else{
-                                            "".to_owned()
-                                        }
-                                        )+"})")
-                                    )
-                                        .and_then(|code|v8::Script::compile(scope, code, None))
-                                        .and_then(|v|v.run(scope))
-                                    ;
-                                    r+=&script.parse(scope,&mut ev,"ss:for");
-                                    v8::String::new(scope,"ss.stack.pop()")
-                                        .and_then(|code|v8::Script::compile(scope, code, None))
-                                        .and_then(|v|v.run(scope))
-                                    ;
-                                    break;
+    let attr=xml_util::attr2hash_map(&e);
+    let var=crate::attr_parse_or_static(scope,&attr,"var");
+    if var!=""{
+        if let Some(arr)=attr.get("ss:in"){
+            if let Ok(arr)=std::str::from_utf8(arr){
+                if let Some(rs)=v8::String::new(scope,&arr)
+                    .and_then(|code|v8::Script::compile(scope,code, None))
+                    .and_then(|code|code.run(scope))
+                    .and_then(|v|v8::Local::<v8::Array>::try_from(v).ok())
+                {
+                    let length=rs.length();
+                    for i in 0..length {
+                        let mut ev=Reader::from_str(&xml_str);
+                        ev.expand_empty_elements(true);
+                        loop{
+                            match ev.read_event(){
+                                Ok(Event::Start(e))=>{
+                                    if e.name().as_ref()==b"ss:for"{
+                                        v8::String::new(
+                                            scope
+                                            ,&("ss.stack.push({".to_owned()+&var.to_string()+":"+arr+"["+&i.to_string()+"]"+&(
+                                            if let Ok(Some(index))=e.try_get_attribute(b"index"){
+                                                std::str::from_utf8(&index.value).map_or("".to_string(),|v|",".to_owned()+v+":"+&i.to_string())
+                                            }else{
+                                                "".to_owned()
+                                            }
+                                            )+"})")
+                                        )
+                                            .and_then(|code|v8::Script::compile(scope, code, None))
+                                            .and_then(|v|v.run(scope))
+                                        ;
+                                        r+=&script.parse(scope,&mut ev,"ss:for");
+                                        v8::String::new(scope,"ss.stack.pop()")
+                                            .and_then(|code|v8::Script::compile(scope, code, None))
+                                            .and_then(|v|v.run(scope))
+                                        ;
+                                        break;
+                                    }
                                 }
+                                ,_=>{}
                             }
-                            ,_=>{}
                         }
                     }
                 }
@@ -200,13 +194,7 @@ pub(super) fn html(name:&[u8],e:&BytesStart,scope: &mut v8::HandleScope)->String
                     
                     if let Ok(value)=std::str::from_utf8(&attr.value){
                         if is_ss{
-                            if let Some(result)=v8::String::new(scope,value)
-                                .and_then(|code|v8::Script::compile(scope, code, None))
-                                .and_then(|v|v.run(scope))
-                                .and_then(|result|result.to_string(scope))
-                            {
-                                html_attr.push_str(&result.to_rust_string_lossy(scope));
-                            }
+                            html_attr.push_str(&crate::eval_result(scope, value));
                         }else{
                             html_attr.push_str(
                                 &value.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")

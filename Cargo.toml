@@ -1,10 +1,9 @@
 [package]
 name = "semilattice-script"
-version = "0.1.8"
-edition = "2018"
+version = "0.1.9"
+edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
-
 
 description = "You can read and write data using XML and output various structured documents.You can also program using javascript(v8)."
 

@@ -41,7 +41,7 @@ fn it_works(){
                 find <ss:print ss:value="ss.v('q').length" /> persons.
             </div>
             <ul>
-                <ss:for var="r" index="i" in="ss.v('q')"><li>
+                <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
                     <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
                 </li></ss:for>
             </ul>
@@ -59,7 +59,7 @@ fn it_works(){
                 find <ss:print ss:value="ss.v('q').length" /> persons from the US.
             </div>
             <ul>
-                <ss:for var="r" index="i" in="ss.v('q')"><li>
+                <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
                     <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
                 </li></ss:for>
             </ul>
@@ -87,7 +87,7 @@ fn it_works(){
                 find <ss:print ss:value="ss.v('q').length" /> persons from the <ss:print ss:value="uk" />.
             </div>
             <ul>
-                <ss:for var="r" index="i" in="ss.v('q')"><li>
+                <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
                     <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
                 </li></ss:for>
             </ul>
@@ -100,7 +100,7 @@ fn it_works(){
         <ss:update commit="1">
             <ss:search name="person" collection="person"></ss:search>
             <ss:result var="q" search="person">
-                <ss:for var="r" index="i" in="ss.v('q')">
+                <ss:for var="r" index="i" ss:in="ss.v('q')">
                     hoge:<ss:print ss:value="ss.v('r').row" />
                     <collection name="person" ss:row="ss.v('r').row">
                         <field name="name">Renamed <ss:print ss:value="ss.v('r').field('name')" /></field>
@@ -117,7 +117,7 @@ fn it_works(){
                 find <ss:print ss:value="ss.v('q').length" /> persons.
             </div>
             <ul>
-                <ss:for var="r" index="i" in="ss.v('q')"><li>
+                <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
                     <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
                 </li></ss:for>
             </ul>
@@ -248,7 +248,7 @@ fn it_works(){
             <ss:result var="q" search="test">
                 (TEST)データが<ss:print ss:value="ss.v('q').length" />件あります
                 <ul>
-                    <ss:for var="r" index="i" in="ss.v('q')"><li>
+                    <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
                         <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('num')" />
                     </li></ss:for>
                 </ul>
@@ -283,7 +283,7 @@ fn it_works(){
             <ss:result var="q" search="test">
                 (TEST)データが<ss:print ss:value="ss.v('q').length" />件あります
                 <ul>
-                    <ss:for var="r" index="i" in="ss.v('q')"><li>
+                    <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
                         <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('num')" />
                     </li></ss:for>
                 </ul>
@@ -291,10 +291,10 @@ fn it_works(){
             <ss:result var="q" search="s">
                 データが<span ss:collection="'hoge'+ss.v('q').length"><ss:print ss:value="ss.v('q').length" /></span>件あります
                 <ul>
-                    <ss:for var="r" index="i" in="ss.v('q')"><li>
+                    <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
                         <ss:print ss:value="ss.v('i')+1" /> row:<ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('_uuid')" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print value="ss.v('r').field('num')" />
                     </li></ss:for>
-                    <ss:for var="r" index="i" in="[0,3,1]"><li>
+                    <ss:for var="r" index="i" ss:in="[0,3,1]"><li>
                         OK<ss:print ss:value="ss.v('i')+':'+ss.v('r')" />
                     </li></ss:for>
                 </ul>
@@ -362,10 +362,10 @@ fn it_works(){
                     <ss:result var="q" search="s"><div class="hoge2">
                         データが<span ss:collection="'hoge'+(ss.v('q').length)"><ss:print ss:value="ss.v('q').length" /></span>件あります
                         <ul>
-                            <ss:for var="r" index="i" in="ss.v('q')"><li>
+                            <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
                                 <ss:print ss:value="ss.v('i')+1" /> row:<ss:print ss:value="ss.v('r').row" /> <ss:print ss:value="ss.v('r').field('_activity')+','+ss.v('r').field('name')" />
                             </li></ss:for>
-                            <ss:for var="r" index="i" in="[0,3,1]"><li>
+                            <ss:for var="r" index="i" ss:in="[0,3,1]"><li>
                                 OK<ss:print ss:value="ss.v('i')+':'+ss.v('r')" />
                             </li></ss:for>
                         </ul>

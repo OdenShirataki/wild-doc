@@ -41,7 +41,7 @@ let r=ss.exec(r#"<ss>
             find <ss:print ss:value="ss.v('q').length" /> persons.
         </div>
         <ul>
-            <ss:for var="r" index="i" in="ss.v('q')"><li>
+            <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
                 <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
             </li></ss:for>
         </ul>
@@ -59,7 +59,7 @@ let r=ss.exec(r#"<ss>
             find <ss:print ss:value="ss.v('q').length" /> persons from the US.
         </div>
         <ul>
-            <ss:for var="r" index="i" in="ss.v('q')"><li>
+            <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
                 <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
             </li></ss:for>
         </ul>
@@ -87,7 +87,7 @@ let r=ss.exec(r#"<ss>
             find <ss:print ss:value="ss.v('q').length" /> persons from the <ss:print ss:value="uk" />.
         </div>
         <ul>
-            <ss:for var="r" index="i" in="ss.v('q')"><li>
+            <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
                 <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
             </li></ss:for>
         </ul>
@@ -100,7 +100,7 @@ ss.exec(r#"<ss><ss:session name="hoge">
     <ss:update commit="1">
         <ss:search name="person" collection="person"></ss:search>
         <ss:result var="q" search="person">
-            <ss:for var="r" index="i" in="ss.v('q')">
+            <ss:for var="r" index="i" ss:in="ss.v('q')">
                 hoge:<ss:print ss:value="ss.v('r').row" />
                 <collection name="person" ss:row="ss.v('r').row">
                     <field name="name">Renamed <ss:print ss:value="ss.v('r').field('name')" /></field>
@@ -117,7 +117,7 @@ let r=ss.exec(r#"<ss>
             find <ss:print ss:value="ss.v('q').length" /> persons.
         </div>
         <ul>
-            <ss:for var="r" index="i" in="ss.v('q')"><li>
+            <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
                 <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
             </li></ss:for>
         </ul>
