@@ -12,10 +12,10 @@ use semilattice_database::{
 
 use crate::xml_util::{self, XmlAttr};
 
-use super::Script;
+use super::{Script, method::eval};
 
-pub(super) fn make_conditions(script:&Script,attr:&XmlAttr,reader: &mut Reader<&[u8]>)->Vec<Condition>{
-    let mut conditions=condition_loop(script,reader);
+pub(super) fn make_conditions(script:&Script,attr:&XmlAttr,reader: &mut Reader<&[u8]>,scope: &mut v8::HandleScope)->Vec<Condition>{
+    let mut conditions=condition_loop(script,reader,scope);
 
     let activity=attr.get("activity").map_or(
         Some(Activity::Active)
@@ -69,7 +69,7 @@ pub(super) fn make_conditions(script:&Script,attr:&XmlAttr,reader: &mut Reader<&
     conditions
 }
 
-fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>)->Vec<Condition>{
+fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::HandleScope)->Vec<Condition>{
     let mut conditions=Vec::new();
     loop{
         if let Ok(next)=reader.read_event(){
@@ -77,7 +77,7 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>)->Vec<Condition>{
                 Event::Start(ref e)=>{
                     match e.name().as_ref(){
                         b"field"=>{
-                            if let Some(c)=condition_field(xml_util::attr2hash_map(&e)){
+                            if let Some(c)=condition_field(xml_util::attr2hash_map(&e),scope){
                                 conditions.push(c);
                             }
                             reader.read_to_end(e.name()).unwrap();
@@ -89,10 +89,10 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>)->Vec<Condition>{
                             reader.read_to_end(e.name()).unwrap();
                         }
                         ,b"narrow"=>{
-                            conditions.push(Condition::Narrow(condition_loop(script,reader)));
+                            conditions.push(Condition::Narrow(condition_loop(script,reader,scope)));
                         }
                         ,b"wide"=>{
-                            conditions.push(Condition::Wide(condition_loop(script,reader)));
+                            conditions.push(Condition::Wide(condition_loop(script,reader,scope)));
                         }
                         ,b"depend"=>{
                             let attrs=xml_util::attr2hash_map(e);
@@ -214,7 +214,7 @@ fn condition_row<'a>(e:XmlAttr)->Option<Condition>{
     }
     None
 }
-fn condition_field<'a>(e:XmlAttr)->Option<Condition>{
+fn condition_field<'a>(e:XmlAttr,scope: &mut v8::HandleScope)->Option<Condition>{
     if let (
         Some(name)
         ,Some(method)
@@ -233,6 +233,15 @@ fn condition_field<'a>(e:XmlAttr)->Option<Condition>{
             ,std::str::from_utf8(method)
             ,std::str::from_utf8(value)
         ){
+            let value=if let Some(value)=v8::String::new(scope,&value)
+                .and_then(|code|v8::Script::compile(scope, code, None))
+                .and_then(|v|v.run(scope))
+                .and_then(|v|v.to_string(scope))
+            {
+                value.to_rust_string_lossy(scope)
+            }else{
+                value.to_string()
+            };
             let method_pair:Vec<&str>=method.split('!').collect();
             let len=method_pair.len();
             let i=len-1;

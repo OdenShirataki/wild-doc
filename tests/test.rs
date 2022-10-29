@@ -75,9 +75,10 @@ fn it_works(){
                 const now=new Date();
                 return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
             };
+            const uk="UK";
         </ss:script>
         <ss:search name="p" collection="person">
-            <field name="country" method="match" value="US" />
+            <field name="country" method="match" value="uk" />
         </ss:search>
         <ss:result var="q" search="p">
             <div>
