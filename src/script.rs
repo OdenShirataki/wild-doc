@@ -117,11 +117,14 @@ impl Script{
                             ,b"ss:update"=>{
                                 if let Some(session)=self.sessions.last_mut(){
                                     if !session.is_blank(){
-                                        let updates=update::make_update_struct(&mut self.database.clone().borrow_mut(),session,reader);
+                                        let updates=update::make_update_struct(&mut self.database.clone().borrow_mut(),session,reader,scope);
                                         self.database.clone().borrow_mut().update(session,updates);
                                         if let Ok(Some(ref commit))=e.try_get_attribute(b"commit"){
-                                            if commit.value.to_vec()==b"1"{
-                                                self.database.clone().borrow_mut().commit(session);
+                                            if let Ok(commit)=std::str::from_utf8(&commit.value){
+                                                let commit=crate::eval_result(scope,commit);
+                                                if commit=="1"{
+                                                    self.database.clone().borrow_mut().commit(session);
+                                                }
                                             }
                                         }
                                     }
@@ -145,7 +148,9 @@ impl Script{
                                         std::str::from_utf8(name)
                                         ,std::str::from_utf8(collection_name)
                                     ){
-                                        if let Some(collection_id)=self.database.clone().borrow().collection_id(collection_name){
+                                        let name=crate::eval_result(scope,name);
+                                        let collection_name=crate::eval_result(scope,collection_name);
+                                        if let Some(collection_id)=self.database.clone().borrow().collection_id(&collection_name){
                                             let condition=search::make_conditions(self,&attr,reader,scope);
                                             search_map.insert(name.to_owned(),(collection_id,condition));
                                         }
@@ -168,7 +173,8 @@ impl Script{
                                         std::str::from_utf8(var)
                                         ,std::str::from_utf8(search)
                                     ){
-                                        if let Some((collection_id,conditions))=search_map.get(search){
+                                        let search=crate::eval_result(scope,search);
+                                        if let Some((collection_id,conditions))=search_map.get(&search){
                                             let collection_id=*collection_id;
                                             if let Some(collection)=self.database.clone().borrow().collection(collection_id){
                                                 let mut search=self.database.clone().borrow().search(collection);
@@ -194,7 +200,7 @@ impl Script{
                                                     ,v8::String::new(scope,"row")
                                                     ,v8::String::new(scope,"ss")
                                                     ,v8::String::new(scope,"stack")
-                                                    ,v8::String::new(scope,var)
+                                                    ,v8::String::new(scope,&var)
                                                     ,v8::Function::new(scope,field)
                                                 ){
                                                     if let Some(ss)=global.get(scope,v8str_ss.into()){

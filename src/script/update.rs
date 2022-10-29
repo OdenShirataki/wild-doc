@@ -22,6 +22,7 @@ pub fn make_update_struct(
     database:&mut Database
     ,session:&mut Session
     ,reader:&mut Reader<&[u8]>
+    ,scope: &mut v8::HandleScope
 )->Vec<Record>{
     let mut updates=Vec::new();
     loop{
@@ -38,13 +39,17 @@ pub fn make_update_struct(
                                         if e.name().as_ref()==b"field"{
                                             if let Ok(Some(field_name))=e.try_get_attribute(b"name"){
                                                 if let Ok(field_name)=std::str::from_utf8(&field_name.value){
-                                                    fields.insert(field_name.to_string(),xml_util::text_content(reader,e.name()));
+                                                    let field_name=crate::eval_result(scope,field_name);
+                                                    let cont=xml_util::text_content(reader,e.name());
+                                                    fields.insert(field_name,cont);
                                                 }
                                             }
                                         }else if e.name().as_ref()==b"pends"{
-                                            let pends_tmp=make_update_struct(database,session,&mut Reader::from_str(&xml_util::inner(reader)));
+                                            let inner_xml=xml_util::inner(reader);
+                                            let pends_tmp=make_update_struct(database,session,&mut Reader::from_str(&inner_xml),scope);
                                             if let Ok(Some(key))=e.try_get_attribute("key"){
                                                 if let Ok(key)=std::str::from_utf8(&key.value){
+                                                    let key=crate::eval_result(scope,key);
                                                     pends.push(Pend::new(key,pends_tmp));
                                                 }
                                             }
@@ -61,36 +66,51 @@ pub fn make_update_struct(
                             let attr=xml_util::attr2hash_map(&e);
 
                             let row=if let Some(row)=attr.get("row"){
-                                std::str::from_utf8(row).unwrap_or("0").parse().unwrap_or(0)
+                                if let Ok(row)=std::str::from_utf8(row){
+                                    let row=crate::eval_result(scope,row);
+                                    row.parse().unwrap_or(0)
+                                }else{
+                                    0
+                                }
                             }else{
                                 0
                             };
                             let activity=if let Some(v)=attr.get("activity"){
-                                match std::str::from_utf8(v){
-                                    Ok("inactive")=>Activity::Inactive
-                                    ,Ok("0")=>Activity::Inactive
-                                    ,_=>Activity::Active
+                                if let Ok(v)=std::str::from_utf8(v){
+                                    let activity=crate::eval_result(scope,v);
+                                    match &*activity{
+                                        "inactive"=>Activity::Inactive
+                                        ,"0"=>Activity::Inactive
+                                        ,_=>Activity::Active
+                                    }
+                                }else{
+                                    Activity::Active
                                 }
                             }else{
                                 Activity::Active
                             };
                             let term_begin=if let Some(v)=attr.get("term_begin"){
-                                if let Some(t)=std::str::from_utf8(v).map_or(
-                                    None,|v|chrono::Local.datetime_from_str(v,"%Y-%m-%d %H:%M:%S").map_or(None,|v|Some(v.timestamp()))
-                                ){
-                                    Term::Overwrite(t)
+                                if let Ok(v)=std::str::from_utf8(v){
+                                    let v=crate::eval_result(scope,v);
+                                    if let Some(t)=chrono::Local.datetime_from_str(&v,"%Y-%m-%d %H:%M:%S").map_or(None,|v|Some(v.timestamp())){
+                                        Term::Overwrite(t)
+                                    }else{
+                                        Term::Defalut
+                                    }
                                 }else{
                                     Term::Defalut
                                 }
-                                
                             }else{
                                 Term::Defalut
                             };
                             let term_end=if let Some(v)=attr.get("term_end"){
-                                if let Some(t)=std::str::from_utf8(v).map_or(
-                                    None,|v|chrono::Local.datetime_from_str(v,"%Y-%m-%d %H:%M:%S").map_or(None,|v|Some(v.timestamp()))
-                                ){
-                                    Term::Overwrite(t)
+                                if let Ok(v)=std::str::from_utf8(v){
+                                    let v=crate::eval_result(scope,v);
+                                    if let Some(t)=chrono::Local.datetime_from_str(&v,"%Y-%m-%d %H:%M:%S").map_or(None,|v|Some(v.timestamp())){
+                                        Term::Overwrite(t)
+                                    }else{
+                                        Term::Defalut
+                                    }
                                 }else{
                                     Term::Defalut
                                 }
