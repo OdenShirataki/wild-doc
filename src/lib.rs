@@ -1,4 +1,4 @@
-use std::{rc::Rc, cell::RefCell};
+use std::sync::{Arc,RwLock};
 
 use quick_xml::{
     Reader
@@ -13,12 +13,12 @@ use xml_util::XmlAttr;
 mod xml_util;
 
 pub struct SemilatticeScript{
-    database:Rc<RefCell<Database>>
+    database:Arc<RwLock<Database>>
 }
 impl SemilatticeScript{
-    pub fn new(dir:&str)->Result<SemilatticeScript,std::io::Error>{
-        Ok(SemilatticeScript{
-            database:Rc::new(RefCell::new(Database::new(dir)?))
+    pub fn new(dir:&str)->Result<Self,std::io::Error>{
+        Ok(Self{
+            database:Arc::new(RwLock::new(Database::new(dir)?))
         })
     }
 

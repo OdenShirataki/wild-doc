@@ -99,7 +99,7 @@ pub fn make_update_struct(
                             }else{
                                 false
                             }; */
-                            let collection_id=script.database.clone().borrow_mut().collection_id_or_create(collection_name).unwrap();
+                            let collection_id=script.database.clone().write().unwrap().collection_id_or_create(collection_name).unwrap();
                             let mut f=Vec::new();
                             for (key,value) in fields{
                                 f.push(KeyValue::new(key,value))

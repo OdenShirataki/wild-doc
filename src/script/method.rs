@@ -1,4 +1,4 @@
-use std::{convert::TryFrom, rc::Rc, cell::RefCell};
+use std::{convert::TryFrom, sync::{Arc, RwLock}};
 
 use semilattice_database::Database;
 
@@ -65,8 +65,8 @@ pub fn field(
         ){
             let field_name=field_name.to_rust_string_lossy(scope);
 
-            if let Some(database)=scope.get_slot::<Rc<RefCell<Database>>>(){
-                if let Some(data)=database.clone().borrow().collection(collection_id){
+            if let Some(database)=scope.get_slot::<Arc<RwLock<Database>>>(){
+                if let Some(data)=database.clone().read().unwrap().collection(collection_id){
                     let main_row=row as u32;
                     match field_name.as_str(){
                         "_activity"=>{

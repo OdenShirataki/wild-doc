@@ -105,7 +105,7 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
                                     ,Some(collection_id)
                                 )=(
                                     row.parse::<u32>()
-                                    ,script.database.clone().borrow().collection_id(&collection_name)
+                                    ,script.database.clone().read().unwrap().collection_id(&collection_name)
                                 ){
                                     let key=crate::attr_parse_or_static(scope,&attr,"key");
                                     conditions.push(Condition::Depend(

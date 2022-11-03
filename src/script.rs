@@ -1,8 +1,7 @@
-use std::cell::RefCell;
+use std::sync::Arc;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::rc::Rc;
-use std::sync::Once;
+use std::sync::{Once, RwLock};
 
 use quick_xml::events::Event;
 use v8;
@@ -19,13 +18,13 @@ mod method;
 use method::*;
 
 pub struct Script{
-    database:Rc<RefCell<Database>>
+    database:Arc<RwLock<Database>>
     ,sessions:Vec<Session>
 }
 impl Script{
-    pub fn new(database:Rc<RefCell<Database>>)->Script{
-        let session=database.clone().borrow().blank_session().unwrap();
-        Script{
+    pub fn new(database:Arc<RwLock<Database>>)->Self{
+        let session=database.clone().read().unwrap().blank_session().unwrap();
+        Self{
             database
             ,sessions:vec![session]
         }
@@ -95,11 +94,11 @@ impl Script{
                             b"ss:session"=>{
                                 let attr=xml_util::attr2hash_map(&e);
                                 let session_name=crate::attr_parse_or_static(scope,&attr,"name");
-                                if let Ok(mut session)=Session::new(&self.database.clone().borrow(),&session_name){
+                                if let Ok(mut session)=Session::new(&self.database.clone().read().unwrap(),&session_name){
                                     if session_name!=""{
                                         if let Ok(Some(value))=e.try_get_attribute(b"initialize"){
                                             if value.value.to_vec()==b"true"{
-                                                self.database.clone().borrow().session_restart(&mut session);
+                                                self.database.clone().read().unwrap().session_restart(&mut session);
                                             }
                                         }
                                     }
@@ -119,9 +118,9 @@ impl Script{
 
                                 if let Some(session)=self.sessions.last_mut(){
                                     if !session.is_blank(){
-                                        self.database.clone().borrow_mut().update(session,updates);
+                                        self.database.clone().read().unwrap().update(session,updates);
                                         if with_commit{
-                                            self.database.clone().borrow_mut().commit(session);
+                                            self.database.clone().write().unwrap().commit(session);
                                         }
                                     }
                                 }
@@ -132,7 +131,7 @@ impl Script{
                                 let collection_name=crate::attr_parse_or_static(scope,&attr,"collection");
                                 
                                 if name!="" && collection_name!=""{
-                                    if let Some(collection_id)=self.database.clone().borrow().collection_id(&collection_name){
+                                    if let Some(collection_id)=self.database.clone().read().unwrap().collection_id(&collection_name){
                                         let condition=search::make_conditions(self,&attr,reader,scope);
                                         search_map.insert(name.to_owned(),(collection_id,condition));
                                     }
@@ -145,12 +144,12 @@ impl Script{
                                 if search!="" && var!=""{
                                     if let Some((collection_id,conditions))=search_map.get(&search){
                                         let collection_id=*collection_id;
-                                        if let Some(collection)=self.database.clone().borrow().collection(collection_id){
-                                            let mut search=self.database.clone().borrow().search(collection);
+                                        if let Some(collection)=self.database.clone().read().unwrap().collection(collection_id){
+                                            let mut search=self.database.clone().read().unwrap().search(collection);
                                             for c in conditions{
                                                 search=search.search(c.clone());
                                             }
-                                            let rowset=self.database.clone().borrow().result(&search);
+                                            let rowset=self.database.clone().read().unwrap().result(&search);
                                             let context=scope.get_current_context();
                                             let global=context.global(scope);
                                             if let (
