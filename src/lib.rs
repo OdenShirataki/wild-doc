@@ -23,6 +23,7 @@ impl SemilatticeScript{
     }
 
     pub fn exec(&mut self,qml:&str)->String{
+        //println!("{}",qml);
         let mut reader=Reader::from_str(qml.trim());
         reader.expand_empty_elements(true);
         loop{

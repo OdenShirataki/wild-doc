@@ -87,7 +87,7 @@ pub fn field(
                         }
                         }
                         ,_=>{
-                            if let Some(str)=v8::String::new(scope,data.field_str(main_row,&field_name)){
+                            if let Some(str)=v8::String::new(scope,std::str::from_utf8(data.field_bytes(main_row,&field_name)).unwrap()){
                                 rv.set(str.into());
                             }
                         }
