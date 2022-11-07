@@ -13,7 +13,7 @@ if std::path::Path::new(dir).exists(){
 }else{
     std::fs::create_dir_all(dir).unwrap();
 }
-let mut wd=SemilatticeScript::new(
+let mut wd=WildDoc::new(
     dir
     ,IncludeLocal::new("./include/")
 ).unwrap();
