@@ -11,7 +11,7 @@ use semilattice_database::{Database, Session};
 
 mod process;
 
-use crate::xml_util;
+use crate::{xml_util, IncludeAdaptor};
 mod update;
 mod search;
 mod method;
@@ -22,15 +22,17 @@ pub struct Script{
     ,sessions:Vec<Session>
 }
 impl Script{
-    pub fn new(database:Arc<RwLock<Database>>)->Self{
+    pub fn new(
+        database:Arc<RwLock<Database>>
+    )->Self{
         let session=database.clone().read().unwrap().blank_session().unwrap();
         Self{
             database
             ,sessions:vec![session]
         }
     }
-    pub fn parse_xml(&mut self,reader: &mut Reader<&[u8]>)->String{
-        static START: Once = Once::new();
+    pub fn parse_xml<T:IncludeAdaptor>(&mut self,reader: &mut Reader<&[u8]>,include_adaptor:&T)->String{
+        static START: Once=Once::new();
         START.call_once(||{
             v8::V8::set_flags_from_string("--expose_gc");
             v8::V8::initialize_platform(
@@ -77,12 +79,13 @@ impl Script{
                 scope
                 ,reader
                 ,"ss"
+                ,include_adaptor
             );
         }
         ret
     }
 
-    pub fn parse(&mut self,scope: &mut v8::HandleScope,reader: &mut Reader<&[u8]>,break_tag:&str)->String{
+    pub fn parse<T:IncludeAdaptor>(&mut self,scope: &mut v8::HandleScope,reader: &mut Reader<&[u8]>,break_tag:&str,include_adaptor:&T)->String{
         let mut search_map=HashMap::new();
         let mut r=String::new();
         loop{
@@ -90,7 +93,8 @@ impl Script{
                 match next{
                     Event::Start(ref e)=>{
                         let name=e.name();
-                        match name.as_ref(){
+                        let name=name.as_ref();
+                        match name{
                             b"ss:session"=>{
                                 let attr=xml_util::attr2hash_map(&e);
                                 let session_name=crate::attr_parse_or_static(scope,&attr,"name");
@@ -111,11 +115,10 @@ impl Script{
                                 let attr=xml_util::attr2hash_map(&e);
                                 let with_commit=crate::attr_parse_or_static(scope,&attr,"commit")=="1";
                                 
-                                let inner_xml=self.parse(scope,reader,"ss:update");
+                                let inner_xml=self.parse(scope,reader,"ss:update",include_adaptor);
                                 let mut inner_reader=Reader::from_str(&inner_xml);
                                 inner_reader.expand_empty_elements(true);
                                 let updates=update::make_update_struct(self,&mut inner_reader,scope);
-
                                 if let Some(session)=self.sessions.last_mut(){
                                     if !session.is_blank(){
                                         self.database.clone().read().unwrap().update(session,updates);
@@ -230,19 +233,41 @@ impl Script{
                                 r+=&crate::attr_parse_or_static(scope,&attr,"value");
                             }
                             ,b"ss:case"=>{
-                                r+=&process::case(self,&e,&xml_util::outer(&next,reader),scope);
+                                r+=&process::case(self,&e,&xml_util::outer(&next,reader),scope,include_adaptor);
                             }
                             ,b"ss:for"=>{
                                 let outer=xml_util::outer(&next,reader);
-                                r+=&process::r#for(self,&e,&outer,scope);
+                                r+=&process::r#for(self,&e,&outer,scope,include_adaptor);
                             }
-                            /*
                             ,b"ss:include"=>{
-                                r+=&process::include(session,&e,scope);
+                                if let Ok(Some(src))=e.try_get_attribute(b"src"){
+                                    if let Some(src)=std::str::from_utf8(&src.value).ok().and_then(|src|v8::String::new(scope,&src))
+                                        .and_then(|code|v8::Script::compile(scope, code, None))
+                                        .and_then(|v|v.run(scope))
+                                        .and_then(|v|v.to_string(scope))
+                                    {
+                                        let src=src.to_rust_string_lossy(scope);
+                                        let xml=include_adaptor.include(&src);
+
+                                        let str_xml="<root>".to_owned()+&xml+"</root>";
+                                        let mut event_reader_inner=Reader::from_str(&str_xml);
+                                        event_reader_inner.expand_empty_elements(true);
+                                        loop{
+                                            match event_reader_inner.read_event(){
+                                                Ok(Event::Start(e))=>{
+                                                    if e.name().as_ref()==b"root"{
+                                                        r+=&self.parse(scope,&mut event_reader_inner,"root",include_adaptor);
+                                                        break;
+                                                    }
+                                                }
+                                                ,_=>{}
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            */
                             ,_=>{
-                                r+=&process::html(e.name().as_ref(),&e,scope);
+                                r+=&process::html(name,&e,scope);
                             }
                         }
                     }
@@ -265,17 +290,15 @@ impl Script{
                                     self.sessions.pop();
                                 }
                             }else{
-                                r.push_str("</");
-                                r.push_str(std::str::from_utf8(name).unwrap_or(""));
-                                r.push('>');
+                                r+=&("</".to_owned()+std::str::from_utf8(name).unwrap_or("")+">");
                             }
                         }
                     }
                     ,Event::CData(c)=>{
-                        r.push_str(std::str::from_utf8(&c.into_inner()).expect("Error!"));
+                        r+=std::str::from_utf8(&c.into_inner()).unwrap_or("");
                     }
                     ,Event::Text(c)=>{
-                        r.push_str(&c.unescape().expect("Error!"));
+                        r+=&c.unescape().expect("Error!");
                     }
                     ,_ => {}
                 }

@@ -12,7 +12,10 @@ fn it_works(){
     }else{
         std::fs::create_dir_all(dir).unwrap();
     }
-    let mut ss=SemilatticeScript::new(dir).unwrap();
+    let mut ss=SemilatticeScript::new(
+        dir
+        ,IncludeLocal::new("./include/")
+    ).unwrap();
 
     //update data.
     ss.exec(r#"<ss><ss:session name="hoge">
@@ -63,6 +66,7 @@ fn it_works(){
                     <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
                 </li></ss:for>
             </ul>
+            <ss:include src="'hoge.xml'" />
         </ss:result>
     </ss>"#);
     println!("{}",r);

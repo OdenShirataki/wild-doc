@@ -8,20 +8,27 @@ use semilattice_database::Database;
 
 mod script;
 use script::Script;
-use xml_util::XmlAttr;
 
 mod xml_util;
+use xml_util::XmlAttr;
 
-pub struct SemilatticeScript{
+mod include;
+pub use include::{IncludeAdaptor,IncludeLocal};
+
+pub struct SemilatticeScript<T:IncludeAdaptor>{
     database:Arc<RwLock<Database>>
+    ,include_adaptor:T
 }
-impl SemilatticeScript{
-    pub fn new(dir:&str)->Result<Self,std::io::Error>{
+impl<T:IncludeAdaptor> SemilatticeScript<T>{
+    pub fn new(
+        dir:&str
+        ,include_adaptor:T
+    )->Result<Self,std::io::Error>{
         Ok(Self{
             database:Arc::new(RwLock::new(Database::new(dir)?))
+            ,include_adaptor
         })
     }
-
     pub fn exec(&mut self,qml:&str)->String{
         //println!("{}",qml);
         let mut reader=Reader::from_str(qml.trim());
@@ -33,7 +40,7 @@ impl SemilatticeScript{
                         let mut script=Script::new(
                             self.database.clone()
                         );
-                        return script.parse_xml(&mut reader);
+                        return script.parse_xml(&mut reader,&self.include_adaptor);
                     }
                 }
                 ,_=>{}

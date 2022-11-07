@@ -9,11 +9,11 @@ use quick_xml::{
     }
 };
 
-use crate::xml_util;
+use crate::{xml_util, IncludeAdaptor};
 
 use super::Script;
 
-pub(super) fn case(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope)->String{
+pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope,include_adaptor:&T)->String{
     let mut r=String::new();
     let attr=xml_util::attr2hash_map(&e);
     let cmp_value=crate::attr_parse_or_static(scope,&attr,"value");
@@ -37,7 +37,7 @@ pub(super) fn case(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8:
                                                     match event_reader_inner.read_event(){
                                                         Ok(Event::Start(e))=>{
                                                             if e.name().as_ref()==b"ss:else"{
-                                                                r+=&script.parse(scope,&mut event_reader_inner,"");
+                                                                r+=&script.parse(scope,&mut event_reader_inner,"",include_adaptor);
                                                                 break;
                                                             }
                                                         }
@@ -56,7 +56,7 @@ pub(super) fn case(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8:
                                                         match event_reader_inner.read_event(){
                                                             Ok(Event::Start(e))=>{
                                                                 if e.name().as_ref()==b"ss:when"{
-                                                                    r+=&script.parse(scope,&mut event_reader_inner,"");
+                                                                    r+=&script.parse(scope,&mut event_reader_inner,"",include_adaptor);
                                                                     break 'case;
                                                                 }
                                                             }
@@ -84,7 +84,7 @@ pub(super) fn case(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8:
     }
     r
 }
-pub(super) fn r#for(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope)->String{
+pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope,include_adaptor:&T)->String{
     let mut r=String::new();
     let attr=xml_util::attr2hash_map(&e);
     let var=crate::attr_parse_or_static(scope,&attr,"var");
@@ -117,7 +117,7 @@ pub(super) fn r#for(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8
                                             .and_then(|code|v8::Script::compile(scope, code, None))
                                             .and_then(|v|v.run(scope))
                                         ;
-                                        r+=&script.parse(scope,&mut ev,"ss:for");
+                                        r+=&script.parse(scope,&mut ev,"ss:for",include_adaptor);
                                         v8::String::new(scope,"ss.stack.pop()")
                                             .and_then(|code|v8::Script::compile(scope, code, None))
                                             .and_then(|v|v.run(scope))
@@ -135,45 +135,6 @@ pub(super) fn r#for(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8
     }
     r
 }
-
-/*
-pub(super) fn include(session:&mut Session,e:&BytesStart,scope: &mut v8::HandleScope)->String{
-    let mut r=String::new();
-    if let Ok(Some(src))=e.try_get_attribute(b"src"){
-        if let Some(src)=std::str::from_utf8(&src.value).ok().and_then(|src|v8::String::new(scope,&src))
-            .and_then(|code|v8::Script::compile(scope, code, None))
-            .and_then(|v|v.run(scope))
-            .and_then(|v|v.to_string(scope))
-        {
-            if let Ok(mut file)=OpenOptions::new()
-                .read(true)
-                .write(false)
-                .create(false)
-                .open("d:/data/script/".to_owned()+&src.to_rust_string_lossy(scope))
-            {
-                let mut contents = String::new();
-                if let Ok(_)=file.read_to_string(&mut contents){
-                    let xml_str="<ss:select xmlns:ss=\"ss\">".to_owned()+&contents+"</ss:select>";
-                    let mut event_reader_inner=Reader::from_str(&xml_str);
-                    event_reader_inner.expand_empty_elements(true);
-                    loop{
-                        match event_reader_inner.read_event(){
-                            Ok(Event::Start(e))=>{
-                                if e.name().as_ref()==b"ss:select"{
-                                    r+=&super::Script::parse(session,scope,&mut event_reader_inner);
-                                    break;
-                                }
-                            }
-                            ,_=>{}
-                        }
-                    }
-                }
-            }
-        }
-    }
-    r
-}
-*/
 
 pub(super) fn html(name:&[u8],e:&BytesStart,scope: &mut v8::HandleScope)->String{
     let mut r=String::new();

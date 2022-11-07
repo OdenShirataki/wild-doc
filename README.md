@@ -3,6 +3,7 @@
 ## Example
 
 ```rust
+use chrono::TimeZone;
 use semilattice_script::*;
 
 let dir="./ss-test/";
@@ -12,7 +13,10 @@ if std::path::Path::new(dir).exists(){
 }else{
     std::fs::create_dir_all(dir).unwrap();
 }
-let mut ss=SemilatticeScript::new(dir).unwrap();
+let mut ss=SemilatticeScript::new(
+    dir
+    ,IncludeLocal::new("./include/")
+).unwrap();
 
 //update data.
 ss.exec(r#"<ss><ss:session name="hoge">
@@ -63,6 +67,7 @@ let r=ss.exec(r#"<ss>
                 <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
             </li></ss:for>
         </ul>
+        <ss:include src="'hoge.xml'" />
     </ss:result>
 </ss>"#);
 println!("{}",r);
