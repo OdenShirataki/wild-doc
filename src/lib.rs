@@ -15,11 +15,11 @@ use xml_util::XmlAttr;
 mod include;
 pub use include::{IncludeAdaptor,IncludeLocal};
 
-pub struct SemilatticeScript<T:IncludeAdaptor>{
+pub struct WildDoc<T:IncludeAdaptor>{
     database:Arc<RwLock<Database>>
     ,include_adaptor:T
 }
-impl<T:IncludeAdaptor> SemilatticeScript<T>{
+impl<T:IncludeAdaptor> WildDoc<T>{
     pub fn new(
         dir:&str
         ,include_adaptor:T

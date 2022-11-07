@@ -12,7 +12,7 @@ fn it_works(){
     }else{
         std::fs::create_dir_all(dir).unwrap();
     }
-    let mut wd=SemilatticeScript::new(
+    let mut wd=WildDoc::new(
         dir
         ,IncludeLocal::new("./include/")
     ).unwrap();
