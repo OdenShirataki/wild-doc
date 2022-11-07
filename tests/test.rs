@@ -3,23 +3,23 @@
 #[test]
 fn it_works(){
     use chrono::TimeZone;
-    use semilattice_script::*;
+    use wild_doc::*;
 
-    let dir="./ss-test/";
+    let dir="./wd-test/";
     if std::path::Path::new(dir).exists(){
         std::fs::remove_dir_all(dir).unwrap();
         std::fs::create_dir_all(dir).unwrap();
     }else{
         std::fs::create_dir_all(dir).unwrap();
     }
-    let mut ss=SemilatticeScript::new(
+    let mut wd=SemilatticeScript::new(
         dir
         ,IncludeLocal::new("./include/")
     ).unwrap();
 
     //update data.
-    ss.exec(r#"<ss><ss:session name="hoge">
-        <ss:update commit="1">
+    wd.exec(r#"<wd><wd:session name="hoge">
+        <wd:update commit="1">
             <collection name="person">
                 <field name="name">Noah</field>
                 <field name="country">US</field>
@@ -32,109 +32,109 @@ fn it_works(){
                 <field name="name">Olivia</field>
                 <field name="country">UK</field>
             </collection>
-        </ss:update>
-    </ss:session></ss>"#);
+        </wd:update>
+    </wd:session></wd>"#);
 
     //select data.
-    let r=ss.exec(r#"<ss>
-        <ss:search name="p" collection="person">
-        </ss:search>
-        <ss:result var="q" search="p">
+    let r=wd.exec(r#"<wd>
+        <wd:search name="p" collection="person">
+        </wd:search>
+        <wd:result var="q" search="p">
             <div>
-                find <ss:print ss:value="ss.v('q').length" /> persons.
+                find <wd:print wd:value="wd.v('q').length" /> persons.
             </div>
             <ul>
-                <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
-                    <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
-                </li></ss:for>
+                <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                    <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
+                </li></wd:for>
             </ul>
-        </ss:result>
-    </ss>"#);
+        </wd:result>
+    </wd>"#);
     println!("{}",r);
 
     //seaech data
-    let r=ss.exec(r#"<ss>
-        <ss:search name="p" collection="person">
+    let r=wd.exec(r#"<wd>
+        <wd:search name="p" collection="person">
             <field name="country" method="match" value="US" />
-        </ss:search>
-        <ss:result var="q" search="p">
+        </wd:search>
+        <wd:result var="q" search="p">
             <div>
-                find <ss:print ss:value="ss.v('q').length" /> persons from the US.
+                find <wd:print wd:value="wd.v('q').length" /> persons from the US.
             </div>
             <ul>
-                <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
-                    <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
-                </li></ss:for>
+                <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                    <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
+                </li></wd:for>
             </ul>
-            <ss:include src="'hoge.xml'" />
-        </ss:result>
-    </ss>"#);
+            <wd:include src="'hoge.xml'" />
+        </wd:result>
+    </wd>"#);
     println!("{}",r);
 
     //use javascript
-    let r=ss.exec(r#"<ss>
-        <ss:script>
+    let r=wd.exec(r#"<wd>
+        <wd:script>
             const ymd=function(){
                 const now=new Date();
                 return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
             };
             const uk="UK";
-        </ss:script>
-        <ss:search name="p" collection="person">
-            <field name="country" method="match" ss:value="uk" />
-        </ss:search>
-        <ss:result var="q" search="p">
+        </wd:script>
+        <wd:search name="p" collection="person">
+            <field name="country" method="match" wd:value="uk" />
+        </wd:search>
+        <wd:result var="q" search="p">
             <div>
-                <ss:print ss:value="ymd()" />
+                <wd:print wd:value="ymd()" />
             </div>
             <div>
-                find <ss:print ss:value="ss.v('q').length" /> persons from the <ss:print ss:value="uk" />.
+                find <wd:print wd:value="wd.v('q').length" /> persons from the <wd:print wd:value="uk" />.
             </div>
             <ul>
-                <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
-                    <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
-                </li></ss:for>
+                <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                    <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
+                </li></wd:for>
             </ul>
-        </ss:result>
-    </ss>"#);
+        </wd:result>
+    </wd>"#);
     println!("{}",r);
 
     //search in update section.
-    ss.exec(r#"<ss><ss:session name="hoge">
-        <ss:update commit="1">
-            <ss:search name="person" collection="person"></ss:search>
-            <ss:result var="q" search="person">
-                <ss:for var="r" index="i" ss:in="ss.v('q')">
-                    hoge:<ss:print ss:value="ss.v('r').row" />
-                    <collection name="person" ss:row="ss.v('r').row">
-                        <field name="name">Renamed <ss:print ss:value="ss.v('r').field('name')" /></field>
-                        <field name="country"><ss:print ss:value="ss.v('r').field('country')" /></field>
+    wd.exec(r#"<wd><wd:session name="hoge">
+        <wd:update commit="1">
+            <wd:search name="person" collection="person"></wd:search>
+            <wd:result var="q" search="person">
+                <wd:for var="r" index="i" wd:in="wd.v('q')">
+                    hoge:<wd:print wd:value="wd.v('r').row" />
+                    <collection name="person" wd:row="wd.v('r').row">
+                        <field name="name">Renamed <wd:print wd:value="wd.v('r').field('name')" /></field>
+                        <field name="country"><wd:print wd:value="wd.v('r').field('country')" /></field>
                     </collection>
-                </ss:for>
-            </ss:result>
-        </ss:update>
-    </ss:session></ss>"#);
-    let r=ss.exec(r#"<ss>
-        <ss:search name="p" collection="person"></ss:search>
-        <ss:result var="q" search="p">
+                </wd:for>
+            </wd:result>
+        </wd:update>
+    </wd:session></wd>"#);
+    let r=wd.exec(r#"<wd>
+        <wd:search name="p" collection="person"></wd:search>
+        <wd:result var="q" search="p">
             <div>
-                find <ss:print ss:value="ss.v('q').length" /> persons.
+                find <wd:print wd:value="wd.v('q').length" /> persons.
             </div>
             <ul>
-                <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
-                    <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
-                </li></ss:for>
+                <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                    <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
+                </li></wd:for>
             </ul>
-        </ss:result>
-    </ss>"#);
+        </wd:result>
+    </wd>"#);
     println!("{}",r);
 
 
     //REPEAT
     
     //update data.
-    ss.exec(r#"<ss><ss:session name="hoge">
-        <ss:update commit="1">
+    wd.exec(r#"<wd><wd:session name="hoge">
+        <wd:update commit="1">
             <collection name="person">
                 <field name="name">Noah</field>
                 <field name="country">US</field>
@@ -147,107 +147,107 @@ fn it_works(){
                 <field name="name">Olivia</field>
                 <field name="country">UK</field>
             </collection>
-        </ss:update>
-    </ss:session></ss>"#);
+        </wd:update>
+    </wd:session></wd>"#);
 
     //select data.
-    let r=ss.exec(r#"<ss>
-        <ss:search name="p" collection="person">
-        </ss:search>
-        <ss:result var="q" search="p">
+    let r=wd.exec(r#"<wd>
+        <wd:search name="p" collection="person">
+        </wd:search>
+        <wd:result var="q" search="p">
             <div>
-                find <ss:print ss:value="ss.v('q').length" /> persons.
+                find <wd:print wd:value="wd.v('q').length" /> persons.
             </div>
             <ul>
-                <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
-                    <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
-                </li></ss:for>
+                <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                    <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
+                </li></wd:for>
             </ul>
-        </ss:result>
-    </ss>"#);
+        </wd:result>
+    </wd>"#);
     println!("{}",r);
 
     //seaech data
-    let r=ss.exec(r#"<ss>
-        <ss:search name="p" collection="person">
+    let r=wd.exec(r#"<wd>
+        <wd:search name="p" collection="person">
             <field name="country" method="match" value="US" />
-        </ss:search>
-        <ss:result var="q" search="p">
+        </wd:search>
+        <wd:result var="q" search="p">
             <div>
-                find <ss:print ss:value="ss.v('q').length" /> persons from the US.
+                find <wd:print wd:value="wd.v('q').length" /> persons from the US.
             </div>
             <ul>
-                <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
-                    <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
-                </li></ss:for>
+                <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                    <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
+                </li></wd:for>
             </ul>
-        </ss:result>
-    </ss>"#);
+        </wd:result>
+    </wd>"#);
     println!("{}",r);
 
     //use javascript
-    let r=ss.exec(r#"<ss>
-        <ss:script>
+    let r=wd.exec(r#"<wd>
+        <wd:script>
             const ymd=function(){
                 const now=new Date();
                 return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
             };
             const uk="UK";
-        </ss:script>
-        <ss:search name="p" collection="person">
-            <field name="country" method="match" ss:value="uk" />
-        </ss:search>
-        <ss:result var="q" search="p">
+        </wd:script>
+        <wd:search name="p" collection="person">
+            <field name="country" method="match" wd:value="uk" />
+        </wd:search>
+        <wd:result var="q" search="p">
             <div>
-                <ss:print ss:value="ymd()" />
+                <wd:print wd:value="ymd()" />
             </div>
             <div>
-                find <ss:print ss:value="ss.v('q').length" /> persons from the <ss:print ss:value="uk" />.
+                find <wd:print wd:value="wd.v('q').length" /> persons from the <wd:print wd:value="uk" />.
             </div>
             <ul>
-                <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
-                    <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
-                </li></ss:for>
+                <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                    <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
+                </li></wd:for>
             </ul>
-        </ss:result>
-    </ss>"#);
+        </wd:result>
+    </wd>"#);
     println!("{}",r);
 
     //search in update section.
-    ss.exec(r#"<ss><ss:session name="hoge">
-        <ss:update commit="1">
-            <ss:search name="person" collection="person"></ss:search>
-            <ss:result var="q" search="person">
-                <ss:for var="r" index="i" ss:in="ss.v('q')">
-                    hoge:<ss:print ss:value="ss.v('r').row" />
-                    <collection name="person" ss:row="ss.v('r').row">
-                        <field name="name">Renamed <ss:print ss:value="ss.v('r').field('name')" /></field>
-                        <field name="country"><ss:print ss:value="ss.v('r').field('country')" /></field>
+    wd.exec(r#"<wd><wd:session name="hoge">
+        <wd:update commit="1">
+            <wd:search name="person" collection="person"></wd:search>
+            <wd:result var="q" search="person">
+                <wd:for var="r" index="i" wd:in="wd.v('q')">
+                    hoge:<wd:print wd:value="wd.v('r').row" />
+                    <collection name="person" wd:row="wd.v('r').row">
+                        <field name="name">Renamed <wd:print wd:value="wd.v('r').field('name')" /></field>
+                        <field name="country"><wd:print wd:value="wd.v('r').field('country')" /></field>
                     </collection>
-                </ss:for>
-            </ss:result>
-        </ss:update>
-    </ss:session></ss>"#);
-    let r=ss.exec(r#"<ss>
-        <ss:search name="p" collection="person"></ss:search>
-        <ss:result var="q" search="p">
+                </wd:for>
+            </wd:result>
+        </wd:update>
+    </wd:session></wd>"#);
+    let r=wd.exec(r#"<wd>
+        <wd:search name="p" collection="person"></wd:search>
+        <wd:result var="q" search="p">
             <div>
-                find <ss:print ss:value="ss.v('q').length" /> persons.
+                find <wd:print wd:value="wd.v('q').length" /> persons.
             </div>
             <ul>
-                <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
-                    <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print ss:value="ss.v('r').field('country')" />
-                </li></ss:for>
+                <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                    <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
+                </li></wd:for>
             </ul>
-        </ss:result>
-    </ss>"#);
+        </wd:result>
+    </wd>"#);
     println!("{}",r);
 
     /*
 
     //search in update section.
-    ss.exec(r#"<ss><ss:session name="hoge">
-        <ss:update commit="1">
+    wd.exec(r#"<wd><wd:session name="hoge">
+        <wd:update commit="1">
             <collection name="fields">
                 <field name="name">birthday</field>
                 <field name="default">1970-01-01</field>
@@ -260,16 +260,16 @@ fn it_works(){
                 <field name="name">height</field>
                 <field name="default">170</field>
             </collection>
-        </ss:update>
-    </ss:session></ss>"#);
+        </wd:update>
+    </wd:session></wd>"#);
         */
     return;
     
     let now=chrono::Local.timestamp(chrono::Local::now().timestamp()-1000,0).format("%Y-%m-%d %H:%M:%S").to_string();
     let end=chrono::Local.timestamp(chrono::Local::now().timestamp()-100,0).format("%Y-%m-%d %H:%M:%S").to_string();
 
-    ss.exec(r#"<ss><ss:session name="hoge" initialize="true">
-        <ss:update commit="1">
+    wd.exec(r#"<wd><wd:session name="hoge" initialize="true">
+        <wd:update commit="1">
             <collection name="test">
                 <field name="num" type="numeric">3</field>
             </collection>
@@ -297,11 +297,11 @@ fn it_works(){
             <collection name="test">
                 <field name="num" type="numeric">20</field>
             </collection>
-        </ss:update>
-    </ss:session></ss>"#);
+        </wd:update>
+    </wd:session></wd>"#);
     
-    ss.exec(&(r#"<ss><ss:session name="hoge" initialize="true">
-        <ss:update>
+    wd.exec(&(r#"<wd><wd:session name="hoge" initialize="true">
+        <wd:update>
             <collection name="sys_ac" row="0" term_begin=""#.to_owned()+&now+r#"" term_end=""#+&end+r#"" activity="active" priority="0">
                 <field name="name" type="text">aa</field>
                 <field name="num" type="numeric">1</field>
@@ -315,196 +315,196 @@ fn it_works(){
                     </collection>
                 </pends>
             </collection>
-        </ss:update>
-    </ss:session></ss>"#));
+        </wd:update>
+    </wd:session></wd>"#));
     
-    ss.exec(&(r#"<ss><ss:session name="hoge">
-        <ss:update>
+    wd.exec(&(r#"<wd><wd:session name="hoge">
+        <wd:update>
             <collection name="sys_ac">
                 <field name="name" type="text">TEST</field>
                 <field name="num" type="numeric">2</field>
             </collection>
-        </ss:update>
-    </ss:session></ss>"#));
+        </wd:update>
+    </wd:session></wd>"#));
 
-    ss.exec(&(r#"<ss><ss:session name="hoge">
-        <ss:update>
+    wd.exec(&(r#"<wd><wd:session name="hoge">
+        <wd:update>
             <collection name="sys_ac" term_begin=""#.to_owned()+&now+r#"" row="-1">
                 <field name="name" type="text">AA</field>
             </collection>
-        </ss:update>
-    </ss:session></ss>"#));
+        </wd:update>
+    </wd:session></wd>"#));
     
     
-    ss.exec(&(r#"<ss><ss:session name="hoge">
-        <ss:update>
+    wd.exec(&(r#"<wd><wd:session name="hoge">
+        <wd:update>
             <collection name="sys_ac" term_begin=""#.to_owned()+&now+r#"" row="0">
                 <field name="name" type="text">cccc</field>
                 <field name="num" type="numeric">3</field>
             </collection>
-        </ss:update>
-    </session></ss>"#));
+        </wd:update>
+    </session></wd>"#));
     
-    ss.exec(r#"<ss><ss:session name="hoge">
-        <ss:update commit="1"></ss:update>
-    </ss:session></ss>"#);
+    wd.exec(r#"<wd><wd:session name="hoge">
+        <wd:update commit="1"></wd:update>
+    </wd:session></wd>"#);
 
-    let r=ss.exec(&(r#"<ss>
-        <ss:script>
+    let r=wd.exec(&(r#"<wd>
+        <wd:script>
             const hoge='HOGE';
             const f=function(){
                 return 'FUGA';
             };
-        </ss:script>
-        <ss:stack var="hoge:2">hoge=<ss:print ss:value="ss.v('hoge')" /><ss:stack var="hoge2:3">
-            hoge=<ss:print ss:value="ss.v('hoge')" />
-            hoge2=<ss:print ss:value="ss.v('hoge2')" />
-            <ss:search name="test" collection="test">
+        </wd:script>
+        <wd:stack var="hoge:2">hoge=<wd:print wd:value="wd.v('hoge')" /><wd:stack var="hoge2:3">
+            hoge=<wd:print wd:value="wd.v('hoge')" />
+            hoge2=<wd:print wd:value="wd.v('hoge2')" />
+            <wd:search name="test" collection="test">
                 <field name="num" method="range" value="4..10" />
                 <row method="range" value="6..8" />
-            </ss:search>
-            <ss:result var="q" search="test">
-                (TEST)データが<ss:print ss:value="ss.v('q').length" />件あります
+            </wd:search>
+            <wd:result var="q" search="test">
+                (TEST)データが<wd:print wd:value="wd.v('q').length" />件あります
                 <ul>
-                    <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
-                        <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('num')" />
-                    </li></ss:for>
+                    <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                        <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('num')" />
+                    </li></wd:for>
                 </ul>
-            </ss:result>
-        </ss:stack></ss:stack>
-    </ss>"#));
+            </wd:result>
+        </wd:stack></wd:stack>
+    </wd>"#));
     println!("{}",r);
-    let r=ss.exec(&(r#"<ss>
-        <ss:script>
+    let r=wd.exec(&(r#"<wd>
+        <wd:script>
             const hoge='HOGE';
             const f=function(){
                 return 'FUGA';
             };
-        </ss:script>
-        <ss:stack var="hoge:2">hoge=<ss:print ss:value="ss.v('hoge')" /><ss:stack var="hoge2:3">
-            hoge=<ss:print ss:value="ss.v('hoge')" />
-            hoge2=<ss:print ss:value="ss.v('hoge2')" />
-            <ss:search name="s"
+        </wd:script>
+        <wd:stack var="hoge:2">hoge=<wd:print wd:value="wd.v('hoge')" /><wd:stack var="hoge2:3">
+            hoge=<wd:print wd:value="wd.v('hoge')" />
+            hoge2=<wd:print wd:value="wd.v('hoge2')" />
+            <wd:search name="s"
                 collection="sys_ac"
                 activity="active"
                 term="in@"#.to_owned()+&chrono::Local.timestamp(chrono::Local::now().timestamp(),0).format("%Y-%m-%d %H:%M:%S").to_string()+r#""
             >
                 <field name="num" method="match" value="2" />
-            </ss:search>
-            <ss:search name="test" collection="test">
+            </wd:search>
+            <wd:search name="test" collection="test">
                 <field name="num" method="range" value="4..10" />
                 <row method="range" value="6..8" />
                 <depend key="" collection="collection_name" row="1" />
                 <narrow></narrow>
                 <wide></wide>
-            </ss:search>
-            <ss:result var="q" search="test">
-                (TEST)データが<ss:print ss:value="ss.v('q').length" />件あります
+            </wd:search>
+            <wd:result var="q" search="test">
+                (TEST)データが<wd:print wd:value="wd.v('q').length" />件あります
                 <ul>
-                    <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
-                        <ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('num')" />
-                    </li></ss:for>
+                    <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                        <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('num')" />
+                    </li></wd:for>
                 </ul>
-            </ss:result>
-            <ss:result var="q" search="s">
-                データが<span ss:collection="'hoge'+ss.v('q').length"><ss:print ss:value="ss.v('q').length" /></span>件あります
+            </wd:result>
+            <wd:result var="q" search="s">
+                データが<span wd:collection="'hoge'+wd.v('q').length"><wd:print wd:value="wd.v('q').length" /></span>件あります
                 <ul>
-                    <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
-                        <ss:print ss:value="ss.v('i')+1" /> row:<ss:print ss:value="ss.v('r').row" /> : <ss:print ss:value="ss.v('r').field('_uuid')" /> : <ss:print ss:value="ss.v('r').field('name')" /> : <ss:print value="ss.v('r').field('num')" />
-                    </li></ss:for>
-                    <ss:for var="r" index="i" ss:in="[0,3,1]"><li>
-                        OK<ss:print ss:value="ss.v('i')+':'+ss.v('r')" />
-                    </li></ss:for>
+                    <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                        <wd:print wd:value="wd.v('i')+1" /> row:<wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('_uuid')" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print value="wd.v('r').field('num')" />
+                    </li></wd:for>
+                    <wd:for var="r" index="i" wd:in="[0,3,1]"><li>
+                        OK<wd:print wd:value="wd.v('i')+':'+wd.v('r')" />
+                    </li></wd:for>
                 </ul>
-                hoge=<ss:print ss:value="hoge" />
-                <ss:case value="hoge">
-                    <ss:when value="2">
+                hoge=<wd:print wd:value="hoge" />
+                <wd:case value="hoge">
+                    <wd:when value="2">
                         hogeは2です。
-                    </ss:when>
-                    <ss:when value="'HOGE'">
+                    </wd:when>
+                    <wd:when value="'HOGE'">
                         OKです。
-                    </ss:when>
-                    <ss:else>
+                    </wd:when>
+                    <wd:else>
                         else
-                    </ss:else>
-                </ss:case>
-            </ss:result>
-        </ss:stack></ss:stack>
-        <ss:include src="'hoge.ygl'" />
-    </ss>"#));
+                    </wd:else>
+                </wd:case>
+            </wd:result>
+        </wd:stack></wd:stack>
+        <wd:include src="'hoge.ygl'" />
+    </wd>"#));
     println!("{}",r);
     
     return;
-    ss.exec(r#"<ss><ss:session="hoge">
-        <ss:update commit="1">
+    wd.exec(r#"<wd><wd:session="hoge">
+        <wd:update commit="1">
             <collection name="sys_ac" row="2">
                 <field name="name" type="text">test_rename2</field>
             </collection>
-        </ss:update>
-    </ss:session></ss>"#
+        </wd:update>
+    </wd:session></wd>"#
     );
 
-    ss.exec(r#"<ss><ss:session="hoge">
-        <ss:update commit="1">
+    wd.exec(r#"<wd><wd:session="hoge">
+        <wd:update commit="1">
             <collection name="sys_ac" row="2">
                 <field name="name" type="text">test_rename3</field>
             </collection>
-        </ss:update>
-    </ss:session></ss>"#
+        </wd:update>
+    </wd:session></wd>"#
     );
 
-    ss.exec(r#"<ss><ss:session="hoge">
-        <ss:update commit="1">
+    wd.exec(r#"<wd><wd:session="hoge">
+        <wd:update commit="1">
             <collection name="sys_ac" row="3" activity="inactive">
                 <field name="name" type="text">test_rename4</field>
             </collection>
-        </ss:update>
-    </ss:session></ss>"#
+        </wd:update>
+    </wd:session></wd>"#
     );
 
-    ss.exec(r#"<ss><ss:session="hoge">
-        <ss:select>
-            <ss:stack var="hoge:true">
-                <ss:script>
+    wd.exec(r#"<wd><wd:session="hoge">
+        <wd:select>
+            <wd:stack var="hoge:true">
+                <wd:script>
                     var hoge="HOGE";
                     var f=function(){
                         return "FUGA"
                     }
-                </ss:script>
-                hoge=<ss:print ss:value="f()" />
-                <ss:query>
-                    <ss:search name="s"
+                </wd:script>
+                hoge=<wd:print wd:value="f()" />
+                <wd:query>
+                    <wd:search name="s"
                         collection="sys_ac"
                         activity="all"
-                    ></ss:search>
-                    <ss:result var="q" search="s"><div class="hoge2">
-                        データが<span ss:collection="'hoge'+(ss.v('q').length)"><ss:print ss:value="ss.v('q').length" /></span>件あります
+                    ></wd:search>
+                    <wd:result var="q" search="s"><div class="hoge2">
+                        データが<span wd:collection="'hoge'+(wd.v('q').length)"><wd:print wd:value="wd.v('q').length" /></span>件あります
                         <ul>
-                            <ss:for var="r" index="i" ss:in="ss.v('q')"><li>
-                                <ss:print ss:value="ss.v('i')+1" /> row:<ss:print ss:value="ss.v('r').row" /> <ss:print ss:value="ss.v('r').field('_activity')+','+ss.v('r').field('name')" />
-                            </li></ss:for>
-                            <ss:for var="r" index="i" ss:in="[0,3,1]"><li>
-                                OK<ss:print ss:value="ss.v('i')+':'+ss.v('r')" />
-                            </li></ss:for>
+                            <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                                <wd:print wd:value="wd.v('i')+1" /> row:<wd:print wd:value="wd.v('r').row" /> <wd:print wd:value="wd.v('r').field('_activity')+','+wd.v('r').field('name')" />
+                            </li></wd:for>
+                            <wd:for var="r" index="i" wd:in="[0,3,1]"><li>
+                                OK<wd:print wd:value="wd.v('i')+':'+wd.v('r')" />
+                            </li></wd:for>
                         </ul>
-                        <ss:case value="hoge">
-                            <ss:when value="1">
+                        <wd:case value="hoge">
+                            <wd:when value="1">
                                 hogeは1です。
-                            </ss:when>
-                            <ss:when value="'HOGE'">
+                            </wd:when>
+                            <wd:when value="'HOGE'">
                                 OKです。
-                            </ss:when>
-                            <ss:else>
+                            </wd:when>
+                            <wd:else>
                                 else
-                            </ss:else>
-                        </ss:case>
-                        hoge=<ss:print ss:value="ss.v('hoge')" />
-                    </div></ss:result>
-                </ss:query>
-            </ss:stack>
-            <ss:include src="'hoge.ygl'" />
-        </s:select>
-    </ss:session></ss>"#
+                            </wd:else>
+                        </wd:case>
+                        hoge=<wd:print wd:value="wd.v('hoge')" />
+                    </div></wd:result>
+                </wd:query>
+            </wd:stack>
+            <wd:include src="'hoge.ygl'" />
+        </wd:select>
+    </wd:session></wd>"#
     );
     
 }

@@ -54,31 +54,31 @@ impl Script{
 
         let mut ret="".to_string();
         if let (
-            Some(v8str_ss)
+            Some(v8str_wd)
             ,Some(v8str_stack)
             ,Some(v8str_v)
             ,Some(func_v)
         )=(
-            v8::String::new(scope,"ss")
+            v8::String::new(scope,"wd")
             ,v8::String::new(scope,"stack")
             ,v8::String::new(scope,"v")
             ,v8::Function::new(scope,v)
         ){
-            let ss=v8::Object::new(scope);
+            let wd=v8::Object::new(scope);
             let stack=v8::Array::new(scope,0);
-            ss.set(scope,v8str_stack.into(),stack.into());
-            ss.set(scope,v8str_v.into(),func_v.into());
+            wd.set(scope,v8str_stack.into(),stack.into());
+            wd.set(scope,v8str_v.into(),func_v.into());
             
             global.set(
                 scope
-                ,v8str_ss.into()
-                ,ss.into()
+                ,v8str_wd.into()
+                ,wd.into()
             );
             
             ret=self.parse(
                 scope
                 ,reader
-                ,"ss"
+                ,"wd"
                 ,include_adaptor
             );
         }
@@ -95,7 +95,7 @@ impl Script{
                         let name=e.name();
                         let name=name.as_ref();
                         match name{
-                            b"ss:session"=>{
+                            b"wd:session"=>{
                                 let attr=xml_util::attr2hash_map(&e);
                                 let session_name=crate::attr_parse_or_static(scope,&attr,"name");
                                 if let Ok(mut session)=Session::new(&self.database.clone().read().unwrap(),&session_name){
@@ -111,11 +111,11 @@ impl Script{
                                     xml_util::outer(&next,reader);
                                 }
                             }
-                            ,b"ss:update"=>{
+                            ,b"wd:update"=>{
                                 let attr=xml_util::attr2hash_map(&e);
                                 let with_commit=crate::attr_parse_or_static(scope,&attr,"commit")=="1";
                                 
-                                let inner_xml=self.parse(scope,reader,"ss:update",include_adaptor);
+                                let inner_xml=self.parse(scope,reader,"wd:update",include_adaptor);
                                 let mut inner_reader=Reader::from_str(&inner_xml);
                                 inner_reader.expand_empty_elements(true);
                                 let updates=update::make_update_struct(self,&mut inner_reader,scope);
@@ -128,7 +128,7 @@ impl Script{
                                     }
                                 }
                             }
-                            ,b"ss:search"=>{
+                            ,b"wd:search"=>{
                                 let attr=xml_util::attr2hash_map(&e);
                                 let name=crate::attr_parse_or_static(scope,&attr,"name");
                                 let collection_name=crate::attr_parse_or_static(scope,&attr,"collection");
@@ -140,7 +140,7 @@ impl Script{
                                     }
                                 }
                             }
-                            ,b"ss:result"=>{
+                            ,b"wd:result"=>{
                                 let attr=xml_util::attr2hash_map(&e);
                                 let search=crate::attr_parse_or_static(scope,&attr,"search");
                                 let var=crate::attr_parse_or_static(scope,&attr,"var");
@@ -160,7 +160,7 @@ impl Script{
                                                 ,Some(v8str_session_key)
                                                 ,Some(v8str_func_field)
                                                 ,Some(v8str_row)
-                                                ,Some(v8str_ss)
+                                                ,Some(v8str_wd)
                                                 ,Some(v8str_stack)
                                                 ,Some(var)
                                                 ,Some(v8func_field)
@@ -169,14 +169,14 @@ impl Script{
                                                 ,v8::String::new(scope,"session_key")
                                                 ,v8::String::new(scope,"field")
                                                 ,v8::String::new(scope,"row")
-                                                ,v8::String::new(scope,"ss")
+                                                ,v8::String::new(scope,"wd")
                                                 ,v8::String::new(scope,"stack")
                                                 ,v8::String::new(scope,&var)
                                                 ,v8::Function::new(scope,field)
                                             ){
-                                                if let Some(ss)=global.get(scope,v8str_ss.into()){
-                                                    if let Ok(ss)=v8::Local::<v8::Object>::try_from(ss){
-                                                        if let Some(stack)=ss.get(scope,v8str_stack.into()){
+                                                if let Some(wd)=global.get(scope,v8str_wd.into()){
+                                                    if let Ok(wd)=v8::Local::<v8::Object>::try_from(wd){
+                                                        if let Some(stack)=wd.get(scope,v8str_stack.into()){
                                                             if let Ok(stack)=v8::Local::<v8::Array>::try_from(stack){
                                                                 let obj=v8::Object::new(scope);
                                                                 let return_obj=v8::Array::new(scope,0); 
@@ -209,16 +209,16 @@ impl Script{
                                     }
                                 }
                             }
-                            ,b"ss:stack"=>{
+                            ,b"wd:stack"=>{
                                 if let Ok(Some(var))=e.try_get_attribute(b"var"){
                                     std::str::from_utf8(&var.value).ok()
-                                        .and_then(|code|v8::String::new(scope,&("ss.stack.push({".to_owned()+&code+"});"))
+                                        .and_then(|code|v8::String::new(scope,&("wd.stack.push({".to_owned()+&code+"});"))
                                         .and_then(|code|v8::Script::compile(scope, code, None))
                                         .and_then(|v|v.run(scope)))
                                     ;
                                 }
                             }
-                            ,b"ss:script"=>{
+                            ,b"wd:script"=>{
                                 v8::String::new(scope,&match reader.read_event(){
                                     Ok(Event::Text(c))=>std::str::from_utf8(&c.into_inner()).unwrap_or("").trim().to_string()
                                     ,Ok(Event::CData(c))=>std::str::from_utf8(&c.into_inner()).unwrap_or("").trim().to_string()
@@ -228,18 +228,18 @@ impl Script{
                                     .and_then(|v|v.run(scope))
                                 ;
                             }
-                            ,b"ss:print"=>{
+                            ,b"wd:print"=>{
                                 let attr=xml_util::attr2hash_map(&e);
                                 r+=&crate::attr_parse_or_static(scope,&attr,"value");
                             }
-                            ,b"ss:case"=>{
+                            ,b"wd:case"=>{
                                 r+=&process::case(self,&e,&xml_util::outer(&next,reader),scope,include_adaptor);
                             }
-                            ,b"ss:for"=>{
+                            ,b"wd:for"=>{
                                 let outer=xml_util::outer(&next,reader);
                                 r+=&process::r#for(self,&e,&outer,scope,include_adaptor);
                             }
-                            ,b"ss:include"=>{
+                            ,b"wd:include"=>{
                                 if let Ok(Some(src))=e.try_get_attribute(b"src"){
                                     if let Some(src)=std::str::from_utf8(&src.value).ok().and_then(|src|v8::String::new(scope,&src))
                                         .and_then(|code|v8::Script::compile(scope, code, None))
@@ -277,16 +277,16 @@ impl Script{
                     ,Event::End(e)=>{
                         let name=e.name();
                         let name=name.as_ref();
-                        if name==b"ss" || name==break_tag.as_bytes(){
+                        if name==b"wd" || name==break_tag.as_bytes(){
                             break;
                         }else{
-                            if name.starts_with(b"ss:"){
-                                if name==b"ss:stack"{
-                                    v8::String::new(scope,"ss.stack.pop();")
+                            if name.starts_with(b"wd:"){
+                                if name==b"wd:stack"{
+                                    v8::String::new(scope,"wd.stack.pop();")
                                         .and_then(|code|v8::Script::compile(scope, code, None))
                                         .and_then(|v|v.run(scope))
                                     ;
-                                }else if name==b"ss:session"{
+                                }else if name==b"wd:session"{
                                     self.sessions.pop();
                                 }
                             }else{

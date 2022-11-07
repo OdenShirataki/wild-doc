@@ -124,7 +124,7 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
                 }
                 ,Event::End(e)=>{
                     match e.name().as_ref(){
-                        b"ss:search"|b"narrow"|b"wide"=>{
+                        b"wd:search"|b"narrow"|b"wide"=>{
                             break;
                         }
                         ,_=>{}

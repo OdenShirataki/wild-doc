@@ -9,18 +9,18 @@ pub fn v(
 ){
     if let (
         Some(v8str_var)
-        ,Some(v8str_ss)
+        ,Some(v8str_wd)
         ,Some(v8str_stack)
     )=(
         args.get(0).to_string(scope)
-        ,v8::String::new(scope,"ss")
+        ,v8::String::new(scope,"wd")
         ,v8::String::new(scope,"stack")
     ){
         let context=scope.get_current_context();
         let global=context.global(scope);
-        if let Some(ss)=global.get(scope,v8str_ss.into()){
-            if let Ok(ss)=v8::Local::<v8::Object>::try_from(ss){
-                if let Some(stack)=ss.get(scope,v8str_stack.into()){
+        if let Some(wd)=global.get(scope,v8str_wd.into()){
+            if let Ok(wd)=v8::Local::<v8::Object>::try_from(wd){
+                if let Some(stack)=wd.get(scope,v8str_stack.into()){
                     if let Ok(stack)=v8::Local::<v8::Array>::try_from(stack){
                         for i in (0..stack.length()).rev(){
                             if let Some(cs)=stack.get_index(scope,i){

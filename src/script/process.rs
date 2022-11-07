@@ -23,20 +23,20 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
         loop{
             match event_reader.read_event(){
                 Ok(Event::Start(e))=>{
-                    if e.name().as_ref()==b"ss:case"{
+                    if e.name().as_ref()==b"wd:case"{
                         'case:loop{
                             if let Ok(next)=event_reader.read_event(){
                                 match next{
                                     Event::Start(ref e)=>{
                                         match e.name().as_ref(){
-                                            b"ss:else"=>{
+                                            b"wd:else"=>{
                                                 let xml_str=xml_util::outer(&next,&mut event_reader);
                                                 let mut event_reader_inner=Reader::from_str(&xml_str.trim());
                                                 event_reader_inner.expand_empty_elements(true);
                                                 loop{
                                                     match event_reader_inner.read_event(){
                                                         Ok(Event::Start(e))=>{
-                                                            if e.name().as_ref()==b"ss:else"{
+                                                            if e.name().as_ref()==b"wd:else"{
                                                                 r+=&script.parse(scope,&mut event_reader_inner,"",include_adaptor);
                                                                 break;
                                                             }
@@ -45,7 +45,7 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
                                                     }
                                                 }
                                             }
-                                            ,b"ss:when"=>{
+                                            ,b"wd:when"=>{
                                                 let attr=xml_util::attr2hash_map(&e);
                                                 let wv=crate::attr_parse_or_static(scope,&attr,"value");
                                                 if wv==cmp_value{
@@ -55,7 +55,7 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
                                                     loop{
                                                         match event_reader_inner.read_event(){
                                                             Ok(Event::Start(e))=>{
-                                                                if e.name().as_ref()==b"ss:when"{
+                                                                if e.name().as_ref()==b"wd:when"{
                                                                     r+=&script.parse(scope,&mut event_reader_inner,"",include_adaptor);
                                                                     break 'case;
                                                                 }
@@ -89,7 +89,7 @@ pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&
     let attr=xml_util::attr2hash_map(&e);
     let var=crate::attr_parse_or_static(scope,&attr,"var");
     if var!=""{
-        if let Some(arr)=attr.get("ss:in"){
+        if let Some(arr)=attr.get("wd:in"){
             if let Ok(arr)=std::str::from_utf8(arr){
                 if let Some(rs)=v8::String::new(scope,&arr)
                     .and_then(|code|v8::Script::compile(scope,code, None))
@@ -103,10 +103,10 @@ pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&
                         loop{
                             match ev.read_event(){
                                 Ok(Event::Start(e))=>{
-                                    if e.name().as_ref()==b"ss:for"{
+                                    if e.name().as_ref()==b"wd:for"{
                                         v8::String::new(
                                             scope
-                                            ,&("ss.stack.push({".to_owned()+&var.to_string()+":"+arr+"["+&i.to_string()+"]"+&(
+                                            ,&("wd.stack.push({".to_owned()+&var.to_string()+":"+arr+"["+&i.to_string()+"]"+&(
                                             if let Ok(Some(index))=e.try_get_attribute(b"index"){
                                                 std::str::from_utf8(&index.value).map_or("".to_string(),|v|",".to_owned()+v+":"+&i.to_string())
                                             }else{
@@ -117,8 +117,8 @@ pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&
                                             .and_then(|code|v8::Script::compile(scope, code, None))
                                             .and_then(|v|v.run(scope))
                                         ;
-                                        r+=&script.parse(scope,&mut ev,"ss:for",include_adaptor);
-                                        v8::String::new(scope,"ss.stack.pop()")
+                                        r+=&script.parse(scope,&mut ev,"wd:for",include_adaptor);
+                                        v8::String::new(scope,"wd.stack.pop()")
                                             .and_then(|code|v8::Script::compile(scope, code, None))
                                             .and_then(|v|v.run(scope))
                                         ;
@@ -138,13 +138,13 @@ pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&
 
 pub(super) fn html(name:&[u8],e:&BytesStart,scope: &mut v8::HandleScope)->String{
     let mut r=String::new();
-    if !name.starts_with(b"ss:"){
+    if !name.starts_with(b"wd:"){
         let mut html_attr="".to_string();
         for attr in e.attributes(){
             if let Ok(attr)=attr{
                 if let Ok(attr_key)=std::str::from_utf8(attr.key.as_ref()){
-                    let is_ss=attr_key.starts_with("ss:");
-                    let attr_key=if is_ss{
+                    let is_wd=attr_key.starts_with("wd:");
+                    let attr_key=if is_wd{
                         attr_key.split_at(3).1
                     }else{
                         attr_key
@@ -154,7 +154,7 @@ pub(super) fn html(name:&[u8],e:&BytesStart,scope: &mut v8::HandleScope)->String
                     html_attr.push_str("=\"");
                     
                     if let Ok(value)=std::str::from_utf8(&attr.value){
-                        if is_ss{
+                        if is_wd{
                             html_attr.push_str(&crate::eval_result(scope, value));
                         }else{
                             html_attr.push_str(

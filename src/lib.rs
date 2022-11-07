@@ -36,7 +36,7 @@ impl<T:IncludeAdaptor> SemilatticeScript<T>{
         loop{
             match reader.read_event(){
                 Ok(Event::Start(e))=>{
-                    if e.name().as_ref()==b"ss"{
+                    if e.name().as_ref()==b"wd"{
                         let mut script=Script::new(
                             self.database.clone()
                         );
@@ -70,8 +70,8 @@ fn eval_result(scope:&mut v8::HandleScope,value:&str)->String{
 }
 
 fn attr_parse_or_static(scope:&mut v8::HandleScope,attr:&XmlAttr,key:&str)->String{
-    let sskey="ss:".to_owned()+key;
-    if let Some(value)=attr.get(&sskey){
+    let wdkey="wd:".to_owned()+key;
+    if let Some(value)=attr.get(&wdkey){
         if let Ok(value)=std::str::from_utf8(value){
             crate::eval_result(scope,value)
         }else{

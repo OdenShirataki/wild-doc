@@ -131,7 +131,7 @@ pub fn make_update_struct(
                 }
             }
             ,Ok(Event::End(e))=>{
-                if e.name().as_ref()==b"ss:update"{
+                if e.name().as_ref()==b"wd:update"{
                     break;
                 }
             }
