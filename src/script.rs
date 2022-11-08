@@ -31,7 +31,7 @@ impl Script{
             ,sessions:vec![session]
         }
     }
-    pub fn parse_xml<T:IncludeAdaptor>(&mut self,reader: &mut Reader<&[u8]>,include_adaptor:&T)->String{
+    pub fn parse_xml<T:IncludeAdaptor>(&mut self,reader: &mut Reader<&[u8]>,include_adaptor:&mut T)->String{
         static START: Once=Once::new();
         START.call_once(||{
             v8::V8::set_flags_from_string("--expose_gc");
@@ -85,7 +85,7 @@ impl Script{
         ret
     }
 
-    pub fn parse<T:IncludeAdaptor>(&mut self,scope: &mut v8::HandleScope,reader: &mut Reader<&[u8]>,break_tag:&str,include_adaptor:&T)->String{
+    pub fn parse<T:IncludeAdaptor>(&mut self,scope: &mut v8::HandleScope,reader: &mut Reader<&[u8]>,break_tag:&str,include_adaptor:&mut T)->String{
         let mut search_map=HashMap::new();
         let mut r=String::new();
         loop{
@@ -243,19 +243,20 @@ impl Script{
                                 let attr=xml_util::attr2hash_map(e);
                                 let src=attr_parse_or_static(scope,&attr,"src");
                                 let xml=include_adaptor.include(&src);
-
-                                let str_xml="<root>".to_owned()+&xml+"</root>";
-                                let mut event_reader_inner=Reader::from_str(&str_xml);
-                                event_reader_inner.expand_empty_elements(true);
-                                loop{
-                                    match event_reader_inner.read_event(){
-                                        Ok(Event::Start(e))=>{
-                                            if e.name().as_ref()==b"root"{
-                                                r+=&self.parse(scope,&mut event_reader_inner,"root",include_adaptor);
-                                                break;
+                                if xml.len()>0{
+                                    let str_xml="<root>".to_owned()+&xml+"</root>";
+                                    let mut event_reader_inner=Reader::from_str(&str_xml);
+                                    event_reader_inner.expand_empty_elements(true);
+                                    loop{
+                                        match event_reader_inner.read_event(){
+                                            Ok(Event::Start(e))=>{
+                                                if e.name().as_ref()==b"root"{
+                                                    r+=&self.parse(scope,&mut event_reader_inner,"root",include_adaptor);
+                                                    break;
+                                                }
                                             }
+                                            ,_=>{}
                                         }
-                                        ,_=>{}
                                     }
                                 }
                             }

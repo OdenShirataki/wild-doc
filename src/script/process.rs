@@ -13,7 +13,7 @@ use crate::{xml_util, IncludeAdaptor};
 
 use super::Script;
 
-pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope,include_adaptor:&T)->String{
+pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope,include_adaptor:&mut T)->String{
     let mut r=String::new();
     let attr=xml_util::attr2hash_map(&e);
     let cmp_value=crate::attr_parse_or_static(scope,&attr,"value");
@@ -84,7 +84,7 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
     }
     r
 }
-pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope,include_adaptor:&T)->String{
+pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope,include_adaptor:&mut T)->String{
     let mut r=String::new();
     let attr=xml_util::attr2hash_map(&e);
     let var=crate::attr_parse_or_static(scope,&attr,"var");

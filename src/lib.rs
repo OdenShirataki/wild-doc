@@ -17,20 +17,19 @@ pub use include::{IncludeAdaptor,IncludeLocal};
 
 pub struct WildDoc<T:IncludeAdaptor>{
     database:Arc<RwLock<Database>>
-    ,include_adaptor:T
+    ,default_include_adaptor:T
 }
 impl<T:IncludeAdaptor> WildDoc<T>{
     pub fn new(
         dir:&str
-        ,include_adaptor:T
+        ,default_include_adaptor:T
     )->Result<Self,std::io::Error>{
         Ok(Self{
             database:Arc::new(RwLock::new(Database::new(dir)?))
-            ,include_adaptor
+            ,default_include_adaptor
         })
     }
     pub fn exec(&mut self,qml:&str)->String{
-        //println!("{}",qml);
         let mut reader=Reader::from_str(qml.trim());
         reader.expand_empty_elements(true);
         loop{
@@ -40,7 +39,24 @@ impl<T:IncludeAdaptor> WildDoc<T>{
                         let mut script=Script::new(
                             self.database.clone()
                         );
-                        return script.parse_xml(&mut reader,&self.include_adaptor);
+                        return script.parse_xml(&mut reader,&mut self.default_include_adaptor);
+                    }
+                }
+                ,_=>{}
+            }
+        }
+    }
+    pub fn exec_specify_include_adaptor(&mut self,qml:&str,index_adaptor:&mut impl IncludeAdaptor)->String{
+        let mut reader=Reader::from_str(qml.trim());
+        reader.expand_empty_elements(true);
+        loop{
+            match reader.read_event(){
+                Ok(Event::Start(e))=>{
+                    if e.name().as_ref()==b"wd"{
+                        let mut script=Script::new(
+                            self.database.clone()
+                        );
+                        return script.parse_xml(&mut reader,index_adaptor);
                     }
                 }
                 ,_=>{}
