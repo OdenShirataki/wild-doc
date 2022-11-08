@@ -2,7 +2,6 @@
 
 #[test]
 fn it_works(){
-    use chrono::TimeZone;
     use wild_doc::*;
 
     let dir="./wd-test/";
@@ -66,7 +65,6 @@ fn it_works(){
                     <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
                 </li></wd:for>
             </ul>
-            <wd:include src="hoge.xml" />
         </wd:result>
     </wd>"#);
     println!("{}",r);
@@ -129,6 +127,11 @@ fn it_works(){
     </wd>"#);
     println!("{}",r);
 
+    //include
+    let r=wd.exec(r#"<wd><wd:stack var="body_path:'body.xml'">
+    <wd:include src="layout.xml" />
+<wd:stack></wd>"#);
+    println!("{}",r);
 
     //REPEAT
     
@@ -265,6 +268,7 @@ fn it_works(){
         */
     return;
     
+    use chrono::TimeZone;
     let now=chrono::Local.timestamp(chrono::Local::now().timestamp()-1000,0).format("%Y-%m-%d %H:%M:%S").to_string();
     let end=chrono::Local.timestamp(chrono::Local::now().timestamp()-100,0).format("%Y-%m-%d %H:%M:%S").to_string();
 

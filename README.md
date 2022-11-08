@@ -3,7 +3,6 @@
 ## Example
 
 ```rust
-use chrono::TimeZone;
 use wild_doc::*;
 
 let dir="./wd-test/";
@@ -129,5 +128,41 @@ let r=wd.exec(r#"<wd>
     </wd:result>
 </wd>"#);
 println!("{}",r);
+```
 
+## Include file
+### layout.xml
+```xml
+<html>
+    <head>
+        <title>HTML include test</title>
+    </head>
+    <body>
+        <wd:include wd:src="wd.v('body_path')" />
+    </body>
+</html>
+```
+### body.xml
+```xml
+BODY
+```
+
+### rust
+```rust
+let r=wd.exec(r#"<wd><wd:stack var="body_path:'body.xml'">
+    <wd:include src="layout.xml" />
+<wd:stack></wd>"#);
+    println!("{}",r);
+```
+
+### output
+```html
+<html>
+    <head>
+        <title>HTML include test</title>
+    </head>
+    <body>
+        BODY
+    </body>
+</html>
 ```

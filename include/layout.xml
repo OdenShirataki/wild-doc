@@ -1,0 +1,8 @@
+<html>
+    <head>
+        <title>HTML include test</title>
+    </head>
+    <body>
+        <wd:include wd:src="wd.v('body_path')" />
+    </body>
+</html>
