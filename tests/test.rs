@@ -66,7 +66,7 @@ fn it_works(){
                     <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
                 </li></wd:for>
             </ul>
-            <wd:include src="'hoge.xml'" />
+            <wd:include src="hoge.xml" />
         </wd:result>
     </wd>"#);
     println!("{}",r);
@@ -430,7 +430,7 @@ fn it_works(){
                 </wd:case>
             </wd:result>
         </wd:stack></wd:stack>
-        <wd:include src="'hoge.ygl'" />
+        <wd:include src="hoge.ygl" />
     </wd>"#));
     println!("{}",r);
     

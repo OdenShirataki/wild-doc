@@ -11,7 +11,7 @@ use semilattice_database::{Database, Session};
 
 mod process;
 
-use crate::{xml_util, IncludeAdaptor};
+use crate::{xml_util, IncludeAdaptor, attr_parse_or_static};
 mod update;
 mod search;
 mod method;
@@ -240,29 +240,22 @@ impl Script{
                                 r+=&process::r#for(self,&e,&outer,scope,include_adaptor);
                             }
                             ,b"wd:include"=>{
-                                if let Ok(Some(src))=e.try_get_attribute(b"src"){
-                                    if let Some(src)=std::str::from_utf8(&src.value).ok().and_then(|src|v8::String::new(scope,&src))
-                                        .and_then(|code|v8::Script::compile(scope, code, None))
-                                        .and_then(|v|v.run(scope))
-                                        .and_then(|v|v.to_string(scope))
-                                    {
-                                        let src=src.to_rust_string_lossy(scope);
-                                        let xml=include_adaptor.include(&src);
+                                let attr=xml_util::attr2hash_map(e);
+                                let src=attr_parse_or_static(scope,&attr,"src");
+                                let xml=include_adaptor.include(&src);
 
-                                        let str_xml="<root>".to_owned()+&xml+"</root>";
-                                        let mut event_reader_inner=Reader::from_str(&str_xml);
-                                        event_reader_inner.expand_empty_elements(true);
-                                        loop{
-                                            match event_reader_inner.read_event(){
-                                                Ok(Event::Start(e))=>{
-                                                    if e.name().as_ref()==b"root"{
-                                                        r+=&self.parse(scope,&mut event_reader_inner,"root",include_adaptor);
-                                                        break;
-                                                    }
-                                                }
-                                                ,_=>{}
+                                let str_xml="<root>".to_owned()+&xml+"</root>";
+                                let mut event_reader_inner=Reader::from_str(&str_xml);
+                                event_reader_inner.expand_empty_elements(true);
+                                loop{
+                                    match event_reader_inner.read_event(){
+                                        Ok(Event::Start(e))=>{
+                                            if e.name().as_ref()==b"root"{
+                                                r+=&self.parse(scope,&mut event_reader_inner,"root",include_adaptor);
+                                                break;
                                             }
                                         }
+                                        ,_=>{}
                                     }
                                 }
                             }
