@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -17,7 +17,7 @@ natord="1.0"
 memmap2="0.5"
 quick-xml="0.26"
 chrono="0.4"
-v8="0.54"
+v8="0.55"
 rustc-hash = { version = "1.0", default-features = false }
 rand="0.8"
 

@@ -9,7 +9,7 @@ fn it_works(){
         std::fs::remove_dir_all(dir).unwrap();
     }
     std::fs::create_dir_all(dir).unwrap();
-    
+
     let mut wd=WildDoc::new(
         dir
         ,IncludeLocal::new("./include/")
