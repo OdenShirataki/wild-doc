@@ -25,13 +25,6 @@ impl Script{
     pub fn new(
         database:Arc<RwLock<Database>>
     )->Self{
-        let session=database.clone().read().unwrap().blank_session().unwrap();
-        Self{
-            database
-            ,sessions:vec![session]
-        }
-    }
-    pub fn parse_xml<T:IncludeAdaptor>(&mut self,reader: &mut Reader<&[u8]>,include_adaptor:&mut T)->String{
         static START: Once=Once::new();
         START.call_once(||{
             v8::V8::set_flags_from_string("--expose_gc");
@@ -40,7 +33,13 @@ impl Script{
             );
             v8::V8::initialize();
         });
-
+        let session=database.clone().read().unwrap().blank_session().unwrap();
+        Self{
+            database
+            ,sessions:vec![session]
+        }
+    }
+    pub fn parse_xml<T:IncludeAdaptor>(&mut self,reader: &mut Reader<&[u8]>,include_adaptor:&mut T)->Result<String,std::io::Error>{
         let params = v8::Isolate::create_params();
         let mut isolate = v8::Isolate::new(params);
 
@@ -80,12 +79,12 @@ impl Script{
                 ,reader
                 ,"wd"
                 ,include_adaptor
-            );
+            )?;
         }
-        ret
+        Ok(ret)
     }
 
-    pub fn parse<T:IncludeAdaptor>(&mut self,scope: &mut v8::HandleScope,reader: &mut Reader<&[u8]>,break_tag:&str,include_adaptor:&mut T)->String{
+    pub fn parse<T:IncludeAdaptor>(&mut self,scope: &mut v8::HandleScope,reader: &mut Reader<&[u8]>,break_tag:&str,include_adaptor:&mut T)->Result<String,std::io::Error>{
         let mut search_map=HashMap::new();
         let mut r=String::new();
         loop{
@@ -102,7 +101,7 @@ impl Script{
                                     if session_name!=""{
                                         if let Ok(Some(value))=e.try_get_attribute(b"initialize"){
                                             if value.value.to_vec()==b"true"{
-                                                self.database.clone().read().unwrap().session_restart(&mut session);
+                                                self.database.clone().read().unwrap().session_restart(&mut session)?;
                                             }
                                         }
                                     }
@@ -115,15 +114,15 @@ impl Script{
                                 let attr=xml_util::attr2hash_map(&e);
                                 let with_commit=crate::attr_parse_or_static(scope,&attr,"commit")=="1";
                                 
-                                let inner_xml=self.parse(scope,reader,"wd:update",include_adaptor);
+                                let inner_xml=self.parse(scope,reader,"wd:update",include_adaptor)?;
                                 let mut inner_reader=Reader::from_str(&inner_xml);
                                 inner_reader.expand_empty_elements(true);
                                 let updates=update::make_update_struct(self,&mut inner_reader,scope);
                                 if let Some(session)=self.sessions.last_mut(){
                                     if !session.is_blank(){
-                                        self.database.clone().read().unwrap().update(session,updates);
+                                        self.database.clone().read().unwrap().update(session,updates)?;
                                         if with_commit{
-                                            self.database.clone().write().unwrap().commit(session);
+                                            self.database.clone().write().unwrap().commit(session)?;
                                         }
                                     }
                                 }
@@ -153,6 +152,7 @@ impl Script{
                                                 search=search.search(c.clone());
                                             }
                                             let rowset=self.database.clone().read().unwrap().result(&search);
+                                            println!("RESULT {:?}",rowset);
                                             let context=scope.get_current_context();
                                             let global=context.global(scope);
                                             if let (
@@ -233,11 +233,11 @@ impl Script{
                                 r+=&crate::attr_parse_or_static(scope,&attr,"value");
                             }
                             ,b"wd:case"=>{
-                                r+=&process::case(self,&e,&xml_util::outer(&next,reader),scope,include_adaptor);
+                                r+=&process::case(self,&e,&xml_util::outer(&next,reader),scope,include_adaptor)?;
                             }
                             ,b"wd:for"=>{
                                 let outer=xml_util::outer(&next,reader);
-                                r+=&process::r#for(self,&e,&outer,scope,include_adaptor);
+                                r+=&process::r#for(self,&e,&outer,scope,include_adaptor)?;
                             }
                             ,b"wd:include"=>{
                                 let attr=xml_util::attr2hash_map(e);
@@ -251,7 +251,7 @@ impl Script{
                                         match event_reader_inner.read_event(){
                                             Ok(Event::Start(e))=>{
                                                 if e.name().as_ref()==b"root"{
-                                                    r+=&self.parse(scope,&mut event_reader_inner,"root",include_adaptor);
+                                                    r+=&self.parse(scope,&mut event_reader_inner,"root",include_adaptor)?;
                                                     break;
                                                 }
                                             }
@@ -298,6 +298,6 @@ impl Script{
                 }
             }
         }
-        r
+        Ok(r)
     }
 }

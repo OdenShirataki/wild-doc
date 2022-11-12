@@ -13,7 +13,7 @@ use crate::{xml_util, IncludeAdaptor};
 
 use super::Script;
 
-pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope,include_adaptor:&mut T)->String{
+pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope,include_adaptor:&mut T)->Result<String,std::io::Error>{
     let mut r=String::new();
     let attr=xml_util::attr2hash_map(&e);
     let cmp_value=crate::attr_parse_or_static(scope,&attr,"value");
@@ -37,7 +37,7 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
                                                     match event_reader_inner.read_event(){
                                                         Ok(Event::Start(e))=>{
                                                             if e.name().as_ref()==b"wd:else"{
-                                                                r+=&script.parse(scope,&mut event_reader_inner,"",include_adaptor);
+                                                                r+=&script.parse(scope,&mut event_reader_inner,"",include_adaptor)?;
                                                                 break;
                                                             }
                                                         }
@@ -56,7 +56,7 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
                                                         match event_reader_inner.read_event(){
                                                             Ok(Event::Start(e))=>{
                                                                 if e.name().as_ref()==b"wd:when"{
-                                                                    r+=&script.parse(scope,&mut event_reader_inner,"",include_adaptor);
+                                                                    r+=&script.parse(scope,&mut event_reader_inner,"",include_adaptor)?;
                                                                     break 'case;
                                                                 }
                                                             }
@@ -82,9 +82,9 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
             }
         }
     }
-    r
+    Ok(r)
 }
-pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope,include_adaptor:&mut T)->String{
+pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&str,scope: &mut v8::HandleScope,include_adaptor:&mut T)->Result<String,std::io::Error>{
     let mut r=String::new();
     let attr=xml_util::attr2hash_map(&e);
     let var=crate::attr_parse_or_static(scope,&attr,"var");
@@ -117,7 +117,7 @@ pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&
                                             .and_then(|code|v8::Script::compile(scope, code, None))
                                             .and_then(|v|v.run(scope))
                                         ;
-                                        r+=&script.parse(scope,&mut ev,"wd:for",include_adaptor);
+                                        r+=&script.parse(scope,&mut ev,"wd:for",include_adaptor)?;
                                         v8::String::new(scope,"wd.stack.pop()")
                                             .and_then(|code|v8::Script::compile(scope, code, None))
                                             .and_then(|v|v.run(scope))
@@ -133,7 +133,7 @@ pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&
             }
         }
     }
-    r
+    Ok(r)
 }
 
 pub(super) fn html(name:&[u8],e:&BytesStart,scope: &mut v8::HandleScope)->String{

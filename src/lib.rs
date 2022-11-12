@@ -29,7 +29,7 @@ impl<T:IncludeAdaptor> WildDoc<T>{
             ,default_include_adaptor
         })
     }
-    pub fn exec(&mut self,qml:&str)->String{
+    pub fn exec(&mut self,qml:&str)->Result<String,std::io::Error>{
         let mut reader=Reader::from_str(qml.trim());
         reader.expand_empty_elements(true);
         loop{
@@ -46,7 +46,7 @@ impl<T:IncludeAdaptor> WildDoc<T>{
             }
         }
     }
-    pub fn exec_specify_include_adaptor(&mut self,qml:&str,index_adaptor:&mut impl IncludeAdaptor)->String{
+    pub fn exec_specify_include_adaptor(&mut self,qml:&str,index_adaptor:&mut impl IncludeAdaptor)->Result<String,std::io::Error>{
         let mut reader=Reader::from_str(qml.trim());
         reader.expand_empty_elements(true);
         loop{
