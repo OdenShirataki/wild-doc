@@ -152,7 +152,6 @@ impl Script{
                                                 search=search.search(c.clone());
                                             }
                                             let rowset=self.database.clone().read().unwrap().result(&search);
-                                            println!("RESULT {:?}",rowset);
                                             let context=scope.get_current_context();
                                             let global=context.global(scope);
                                             if let (
