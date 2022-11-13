@@ -46,8 +46,8 @@ impl<T:IncludeAdaptor> WildDoc<T>{
             }
         }
     }
-    pub fn exec_specify_include_adaptor(&mut self,qml:&str,index_adaptor:&mut impl IncludeAdaptor)->Result<String,std::io::Error>{
-        let mut reader=Reader::from_str(qml.trim());
+    pub fn exec_specify_include_adaptor(&mut self,xml:&str,index_adaptor:&mut impl IncludeAdaptor)->Result<String,std::io::Error>{
+        let mut reader=Reader::from_str(xml.trim());
         reader.expand_empty_elements(true);
         loop{
             match reader.read_event(){
@@ -59,7 +59,9 @@ impl<T:IncludeAdaptor> WildDoc<T>{
                         return script.parse_xml(&mut reader,index_adaptor);
                     }
                 }
-                ,_=>{}
+                ,_=>{
+                    return Ok(xml.into());
+                }
             }
         }
     }

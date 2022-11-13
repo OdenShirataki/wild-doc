@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -10,6 +10,9 @@ description = "You can read and write data using XML and output various structur
 repository = "https://github.com/OdenShirataki/wild-doc"
 
 license = "MIT/Apache-2.0"
+
+keywords = ["database","javascript","v8","xml","html"]
+categories = ["database","database-implementations","Text processing","Web programming","Template engine"]
 
 [dependencies]
 libc="0.2"

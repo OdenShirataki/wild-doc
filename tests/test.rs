@@ -149,8 +149,8 @@ fn it_works(){
     return;
     
     use chrono::TimeZone;
-    let now=chrono::Local.timestamp(chrono::Local::now().timestamp()-1000,0).format("%Y-%m-%d %H:%M:%S").to_string();
-    let end=chrono::Local.timestamp(chrono::Local::now().timestamp()-100,0).format("%Y-%m-%d %H:%M:%S").to_string();
+    let now=chrono::Local.timestamp_opt(chrono::Local::now().timestamp()-1000,0).unwrap().format("%Y-%m-%d %H:%M:%S").to_string();
+    let end=chrono::Local.timestamp_opt(chrono::Local::now().timestamp()-100,0).unwrap().format("%Y-%m-%d %H:%M:%S").to_string();
 
     wd.exec(r#"<wd><wd:session name="hoge" initialize="true">
         <wd:update commit="1">
@@ -271,7 +271,7 @@ fn it_works(){
             <wd:search name="s"
                 collection="sys_ac"
                 activity="active"
-                term="in@"#.to_owned()+&chrono::Local.timestamp(chrono::Local::now().timestamp(),0).format("%Y-%m-%d %H:%M:%S").to_string()+r#""
+                term="in@"#.to_owned()+&chrono::Local.timestamp_opt(chrono::Local::now().timestamp(),0).unwrap().format("%Y-%m-%d %H:%M:%S").to_string()+r#""
             >
                 <field name="num" method="match" value="2" />
             </wd:search>
