@@ -143,41 +143,42 @@ impl Script{
                                 let search=crate::attr_parse_or_static(scope,&attr,"search");
                                 let var=crate::attr_parse_or_static(scope,&attr,"var");
                                 if search!="" && var!=""{
-                                    if let Some((collection_id,conditions))=search_map.get(&search){
-                                        let collection_id=*collection_id;
-                                        if let Some(collection)=self.database.clone().read().unwrap().collection(collection_id){
-                                            let mut search=self.database.clone().read().unwrap().search(collection);
-                                            for c in conditions{
-                                                search=search.search(c.clone());
-                                            }
-                                            let rowset=self.database.clone().read().unwrap().result(&search);
-                                            let context=scope.get_current_context();
-                                            let global=context.global(scope);
-                                            if let (
-                                                Some(str_collection_id)
-                                                ,Some(v8str_session_key)
-                                                ,Some(v8str_func_field)
-                                                ,Some(v8str_row)
-                                                ,Some(v8str_wd)
-                                                ,Some(v8str_stack)
-                                                ,Some(var)
-                                                ,Some(v8func_field)
-                                            )=(
-                                                v8::String::new(scope,"collection_id")
-                                                ,v8::String::new(scope,"session_key")
-                                                ,v8::String::new(scope,"field")
-                                                ,v8::String::new(scope,"row")
-                                                ,v8::String::new(scope,"wd")
-                                                ,v8::String::new(scope,"stack")
-                                                ,v8::String::new(scope,&var)
-                                                ,v8::Function::new(scope,field)
-                                            ){
-                                                if let Some(wd)=global.get(scope,v8str_wd.into()){
-                                                    if let Ok(wd)=v8::Local::<v8::Object>::try_from(wd){
-                                                        if let Some(stack)=wd.get(scope,v8str_stack.into()){
-                                                            if let Ok(stack)=v8::Local::<v8::Array>::try_from(stack){
-                                                                let obj=v8::Object::new(scope);
-                                                                let return_obj=v8::Array::new(scope,0); 
+                                    if let (
+                                        Some(str_collection_id)
+                                        ,Some(v8str_session_key)
+                                        ,Some(v8str_func_field)
+                                        ,Some(v8str_row)
+                                        ,Some(v8str_wd)
+                                        ,Some(v8str_stack)
+                                        ,Some(var)
+                                        ,Some(v8func_field)
+                                    )=(
+                                        v8::String::new(scope,"collection_id")
+                                        ,v8::String::new(scope,"session_key")
+                                        ,v8::String::new(scope,"field")
+                                        ,v8::String::new(scope,"row")
+                                        ,v8::String::new(scope,"wd")
+                                        ,v8::String::new(scope,"stack")
+                                        ,v8::String::new(scope,&var)
+                                        ,v8::Function::new(scope,field)
+                                    ){
+                                        let context=scope.get_current_context();
+                                        let global=context.global(scope);
+                                        if let Some(wd)=global.get(scope,v8str_wd.into()){
+                                            if let Ok(wd)=v8::Local::<v8::Object>::try_from(wd){
+                                                if let Some(stack)=wd.get(scope,v8str_stack.into()){
+                                                    if let Ok(stack)=v8::Local::<v8::Array>::try_from(stack){
+                                                        let obj=v8::Object::new(scope);
+                                                        let return_obj=v8::Array::new(scope,0); 
+                                                        if let Some((collection_id,conditions))=search_map.get(&search){
+                                                            let collection_id=*collection_id;
+                                                            if let Some(collection)=self.database.clone().read().unwrap().collection(collection_id){
+                                                                let mut search=self.database.clone().read().unwrap().search(collection);
+                                                                for c in conditions{
+                                                                    search=search.search(c.clone());
+                                                                }
+                                                                let rowset=self.database.clone().read().unwrap().result(&search);
+                                                        
                                                                 let mut i=0;
                                                                 for d in rowset{
                                                                     let obj=v8::Object::new(scope);
@@ -196,10 +197,10 @@ impl Script{
                                                                     return_obj.set_index(scope,i,obj.into());
                                                                     i+=1;
                                                                 }
-                                                                obj.set(scope,var.into(),return_obj.into());
-                                                                stack.set_index(scope,stack.length(),obj.into());
                                                             }
                                                         }
+                                                        obj.set(scope,var.into(),return_obj.into());
+                                                        stack.set_index(scope,stack.length(),obj.into());
                                                     }
                                                 }
                                             }
