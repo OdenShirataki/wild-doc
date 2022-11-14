@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::{Once, RwLock};
 
-use quick_xml::events::Event;
+use quick_xml::events::{Event, BytesStart};
 use v8;
 
 use quick_xml::Reader;
@@ -116,7 +116,6 @@ impl Script{
                                 
                                 let inner_xml=self.parse(scope,reader,"wd:update",include_adaptor)?;
                                 let mut inner_reader=Reader::from_str(&inner_xml);
-                                inner_reader.expand_empty_elements(true);
                                 let updates=update::make_update_struct(self,&mut inner_reader,scope);
                                 if let Some(session)=self.sessions.last_mut(){
                                     if !session.is_blank(){
@@ -227,16 +226,28 @@ impl Script{
                                     .and_then(|v|v.run(scope))
                                 ;
                             }
-                            ,b"wd:print"=>{
-                                let attr=xml_util::attr2hash_map(&e);
-                                r+=&crate::attr_parse_or_static(scope,&attr,"value");
-                            }
                             ,b"wd:case"=>{
                                 r+=&process::case(self,&e,&xml_util::outer(&next,reader),scope,include_adaptor)?;
                             }
                             ,b"wd:for"=>{
                                 let outer=xml_util::outer(&next,reader);
                                 r+=&process::r#for(self,&e,&outer,scope,include_adaptor)?;
+                            }
+                            ,_=>{
+                                if !name.starts_with(b"wd:"){
+                                    let html_attr=Self::html_attr(e,scope);
+                                    r+=&("<".to_owned()+std::str::from_utf8(name).unwrap_or("")+&html_attr+">");
+                                }
+                            }
+                        }
+                    }
+                    ,Event::Empty(ref e)=>{
+                        let name=e.name();
+                        let name=name.as_ref();
+                        match name{
+                            b"wd:print"=>{
+                                let attr=xml_util::attr2hash_map(e);
+                                r+=&crate::attr_parse_or_static(scope,&attr,"value");
                             }
                             ,b"wd:include"=>{
                                 let attr=xml_util::attr2hash_map(e);
@@ -245,7 +256,6 @@ impl Script{
                                 if xml.len()>0{
                                     let str_xml="<root>".to_owned()+&xml+"</root>";
                                     let mut event_reader_inner=Reader::from_str(&str_xml);
-                                    event_reader_inner.expand_empty_elements(true);
                                     loop{
                                         match event_reader_inner.read_event(){
                                             Ok(Event::Start(e))=>{
@@ -260,12 +270,12 @@ impl Script{
                                 }
                             }
                             ,_=>{
-                                r+=&process::html(name,&e,scope);
+                                if !name.starts_with(b"wd:"){
+                                    let html_attr=Self::html_attr(e,scope);
+                                    r+=&("<".to_owned()+std::str::from_utf8(name).unwrap_or("")+&html_attr+" />");
+                                }
                             }
                         }
-                    }
-                    ,Event::Eof=>{
-                        break;
                     }
                     ,Event::End(e)=>{
                         let name=e.name();
@@ -293,10 +303,45 @@ impl Script{
                     ,Event::Text(c)=>{
                         r+=&c.unescape().expect("Error!");
                     }
+                    ,Event::Eof=>{
+                        break;
+                    }
                     ,_ => {}
                 }
             }
         }
         Ok(r)
     }
+
+    fn html_attr(e:&BytesStart,scope:&mut v8::HandleScope)->String{
+        let mut html_attr="".to_string();
+        for attr in e.attributes(){
+            if let Ok(attr)=attr{
+                if let Ok(attr_key)=std::str::from_utf8(attr.key.as_ref()){
+                    let is_wd=attr_key.starts_with("wd:");
+                    let attr_key=if is_wd{
+                        attr_key.split_at(3).1
+                    }else{
+                        attr_key
+                    };
+                    html_attr.push(' ');
+                    html_attr.push_str(attr_key);
+                    html_attr.push_str("=\"");
+                    
+                    if let Ok(value)=std::str::from_utf8(&attr.value){
+                        if is_wd{
+                            html_attr.push_str(&crate::eval_result(scope, value));
+                        }else{
+                            html_attr.push_str(
+                                &value.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+                            );
+                        }
+                    }
+                    html_attr.push('"');
+                }
+            }
+        }
+        html_attr
+    }
 }
+

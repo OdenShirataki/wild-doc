@@ -47,6 +47,8 @@ fn it_works(){
                 </li></wd:for>
             </ul>
         </wd:result>
+        <input type="text" name="hoge" />
+        <wd:include src="body.xml" />
     </wd>"#).unwrap();
     println!("{}",r);
 
@@ -314,7 +316,7 @@ fn it_works(){
                 </wd:case>
             </wd:result>
         </wd:stack></wd:stack>
-        <wd:include src="hoge.ygl" />
+        <wd:include src="body.xml" />
     </wd>"#)).unwrap();
     println!("{}",r);
     

@@ -19,7 +19,6 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
     let cmp_value=crate::attr_parse_or_static(scope,&attr,"value");
     if cmp_value!=""{
         let mut event_reader=Reader::from_str(&xml_str.trim());
-        event_reader.expand_empty_elements(true);
         loop{
             match event_reader.read_event(){
                 Ok(Event::Start(e))=>{
@@ -32,7 +31,6 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
                                             b"wd:else"=>{
                                                 let xml_str=xml_util::outer(&next,&mut event_reader);
                                                 let mut event_reader_inner=Reader::from_str(&xml_str.trim());
-                                                event_reader_inner.expand_empty_elements(true);
                                                 loop{
                                                     match event_reader_inner.read_event(){
                                                         Ok(Event::Start(e))=>{
@@ -51,7 +49,6 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
                                                 if wv==cmp_value{
                                                     let xml_str=xml_util::outer(&next,&mut event_reader);
                                                     let mut event_reader_inner=Reader::from_str(&xml_str.trim());
-                                                    event_reader_inner.expand_empty_elements(true);
                                                     loop{
                                                         match event_reader_inner.read_event(){
                                                             Ok(Event::Start(e))=>{
@@ -99,7 +96,6 @@ pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&
                     let length=rs.length();
                     for i in 0..length {
                         let mut ev=Reader::from_str(&xml_str);
-                        ev.expand_empty_elements(true);
                         loop{
                             match ev.read_event(){
                                 Ok(Event::Start(e))=>{
@@ -134,42 +130,4 @@ pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&
         }
     }
     Ok(r)
-}
-
-pub(super) fn html(name:&[u8],e:&BytesStart,scope: &mut v8::HandleScope)->String{
-    let mut r=String::new();
-    if !name.starts_with(b"wd:"){
-        let mut html_attr="".to_string();
-        for attr in e.attributes(){
-            if let Ok(attr)=attr{
-                if let Ok(attr_key)=std::str::from_utf8(attr.key.as_ref()){
-                    let is_wd=attr_key.starts_with("wd:");
-                    let attr_key=if is_wd{
-                        attr_key.split_at(3).1
-                    }else{
-                        attr_key
-                    };
-                    html_attr.push(' ');
-                    html_attr.push_str(attr_key);
-                    html_attr.push_str("=\"");
-                    
-                    if let Ok(value)=std::str::from_utf8(&attr.value){
-                        if is_wd{
-                            html_attr.push_str(&crate::eval_result(scope, value));
-                        }else{
-                            html_attr.push_str(
-                                &value.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-                            );
-                        }
-                    }
-                    html_attr.push('"');
-                }
-            }
-        }
-        r.push('<');
-        r.push_str(std::str::from_utf8(name).unwrap_or(""));
-        r.push_str(&html_attr);
-        r.push('>');
-    }
-    r
 }

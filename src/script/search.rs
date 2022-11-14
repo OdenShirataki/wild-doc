@@ -76,13 +76,7 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
             match next{
                 Event::Start(ref e)=>{
                     match e.name().as_ref(){
-                        b"field"=>{
-                            if let Some(c)=condition_field(xml_util::attr2hash_map(&e),scope){
-                                conditions.push(c);
-                            }
-                            reader.read_to_end(e.name()).unwrap();
-                        }
-                        ,b"row"=>{
+                        b"row"=>{
                             if let Some(c)=condition_row(xml_util::attr2hash_map(&e),scope){
                                 conditions.push(c);
                             }
@@ -118,6 +112,17 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
                                     ));
                                 }
                             }
+                        }
+                        ,_=>{}
+                    }
+                }
+                ,Event::Empty(e)=>{
+                    match e.name().as_ref(){
+                        b"field"=>{
+                            if let Some(c)=condition_field(xml_util::attr2hash_map(&e),scope){
+                                conditions.push(c);
+                            }
+                            //reader.read_to_end(e.name()).unwrap();
                         }
                         ,_=>{}
                     }
