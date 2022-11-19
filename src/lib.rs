@@ -81,7 +81,7 @@ fn eval_result(scope:&mut v8::HandleScope,value:&str)->String{
     {
         v8_value.to_rust_string_lossy(scope)
     }else{
-        value.to_string()
+        "".to_string()
     }
 }
 
