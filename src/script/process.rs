@@ -28,22 +28,7 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
                                 match next{
                                     Event::Start(ref e)=>{
                                         match e.name().as_ref(){
-                                            b"wd:else"=>{
-                                                let xml_str=xml_util::outer(&next,&mut event_reader);
-                                                let mut event_reader_inner=Reader::from_str(&xml_str.trim());
-                                                loop{
-                                                    match event_reader_inner.read_event(){
-                                                        Ok(Event::Start(e))=>{
-                                                            if e.name().as_ref()==b"wd:else"{
-                                                                r+=&script.parse(scope,&mut event_reader_inner,"",include_adaptor)?;
-                                                                break;
-                                                            }
-                                                        }
-                                                        ,_=>{}
-                                                    }
-                                                }
-                                            }
-                                            ,b"wd:when"=>{
+                                            b"wd:when"=>{
                                                 let attr=xml_util::attr2hash_map(&e);
                                                 let wv=crate::attr_parse_or_static(scope,&attr,"value");
                                                 if wv==cmp_value{
@@ -59,6 +44,21 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
                                                             }
                                                             ,_=>{}
                                                         }
+                                                    }
+                                                }
+                                            }
+                                            ,b"wd:else"=>{
+                                                let xml_str=xml_util::outer(&next,&mut event_reader);
+                                                let mut event_reader_inner=Reader::from_str(&xml_str.trim());
+                                                loop{
+                                                    match event_reader_inner.read_event(){
+                                                        Ok(Event::Start(e))=>{
+                                                            if e.name().as_ref()==b"wd:else"{
+                                                                r+=&script.parse(scope,&mut event_reader_inner,"",include_adaptor)?;
+                                                                break;
+                                                            }
+                                                        }
+                                                        ,_=>{}
                                                     }
                                                 }
                                             }

@@ -31,7 +31,7 @@ fn it_works(){
                 <field name="country">UK</field>
             </collection>
         </wd:update>
-    </wd:session></wd>"#).unwrap();
+    </wd:session></wd>"#,b"").unwrap();
 
     //select data.
     let r=wd.exec(r#"<wd>
@@ -49,7 +49,7 @@ fn it_works(){
         </wd:result>
         <input type="text" name="hoge" />
         <wd:include src="body.xml" />
-    </wd>"#).unwrap();
+    </wd>"#,b"").unwrap();
     println!("{}",r);
 
     //seaech data
@@ -67,7 +67,7 @@ fn it_works(){
                 </li></wd:for>
             </ul>
         </wd:result>
-    </wd>"#).unwrap();
+    </wd>"#,b"").unwrap();
     println!("{}",r);
 
     //use javascript
@@ -95,7 +95,7 @@ fn it_works(){
                 </li></wd:for>
             </ul>
         </wd:result>
-    </wd>"#).unwrap();
+    </wd>"#,b"").unwrap();
     println!("{}",r);
 
     //search in update section.
@@ -112,7 +112,7 @@ fn it_works(){
                 </wd:for>
             </wd:result>
         </wd:update>
-    </wd:session></wd>"#).unwrap();
+    </wd:session></wd>"#,b"").unwrap();
     let r=wd.exec(r#"<wd>
         <wd:search name="p" collection="person"></wd:search>
         <wd:result var="q" search="p">
@@ -125,7 +125,7 @@ fn it_works(){
                 </li></wd:for>
             </ul>
         </wd:result>
-    </wd>"#).unwrap();
+    </wd>"#,b"").unwrap();
     println!("{}",r);
 
     /*
@@ -184,7 +184,7 @@ fn it_works(){
                 <field name="num" type="numeric">20</field>
             </collection>
         </wd:update>
-    </wd:session></wd>"#).unwrap();
+    </wd:session></wd>"#,b"").unwrap();
     
     wd.exec(&(r#"<wd><wd:session name="hoge" initialize="true">
         <wd:update>
@@ -202,7 +202,7 @@ fn it_works(){
                 </pends>
             </collection>
         </wd:update>
-    </wd:session></wd>"#)).unwrap();
+    </wd:session></wd>"#),b"").unwrap();
     
     wd.exec(&(r#"<wd><wd:session name="hoge">
         <wd:update>
@@ -211,7 +211,7 @@ fn it_works(){
                 <field name="num" type="numeric">2</field>
             </collection>
         </wd:update>
-    </wd:session></wd>"#)).unwrap();
+    </wd:session></wd>"#),b"").unwrap();
 
     wd.exec(&(r#"<wd><wd:session name="hoge">
         <wd:update>
@@ -219,7 +219,7 @@ fn it_works(){
                 <field name="name" type="text">AA</field>
             </collection>
         </wd:update>
-    </wd:session></wd>"#)).unwrap();
+    </wd:session></wd>"#),b"").unwrap();
     
     
     wd.exec(&(r#"<wd><wd:session name="hoge">
@@ -229,11 +229,11 @@ fn it_works(){
                 <field name="num" type="numeric">3</field>
             </collection>
         </wd:update>
-    </session></wd>"#)).unwrap();
+    </session></wd>"#),b"").unwrap();
     
     wd.exec(r#"<wd><wd:session name="hoge">
         <wd:update commit="1"></wd:update>
-    </wd:session></wd>"#).unwrap();
+    </wd:session></wd>"#,b"").unwrap();
 
     let r=wd.exec(&(r#"<wd>
         <wd:script>
@@ -258,7 +258,7 @@ fn it_works(){
                 </ul>
             </wd:result>
         </wd:stack></wd:stack>
-    </wd>"#)).unwrap();
+    </wd>"#),b"").unwrap();
     println!("{}",r);
     let r=wd.exec(&(r#"<wd>
         <wd:script>
@@ -317,7 +317,7 @@ fn it_works(){
             </wd:result>
         </wd:stack></wd:stack>
         <wd:include src="body.xml" />
-    </wd>"#)).unwrap();
+    </wd>"#),b"").unwrap();
     println!("{}",r);
     
     return;
@@ -327,7 +327,7 @@ fn it_works(){
                 <field name="name" type="text">test_rename2</field>
             </collection>
         </wd:update>
-    </wd:session></wd>"#
+    </wd:session></wd>"#,b""
     ).unwrap();
 
     wd.exec(r#"<wd><wd:session="hoge">
@@ -336,7 +336,7 @@ fn it_works(){
                 <field name="name" type="text">test_rename3</field>
             </collection>
         </wd:update>
-    </wd:session></wd>"#
+    </wd:session></wd>"#,b""
     ).unwrap();
 
     wd.exec(r#"<wd><wd:session="hoge">
@@ -345,7 +345,7 @@ fn it_works(){
                 <field name="name" type="text">test_rename4</field>
             </collection>
         </wd:update>
-    </wd:session></wd>"#
+    </wd:session></wd>"#,b""
     ).unwrap();
 
     wd.exec(r#"<wd><wd:session="hoge">
@@ -390,7 +390,7 @@ fn it_works(){
             </wd:stack>
             <wd:include src="'hoge.ygl'" />
         </wd:select>
-    </wd:session></wd>"#
+    </wd:session></wd>"#,b""
     ).unwrap();
     
 }

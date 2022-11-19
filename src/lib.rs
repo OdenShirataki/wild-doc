@@ -29,8 +29,8 @@ impl<T:IncludeAdaptor> WildDoc<T>{
             ,default_include_adaptor
         })
     }
-    pub fn exec(&mut self,qml:&str)->Result<String,std::io::Error>{
-        let mut reader=Reader::from_str(qml.trim());
+    pub fn exec(&mut self,xml:&str,input_json:&[u8])->Result<String,std::io::Error>{
+        let mut reader=Reader::from_str(xml);
         loop{
             match reader.read_event(){
                 Ok(Event::Start(e))=>{
@@ -38,15 +38,15 @@ impl<T:IncludeAdaptor> WildDoc<T>{
                         let mut script=Script::new(
                             self.database.clone()
                         );
-                        return script.parse_xml(&mut reader,&mut self.default_include_adaptor);
+                        return script.parse_xml(input_json,&mut reader,&mut self.default_include_adaptor);
                     }
                 }
                 ,_=>{}
             }
         }
     }
-    pub fn exec_specify_include_adaptor(&mut self,xml:&str,index_adaptor:&mut impl IncludeAdaptor)->Result<String,std::io::Error>{
-        let mut reader=Reader::from_str(xml.trim());
+    pub fn exec_specify_include_adaptor(&mut self,xml:&str,input_json:&[u8],index_adaptor:&mut impl IncludeAdaptor)->Result<String,std::io::Error>{
+        let mut reader=Reader::from_str(xml);
         loop{
             match reader.read_event(){
                 Ok(Event::Start(e))=>{
@@ -54,7 +54,7 @@ impl<T:IncludeAdaptor> WildDoc<T>{
                         let mut script=Script::new(
                             self.database.clone()
                         );
-                        return script.parse_xml(&mut reader,index_adaptor);
+                        return script.parse_xml(input_json,&mut reader,index_adaptor);
                     }
                 }
                 ,_=>{

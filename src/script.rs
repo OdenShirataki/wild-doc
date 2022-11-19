@@ -39,7 +39,7 @@ impl Script{
             ,sessions:vec![session]
         }
     }
-    pub fn parse_xml<T:IncludeAdaptor>(&mut self,reader: &mut Reader<&[u8]>,include_adaptor:&mut T)->Result<String,std::io::Error>{
+    pub fn parse_xml<T:IncludeAdaptor>(&mut self,input_json:&[u8],reader: &mut Reader<&[u8]>,include_adaptor:&mut T)->Result<String,std::io::Error>{
         let params = v8::Isolate::create_params();
         let mut isolate = v8::Isolate::new(params);
 
@@ -52,7 +52,8 @@ impl Script{
         let global=context.global(scope);
 
         let mut ret="".to_string();
-        if let (
+
+        if let(
             Some(v8str_wd)
             ,Some(v8str_stack)
             ,Some(v8str_v)
@@ -67,6 +68,22 @@ impl Script{
             let stack=v8::Array::new(scope,0);
             wd.set(scope,v8str_stack.into(),stack.into());
             wd.set(scope,v8str_v.into(),func_v.into());
+
+            if input_json.len()>0{
+                if let(
+                    Ok(input_json)
+                    ,Some(v8str_input)
+                )=(
+                    std::str::from_utf8(input_json)
+                    ,v8::String::new(scope,"input")
+                ){
+                    if let Some(input_json)=v8::String::new(scope,input_json){
+                        if let Some(input_json)=v8::json::parse(scope, input_json.into()){
+                            wd.set(scope,v8str_input.into(),input_json.into());
+                        }
+                    }
+                }
+            }
             
             global.set(
                 scope
