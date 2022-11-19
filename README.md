@@ -8,17 +8,16 @@ use wild_doc::*;
 let dir="./wd-test/";
 if std::path::Path::new(dir).exists(){
     std::fs::remove_dir_all(dir).unwrap();
-    std::fs::create_dir_all(dir).unwrap();
-}else{
-    std::fs::create_dir_all(dir).unwrap();
 }
+std::fs::create_dir_all(dir).unwrap();
+
 let mut wd=WildDoc::new(
     dir
     ,IncludeLocal::new("./include/")
 ).unwrap();
 
 //update data.
-wd.exec(r#"<wd><wd:session name="hoge">
+/*wd.exec(r#"<wd><wd:session name="hoge">
     <wd:update commit="1">
         <collection name="person">
             <field name="name">Noah</field>
@@ -33,7 +32,28 @@ wd.exec(r#"<wd><wd:session name="hoge">
             <field name="country">UK</field>
         </collection>
     </wd:update>
-</wd:session></wd>"#);
+</wd:session></wd>"#,b"").unwrap();*/
+
+let update_xml=r#"<wd><wd:session name="hoge">
+    <wd:update commit="1">
+        <collection name="person">
+            <field name="name"><wd:print wd:value="wd.input['name']" /></field>
+            <field name="country"><wd:print wd:value="wd.input['from']" /></field>
+        </collection>
+    </wd:update>
+</wd:session></wd>"#;
+wd.exec(update_xml,r#"{
+    "name":"Noah"
+    ,"from":"US"
+}"#.as_bytes()).unwrap();
+wd.exec(update_xml,r#"{
+    "name":"Liam"
+    ,"from":"US"
+}"#.as_bytes()).unwrap();
+wd.exec(update_xml,r#"{
+    "name":"Olivia"
+    ,"from":"UK"
+}"#.as_bytes()).unwrap();
 
 //select data.
 let r=wd.exec(r#"<wd>
@@ -49,7 +69,9 @@ let r=wd.exec(r#"<wd>
             </li></wd:for>
         </ul>
     </wd:result>
-</wd>"#);
+    <input type="text" name="hoge" />
+    <wd:include src="body.xml" />
+</wd>"#,b"").unwrap();
 println!("{}",r);
 
 //seaech data
@@ -66,9 +88,8 @@ let r=wd.exec(r#"<wd>
                 <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
             </li></wd:for>
         </ul>
-        <wd:include src="'hoge.xml'" />
     </wd:result>
-</wd>"#);
+</wd>"#,b"").unwrap();
 println!("{}",r);
 
 //use javascript
@@ -96,7 +117,7 @@ let r=wd.exec(r#"<wd>
             </li></wd:for>
         </ul>
     </wd:result>
-</wd>"#);
+</wd>"#,b"").unwrap();
 println!("{}",r);
 
 //search in update section.
@@ -113,7 +134,7 @@ wd.exec(r#"<wd><wd:session name="hoge">
             </wd:for>
         </wd:result>
     </wd:update>
-</wd:session></wd>"#);
+</wd:session></wd>"#,b"").unwrap();
 let r=wd.exec(r#"<wd>
     <wd:search name="p" collection="person"></wd:search>
     <wd:result var="q" search="p">
@@ -126,7 +147,7 @@ let r=wd.exec(r#"<wd>
             </li></wd:for>
         </ul>
     </wd:result>
-</wd>"#);
+</wd>"#,b"").unwrap();
 println!("{}",r);
 ```
 
