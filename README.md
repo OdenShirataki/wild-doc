@@ -1,4 +1,4 @@
-# semilattice-script
+# wild-doc
 
 ## Example
 
@@ -37,8 +37,8 @@ let mut wd=WildDoc::new(
 let update_xml=r#"<wd><wd:session name="hoge">
     <wd:update commit="1">
         <collection name="person">
-            <field name="name"><wd:print wd:value="wd.input['name']" /></field>
-            <field name="country"><wd:print wd:value="wd.input['from']" /></field>
+            <field name="name"><wd:print wd:value="wd.input.name" /></field>
+            <field name="country"><wd:print wd:value="wd.input.from" /></field>
         </collection>
     </wd:update>
 </wd:session></wd>"#;
