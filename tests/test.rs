@@ -15,6 +15,54 @@ fn it_works(){
         ,IncludeLocal::new("./include/")
     ).unwrap();
 
+    for i in 1..=11{
+        println!("{}",i);
+        if i==11{
+            println!("here");
+        }
+        wd.exec(r#"<wd><wd:session name="hoge">
+            <wd:update commit="1">
+                <collection name="person">
+                    <field name="name">Noah</field>
+                </collection>
+                <collection name="person">
+                    <field name="name">Liam</field>
+                </collection>
+                <collection name="person">
+                    <field name="name">Olivia</field>
+                </collection>
+            </wd:update>
+        </wd:session></wd>"#,b"").unwrap();
+        wd.exec(r#"<wd><wd:session name="hoge">
+            <wd:update commit="1">
+                <wd:search name="person" collection="person"></wd:search>
+                <wd:result var="q" search="person">
+                    <wd:for var="r" index="i" wd:in="wd.v('q')">
+                        hoge:<wd:print wd:value="wd.v('r').row" />
+                        <collection name="person" wd:row="wd.v('r').row">
+                            <field name="name">Renamed <wd:print wd:value="wd.v('r').field('name')" /></field>
+                        </collection>
+                    </wd:for>
+                </wd:result>
+            </wd:update>
+        </wd:session></wd>"#,b"").unwrap();
+        let r=wd.exec(r#"<wd>
+            <wd:search name="p" collection="person"></wd:search>
+            <wd:result var="q" search="p">
+                <div>
+                    find <wd:print wd:value="wd.v('q').length" /> persons.
+                </div>
+                <ul>
+                    <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                        <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" />
+                    </li></wd:for>
+                </ul>
+            </wd:result>
+        </wd>"#,b"").unwrap();
+        println!("{}",r);
+    }
+    return;
+
     //update data.
     /*wd.exec(r#"<wd><wd:session name="hoge">
         <wd:update commit="1">
