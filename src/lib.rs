@@ -15,6 +15,19 @@ use xml_util::XmlAttr;
 mod include;
 pub use include::{IncludeAdaptor,IncludeLocal};
 
+
+pub struct WildDocResult{
+    body:Vec<u8>
+    ,options_json:String
+}
+impl WildDocResult{
+    pub fn body(&self)->&[u8]{
+        &self.body
+    }
+    pub fn options_json(&self)->&str{
+        &self.options_json
+    }
+}
 pub struct WildDoc<T:IncludeAdaptor>{
     database:Arc<RwLock<Database>>
     ,default_include_adaptor:T
@@ -29,7 +42,7 @@ impl<T:IncludeAdaptor> WildDoc<T>{
             ,default_include_adaptor
         })
     }
-    pub fn exec(&mut self,xml:&str,input_json:&[u8])->Result<Vec<u8>,std::io::Error>{
+    pub fn exec(&mut self,xml:&str,input_json:&[u8])->Result<WildDocResult,std::io::Error>{
         let mut reader=Reader::from_str(xml);
         loop{
             match reader.read_event(){
@@ -45,7 +58,7 @@ impl<T:IncludeAdaptor> WildDoc<T>{
             }
         }
     }
-    pub fn exec_specify_include_adaptor(&mut self,xml:&str,input_json:&[u8],index_adaptor:&mut impl IncludeAdaptor)->Result<Vec<u8>,std::io::Error>{
+    pub fn exec_specify_include_adaptor(&mut self,xml:&str,input_json:&[u8],index_adaptor:&mut impl IncludeAdaptor)->Result<WildDocResult,std::io::Error>{
         let mut reader=Reader::from_str(xml);
         loop{
             match reader.read_event(){
@@ -58,7 +71,10 @@ impl<T:IncludeAdaptor> WildDoc<T>{
                     }
                 }
                 ,_=>{
-                    return Ok(xml.into());
+                    return Ok(WildDocResult{
+                        body:xml.into()
+                        ,options_json:"".to_string()
+                    });
                 }
             }
         }

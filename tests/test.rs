@@ -15,54 +15,6 @@ fn it_works(){
         ,IncludeLocal::new("./include/")
     ).unwrap();
 
-    for i in 1..=11{
-        println!("{}",i);
-        if i==11{
-            println!("here");
-        }
-        wd.exec(r#"<wd><wd:session name="hoge">
-            <wd:update commit="1">
-                <collection name="person">
-                    <field name="name">Noah</field>
-                </collection>
-                <collection name="person">
-                    <field name="name">Liam</field>
-                </collection>
-                <collection name="person">
-                    <field name="name">Olivia</field>
-                </collection>
-            </wd:update>
-        </wd:session></wd>"#,b"").unwrap();
-        wd.exec(r#"<wd><wd:session name="hoge">
-            <wd:update commit="1">
-                <wd:search name="person" collection="person"></wd:search>
-                <wd:result var="q" search="person">
-                    <wd:for var="r" index="i" wd:in="wd.v('q')">
-                        hoge:<wd:print wd:value="wd.v('r').row" />
-                        <collection name="person" wd:row="wd.v('r').row">
-                            <field name="name">Renamed <wd:print wd:value="wd.v('r').field('name')" /></field>
-                        </collection>
-                    </wd:for>
-                </wd:result>
-            </wd:update>
-        </wd:session></wd>"#,b"").unwrap();
-        let r=wd.exec(r#"<wd>
-            <wd:search name="p" collection="person"></wd:search>
-            <wd:result var="q" search="p">
-                <div>
-                    find <wd:print wd:value="wd.v('q').length" /> persons.
-                </div>
-                <ul>
-                    <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
-                        <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" />
-                    </li></wd:for>
-                </ul>
-            </wd:result>
-        </wd>"#,b"").unwrap();
-        println!("{}",String::from_utf8(r).unwrap());
-    }
-    return;
-
     //update data.
     /*wd.exec(r#"<wd><wd:session name="hoge">
         <wd:update commit="1">
@@ -119,7 +71,7 @@ fn it_works(){
         <input type="text" name="hoge" />
         <wd:include src="body.xml" />
     </wd>"#,b"").unwrap();
-    println!("{}",String::from_utf8(r).unwrap());
+    println!("{}",std::str::from_utf8(r.body()).unwrap());
 
     //seaech data
     let r=wd.exec(r#"<wd>
@@ -137,7 +89,7 @@ fn it_works(){
             </ul>
         </wd:result>
     </wd>"#,b"").unwrap();
-    println!("{}",String::from_utf8(r).unwrap());
+    println!("{}",std::str::from_utf8(r.body()).unwrap());
 
     //use javascript
     let r=wd.exec(r#"<wd>
@@ -147,6 +99,8 @@ fn it_works(){
                 return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
             };
             const uk="UK";
+
+            wd.result_options['test']="OK";
         </wd:script>
         <wd:search name="p" collection="person">
             <field name="country" method="match" wd:value="uk" />
@@ -165,7 +119,7 @@ fn it_works(){
             </ul>
         </wd:result>
     </wd>"#,b"").unwrap();
-    println!("{}",String::from_utf8(r).unwrap());
+    println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
 
     //search in update section.
     wd.exec(r#"<wd><wd:session name="hoge">
@@ -195,7 +149,7 @@ fn it_works(){
             </ul>
         </wd:result>
     </wd>"#,b"").unwrap();
-    println!("{}",String::from_utf8(r).unwrap());
+    println!("{}",std::str::from_utf8(r.body()).unwrap());
 
     /*
 
@@ -328,7 +282,7 @@ fn it_works(){
             </wd:result>
         </wd:stack></wd:stack>
     </wd>"#),b"").unwrap();
-    println!("{}",String::from_utf8(r).unwrap());
+    println!("{}",std::str::from_utf8(r.body()).unwrap());
     let r=wd.exec(&(r#"<wd>
         <wd:script>
             const hoge='HOGE';
@@ -387,7 +341,7 @@ fn it_works(){
         </wd:stack></wd:stack>
         <wd:include src="body.xml" />
     </wd>"#),b"").unwrap();
-    println!("{}",String::from_utf8(r).unwrap());
+    println!("{}",std::str::from_utf8(r.body()).unwrap());
     
     return;
     wd.exec(r#"<wd><wd:session="hoge">

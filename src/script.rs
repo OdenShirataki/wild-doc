@@ -39,7 +39,7 @@ impl Script{
             ,sessions:vec![session]
         }
     }
-    pub fn parse_xml<T:IncludeAdaptor>(&mut self,input_json:&[u8],reader: &mut Reader<&[u8]>,include_adaptor:&mut T)->Result<Vec<u8>,std::io::Error>{
+    pub fn parse_xml<T:IncludeAdaptor>(&mut self,input_json:&[u8],reader: &mut Reader<&[u8]>,include_adaptor:&mut T)->Result<super::WildDocResult,std::io::Error>{
         let params = v8::Isolate::create_params();
         let mut isolate = v8::Isolate::new(params);
 
@@ -58,16 +58,21 @@ impl Script{
             ,Some(v8str_stack)
             ,Some(v8str_v)
             ,Some(func_v)
+            ,Some(v8str_result_options)
         )=(
             v8::String::new(scope,"wd")
             ,v8::String::new(scope,"stack")
             ,v8::String::new(scope,"v")
             ,v8::Function::new(scope,v)
+            ,v8::String::new(scope,"result_options")
         ){
             let wd=v8::Object::new(scope);
             let stack=v8::Array::new(scope,0);
             wd.set(scope,v8str_stack.into(),stack.into());
             wd.set(scope,v8str_v.into(),func_v.into());
+
+            let v8str_result_options_object=v8::Object::new(scope);
+            wd.set(scope,v8str_result_options.into(),v8str_result_options_object.into());
 
             if input_json.len()>0{
                 if let(
@@ -98,7 +103,19 @@ impl Script{
                 ,include_adaptor
             )?;
         }
-        Ok(ret)
+        let mut result_options=String::new();
+        if let Some(v)=v8::String::new(scope,"wd.result_options")
+            .and_then(|code|v8::Script::compile(scope, code, None))
+            .and_then(|v|v.run(scope))
+        {
+            if let Some(json)=v8::json::stringify(scope,v){
+                result_options=json.to_rust_string_lossy(scope);
+            }
+        }
+        Ok(super::WildDocResult{
+            body:ret
+            ,options_json:result_options
+        })
     }
 
     pub fn parse<T:IncludeAdaptor>(&mut self,scope: &mut v8::HandleScope,reader: &mut Reader<&[u8]>,break_tag:&str,include_adaptor:&mut T)->Result<Vec<u8>,std::io::Error>{

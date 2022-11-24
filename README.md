@@ -72,7 +72,7 @@ let r=wd.exec(r#"<wd>
     <input type="text" name="hoge" />
     <wd:include src="body.xml" />
 </wd>"#,b"").unwrap();
-println!("{}",r);
+println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //seaech data
 let r=wd.exec(r#"<wd>
@@ -90,7 +90,7 @@ let r=wd.exec(r#"<wd>
         </ul>
     </wd:result>
 </wd>"#,b"").unwrap();
-println!("{}",r);
+println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //use javascript
 let r=wd.exec(r#"<wd>
@@ -100,6 +100,8 @@ let r=wd.exec(r#"<wd>
             return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
         };
         const uk="UK";
+
+        wd.result_options['test']="OK";
     </wd:script>
     <wd:search name="p" collection="person">
         <field name="country" method="match" wd:value="uk" />
@@ -118,7 +120,7 @@ let r=wd.exec(r#"<wd>
         </ul>
     </wd:result>
 </wd>"#,b"").unwrap();
-println!("{}",r);
+println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
 
 //search in update section.
 wd.exec(r#"<wd><wd:session name="hoge">
@@ -148,7 +150,7 @@ let r=wd.exec(r#"<wd>
         </ul>
     </wd:result>
 </wd>"#,b"").unwrap();
-println!("{}",r);
+println!("{}",std::str::from_utf8(r.body()).unwrap());
 ```
 
 ## Include file

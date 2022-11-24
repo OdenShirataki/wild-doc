@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -12,7 +12,7 @@ repository = "https://github.com/OdenShirataki/wild-doc"
 license = "MIT/Apache-2.0"
 
 keywords = ["database","javascript","v8","xml","html"]
-categories = ["database","database-implementations","Text processing","Web programming","Template engine"]
+categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
 
 [dependencies]
 libc="0.2"
