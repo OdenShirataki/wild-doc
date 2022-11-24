@@ -59,7 +59,7 @@ fn it_works(){
                 </ul>
             </wd:result>
         </wd>"#,b"").unwrap();
-        println!("{}",r);
+        println!("{}",String::from_utf8(r).unwrap());
     }
     return;
 
@@ -119,7 +119,7 @@ fn it_works(){
         <input type="text" name="hoge" />
         <wd:include src="body.xml" />
     </wd>"#,b"").unwrap();
-    println!("{}",r);
+    println!("{}",String::from_utf8(r).unwrap());
 
     //seaech data
     let r=wd.exec(r#"<wd>
@@ -137,7 +137,7 @@ fn it_works(){
             </ul>
         </wd:result>
     </wd>"#,b"").unwrap();
-    println!("{}",r);
+    println!("{}",String::from_utf8(r).unwrap());
 
     //use javascript
     let r=wd.exec(r#"<wd>
@@ -165,7 +165,7 @@ fn it_works(){
             </ul>
         </wd:result>
     </wd>"#,b"").unwrap();
-    println!("{}",r);
+    println!("{}",String::from_utf8(r).unwrap());
 
     //search in update section.
     wd.exec(r#"<wd><wd:session name="hoge">
@@ -195,7 +195,7 @@ fn it_works(){
             </ul>
         </wd:result>
     </wd>"#,b"").unwrap();
-    println!("{}",r);
+    println!("{}",String::from_utf8(r).unwrap());
 
     /*
 
@@ -328,7 +328,7 @@ fn it_works(){
             </wd:result>
         </wd:stack></wd:stack>
     </wd>"#),b"").unwrap();
-    println!("{}",r);
+    println!("{}",String::from_utf8(r).unwrap());
     let r=wd.exec(&(r#"<wd>
         <wd:script>
             const hoge='HOGE';
@@ -387,7 +387,7 @@ fn it_works(){
         </wd:stack></wd:stack>
         <wd:include src="body.xml" />
     </wd>"#),b"").unwrap();
-    println!("{}",r);
+    println!("{}",String::from_utf8(r).unwrap());
     
     return;
     wd.exec(r#"<wd><wd:session="hoge">

@@ -29,7 +29,7 @@ impl<T:IncludeAdaptor> WildDoc<T>{
             ,default_include_adaptor
         })
     }
-    pub fn exec(&mut self,xml:&str,input_json:&[u8])->Result<String,std::io::Error>{
+    pub fn exec(&mut self,xml:&str,input_json:&[u8])->Result<Vec<u8>,std::io::Error>{
         let mut reader=Reader::from_str(xml);
         loop{
             match reader.read_event(){
@@ -45,7 +45,7 @@ impl<T:IncludeAdaptor> WildDoc<T>{
             }
         }
     }
-    pub fn exec_specify_include_adaptor(&mut self,xml:&str,input_json:&[u8],index_adaptor:&mut impl IncludeAdaptor)->Result<String,std::io::Error>{
+    pub fn exec_specify_include_adaptor(&mut self,xml:&str,input_json:&[u8],index_adaptor:&mut impl IncludeAdaptor)->Result<Vec<u8>,std::io::Error>{
         let mut reader=Reader::from_str(xml);
         loop{
             match reader.read_event(){

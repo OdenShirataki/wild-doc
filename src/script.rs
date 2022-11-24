@@ -39,7 +39,7 @@ impl Script{
             ,sessions:vec![session]
         }
     }
-    pub fn parse_xml<T:IncludeAdaptor>(&mut self,input_json:&[u8],reader: &mut Reader<&[u8]>,include_adaptor:&mut T)->Result<String,std::io::Error>{
+    pub fn parse_xml<T:IncludeAdaptor>(&mut self,input_json:&[u8],reader: &mut Reader<&[u8]>,include_adaptor:&mut T)->Result<Vec<u8>,std::io::Error>{
         let params = v8::Isolate::create_params();
         let mut isolate = v8::Isolate::new(params);
 
@@ -51,7 +51,7 @@ impl Script{
 
         let global=context.global(scope);
 
-        let mut ret="".to_string();
+        let mut ret=Vec::new();
 
         if let(
             Some(v8str_wd)
@@ -101,9 +101,9 @@ impl Script{
         Ok(ret)
     }
 
-    pub fn parse<T:IncludeAdaptor>(&mut self,scope: &mut v8::HandleScope,reader: &mut Reader<&[u8]>,break_tag:&str,include_adaptor:&mut T)->Result<String,std::io::Error>{
+    pub fn parse<T:IncludeAdaptor>(&mut self,scope: &mut v8::HandleScope,reader: &mut Reader<&[u8]>,break_tag:&str,include_adaptor:&mut T)->Result<Vec<u8>,std::io::Error>{
         let mut search_map=HashMap::new();
-        let mut r=String::new();
+        let mut r=Vec::new();
         loop{
             if let Ok(next)=reader.read_event(){
                 match next{
@@ -132,7 +132,7 @@ impl Script{
                                 let with_commit=crate::attr_parse_or_static(scope,&attr,"commit")=="1";
                                 
                                 let inner_xml=self.parse(scope,reader,"wd:update",include_adaptor)?;
-                                let mut inner_reader=Reader::from_str(&inner_xml);
+                                let mut inner_reader=Reader::from_str(std::str::from_utf8(&inner_xml).unwrap());
                                 let updates=update::make_update_struct(self,&mut inner_reader,scope);
                                 if let Some(session)=self.sessions.last_mut(){
                                     if !session.is_blank(){
@@ -245,16 +245,19 @@ impl Script{
                                 ;
                             }
                             ,b"wd:case"=>{
-                                r+=&process::case(self,&e,&xml_util::outer(&next,reader),scope,include_adaptor)?;
+                                r.append(&mut process::case(self,&e,&xml_util::outer(&next,reader),scope,include_adaptor)?);
                             }
                             ,b"wd:for"=>{
                                 let outer=xml_util::outer(&next,reader);
-                                r+=&process::r#for(self,&e,&outer,scope,include_adaptor)?;
+                                r.append(&mut process::r#for(self,&e,&outer,scope,include_adaptor)?);
                             }
                             ,_=>{
                                 if !name.starts_with(b"wd:"){
                                     let html_attr=Self::html_attr(e,scope);
-                                    r+=&("<".to_owned()+std::str::from_utf8(name).unwrap_or("")+&html_attr+">");
+                                    r.push(b'<');
+                                    r.append(&mut name.to_vec());
+                                    r.append(&mut html_attr.as_bytes().to_vec());
+                                    r.push(b'>');
                                 }
                             }
                         }
@@ -265,7 +268,7 @@ impl Script{
                         match name{
                             b"wd:print"=>{
                                 let attr=xml_util::attr2hash_map(e);
-                                r+=&crate::attr_parse_or_static(scope,&attr,"value");
+                                r.append(&mut crate::attr_parse_or_static(scope,&attr,"value").as_bytes().to_vec());
                             }
                             ,b"wd:include"=>{
                                 let attr=xml_util::attr2hash_map(e);
@@ -278,7 +281,7 @@ impl Script{
                                         match event_reader_inner.read_event(){
                                             Ok(Event::Start(e))=>{
                                                 if e.name().as_ref()==b"root"{
-                                                    r+=&self.parse(scope,&mut event_reader_inner,"root",include_adaptor)?;
+                                                    r.append(&mut self.parse(scope,&mut event_reader_inner,"root",include_adaptor)?);
                                                     break;
                                                 }
                                             }
@@ -290,7 +293,10 @@ impl Script{
                             ,_=>{
                                 if !name.starts_with(b"wd:"){
                                     let html_attr=Self::html_attr(e,scope);
-                                    r+=&("<".to_owned()+std::str::from_utf8(name).unwrap_or("")+&html_attr+" />");
+                                    r.push(b'<');
+                                    r.append(&mut name.to_vec());
+                                    r.append(&mut html_attr.as_bytes().to_vec());
+                                    r.append(&mut b" />".to_vec());
                                 }
                             }
                         }
@@ -311,15 +317,17 @@ impl Script{
                                     self.sessions.pop();
                                 }
                             }else{
-                                r+=&("</".to_owned()+std::str::from_utf8(name).unwrap_or("")+">");
+                                r.append(&mut b"</".to_vec());
+                                r.append(&mut name.to_vec());
+                                r.push(b'>');
                             }
                         }
                     }
                     ,Event::CData(c)=>{
-                        r+=std::str::from_utf8(&c.into_inner()).unwrap_or("");
+                        r.append(&mut c.into_inner().to_vec());
                     }
                     ,Event::Text(c)=>{
-                        r+=&c.unescape().expect("Error!");
+                        r.append(&mut c.unescape().expect("Error!").as_bytes().to_vec());
                     }
                     ,Event::Eof=>{
                         break;
