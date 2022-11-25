@@ -39,7 +39,7 @@ impl Script{
             ,sessions:vec![session]
         }
     }
-    pub fn parse_xml<T:IncludeAdaptor>(&mut self,input_json:&[u8],reader: &mut Reader<&[u8]>,include_adaptor:&mut T)->Result<super::WildDocResult,std::io::Error>{
+    pub fn parse_xml<T:IncludeAdaptor>(&mut self,input_json:&str,reader: &mut Reader<&[u8]>,include_adaptor:&mut T)->Result<super::WildDocResult,std::io::Error>{
         let params = v8::Isolate::create_params();
         let mut isolate = v8::Isolate::new(params);
 
@@ -75,13 +75,7 @@ impl Script{
             wd.set(scope,v8str_result_options.into(),v8str_result_options_object.into());
 
             if input_json.len()>0{
-                if let(
-                    Ok(input_json)
-                    ,Some(v8str_input)
-                )=(
-                    std::str::from_utf8(input_json)
-                    ,v8::String::new(scope,"input")
-                ){
+                if let Some(v8str_input)=v8::String::new(scope,"input"){
                     if let Some(input_json)=v8::String::new(scope,input_json){
                         if let Some(input_json)=v8::json::parse(scope, input_json.into()){
                             wd.set(scope,v8str_input.into(),input_json.into());

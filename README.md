@@ -35,25 +35,25 @@ let mut wd=WildDoc::new(
 </wd:session></wd>"#,b"").unwrap();*/
 
 let update_xml=r#"<wd><wd:session name="hoge">
-    <wd:update commit="1">
-        <collection name="person">
-            <field name="name"><wd:print wd:value="wd.input.name" /></field>
-            <field name="country"><wd:print wd:value="wd.input.from" /></field>
-        </collection>
-    </wd:update>
+<wd:update commit="1">
+    <collection name="person">
+        <field name="name"><wd:print wd:value="wd.input.name" /></field>
+        <field name="country"><wd:print wd:value="wd.input.from" /></field>
+    </collection>
+</wd:update>
 </wd:session></wd>"#;
 wd.exec(update_xml,r#"{
     "name":"Noah"
     ,"from":"US"
-}"#.as_bytes()).unwrap();
+}"#).unwrap();
 wd.exec(update_xml,r#"{
     "name":"Liam"
     ,"from":"US"
-}"#.as_bytes()).unwrap();
+}"#).unwrap();
 wd.exec(update_xml,r#"{
     "name":"Olivia"
     ,"from":"UK"
-}"#.as_bytes()).unwrap();
+}"#).unwrap();
 
 //select data.
 let r=wd.exec(r#"<wd>
@@ -71,7 +71,7 @@ let r=wd.exec(r#"<wd>
     </wd:result>
     <input type="text" name="hoge" />
     <wd:include src="body.xml" />
-</wd>"#,b"").unwrap();
+</wd>"#,"").unwrap();
 println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //seaech data
@@ -89,7 +89,7 @@ let r=wd.exec(r#"<wd>
             </li></wd:for>
         </ul>
     </wd:result>
-</wd>"#,b"").unwrap();
+</wd>"#,"").unwrap();
 println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //use javascript
@@ -119,7 +119,7 @@ let r=wd.exec(r#"<wd>
             </li></wd:for>
         </ul>
     </wd:result>
-</wd>"#,b"").unwrap();
+</wd>"#,"").unwrap();
 println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
 
 //search in update section.
@@ -136,7 +136,7 @@ wd.exec(r#"<wd><wd:session name="hoge">
             </wd:for>
         </wd:result>
     </wd:update>
-</wd:session></wd>"#,b"").unwrap();
+</wd:session></wd>"#,"").unwrap();
 let r=wd.exec(r#"<wd>
     <wd:search name="p" collection="person"></wd:search>
     <wd:result var="q" search="p">
@@ -149,7 +149,7 @@ let r=wd.exec(r#"<wd>
             </li></wd:for>
         </ul>
     </wd:result>
-</wd>"#,b"").unwrap();
+</wd>"#,"").unwrap();
 println!("{}",std::str::from_utf8(r.body()).unwrap());
 ```
 
