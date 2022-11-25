@@ -16,7 +16,7 @@ fn it_works(){
     ).unwrap();
 
     //update data.
-    /*wd.exec(r#"<wd><wd:session name="hoge">
+    /*wd.run(r#"<wd><wd:session name="hoge">
         <wd:update commit="1">
             <collection name="person">
                 <field name="name">Noah</field>
@@ -41,21 +41,21 @@ fn it_works(){
         </collection>
     </wd:update>
     </wd:session></wd>"#;
-    wd.exec(update_xml,r#"{
+    wd.run(update_xml,r#"{
         "name":"Noah"
         ,"from":"US"
     }"#).unwrap();
-    wd.exec(update_xml,r#"{
+    wd.run(update_xml,r#"{
         "name":"Liam"
         ,"from":"US"
     }"#).unwrap();
-    wd.exec(update_xml,r#"{
+    wd.run(update_xml,r#"{
         "name":"Olivia"
         ,"from":"UK"
     }"#).unwrap();
 
     //select data.
-    let r=wd.exec(r#"<wd>
+    let r=wd.run(r#"<wd>
         <wd:search name="p" collection="person">
         </wd:search>
         <wd:result var="q" search="p">
@@ -74,7 +74,7 @@ fn it_works(){
     println!("{}",std::str::from_utf8(r.body()).unwrap());
 
     //seaech data
-    let r=wd.exec(r#"<wd>
+    let r=wd.run(r#"<wd>
         <wd:search name="p" collection="person">
             <field name="country" method="match" value="US" />
         </wd:search>
@@ -92,8 +92,11 @@ fn it_works(){
     println!("{}",std::str::from_utf8(r.body()).unwrap());
 
     //use javascript
-    let r=wd.exec(r#"<wd>
+    let r=wd.run(r#"<wd>
         <wd:script>
+            import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
+
+            const uuid=uuidv4();
             const ymd=function(){
                 const now=new Date();
                 return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
@@ -122,7 +125,7 @@ fn it_works(){
     println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
 
     //search in update section.
-    wd.exec(r#"<wd><wd:session name="hoge">
+    wd.run(r#"<wd><wd:session name="hoge">
         <wd:update commit="1">
             <wd:search name="person" collection="person"></wd:search>
             <wd:result var="q" search="person">
@@ -136,7 +139,7 @@ fn it_works(){
             </wd:result>
         </wd:update>
     </wd:session></wd>"#,"").unwrap();
-    let r=wd.exec(r#"<wd>
+    let r=wd.run(r#"<wd>
         <wd:search name="p" collection="person"></wd:search>
         <wd:result var="q" search="p">
             <div>
@@ -154,7 +157,7 @@ fn it_works(){
     /*
 
     //search in update section.
-    wd.exec(r#"<wd><wd:session name="hoge">
+    wd.run(r#"<wd><wd:session name="hoge">
         <wd:update commit="1">
             <collection name="fields">
                 <field name="name">birthday</field>
@@ -177,7 +180,7 @@ fn it_works(){
     let now=chrono::Local.timestamp_opt(chrono::Local::now().timestamp()-1000,0).unwrap().format("%Y-%m-%d %H:%M:%S").to_string();
     let end=chrono::Local.timestamp_opt(chrono::Local::now().timestamp()-100,0).unwrap().format("%Y-%m-%d %H:%M:%S").to_string();
 
-    wd.exec(r#"<wd><wd:session name="hoge" initialize="true">
+    wd.run(r#"<wd><wd:session name="hoge" initialize="true">
         <wd:update commit="1">
             <collection name="test">
                 <field name="num" type="numeric">3</field>
@@ -209,7 +212,7 @@ fn it_works(){
         </wd:update>
     </wd:session></wd>"#,"").unwrap();
     
-    wd.exec(&(r#"<wd><wd:session name="hoge" initialize="true">
+    wd.run(&(r#"<wd><wd:session name="hoge" initialize="true">
         <wd:update>
             <collection name="sys_ac" row="0" term_begin=""#.to_owned()+&now+r#"" term_end=""#+&end+r#"" activity="active" priority="0">
                 <field name="name" type="text">aa</field>
@@ -227,7 +230,7 @@ fn it_works(){
         </wd:update>
     </wd:session></wd>"#),"").unwrap();
     
-    wd.exec(&(r#"<wd><wd:session name="hoge">
+    wd.run(&(r#"<wd><wd:session name="hoge">
         <wd:update>
             <collection name="sys_ac">
                 <field name="name" type="text">TEST</field>
@@ -236,7 +239,7 @@ fn it_works(){
         </wd:update>
     </wd:session></wd>"#),"").unwrap();
 
-    wd.exec(&(r#"<wd><wd:session name="hoge">
+    wd.run(&(r#"<wd><wd:session name="hoge">
         <wd:update>
             <collection name="sys_ac" term_begin=""#.to_owned()+&now+r#"" row="-1">
                 <field name="name" type="text">AA</field>
@@ -245,7 +248,7 @@ fn it_works(){
     </wd:session></wd>"#),"").unwrap();
     
     
-    wd.exec(&(r#"<wd><wd:session name="hoge">
+    wd.run(&(r#"<wd><wd:session name="hoge">
         <wd:update>
             <collection name="sys_ac" term_begin=""#.to_owned()+&now+r#"" row="0">
                 <field name="name" type="text">cccc</field>
@@ -254,11 +257,11 @@ fn it_works(){
         </wd:update>
     </session></wd>"#),"").unwrap();
     
-    wd.exec(r#"<wd><wd:session name="hoge">
+    wd.run(r#"<wd><wd:session name="hoge">
         <wd:update commit="1"></wd:update>
     </wd:session></wd>"#,"").unwrap();
 
-    let r=wd.exec(&(r#"<wd>
+    let r=wd.run(&(r#"<wd>
         <wd:script>
             const hoge='HOGE';
             const f=function(){
@@ -283,7 +286,7 @@ fn it_works(){
         </wd:stack></wd:stack>
     </wd>"#),"").unwrap();
     println!("{}",std::str::from_utf8(r.body()).unwrap());
-    let r=wd.exec(&(r#"<wd>
+    let r=wd.run(&(r#"<wd>
         <wd:script>
             const hoge='HOGE';
             const f=function(){
@@ -344,7 +347,7 @@ fn it_works(){
     println!("{}",std::str::from_utf8(r.body()).unwrap());
     
     return;
-    wd.exec(r#"<wd><wd:session="hoge">
+    wd.run(r#"<wd><wd:session="hoge">
         <wd:update commit="1">
             <collection name="sys_ac" row="2">
                 <field name="name" type="text">test_rename2</field>
@@ -353,7 +356,7 @@ fn it_works(){
     </wd:session></wd>"#,""
     ).unwrap();
 
-    wd.exec(r#"<wd><wd:session="hoge">
+    wd.run(r#"<wd><wd:session="hoge">
         <wd:update commit="1">
             <collection name="sys_ac" row="2">
                 <field name="name" type="text">test_rename3</field>
@@ -362,7 +365,7 @@ fn it_works(){
     </wd:session></wd>"#,""
     ).unwrap();
 
-    wd.exec(r#"<wd><wd:session="hoge">
+    wd.run(r#"<wd><wd:session="hoge">
         <wd:update commit="1">
             <collection name="sys_ac" row="3" activity="inactive">
                 <field name="name" type="text">test_rename4</field>
@@ -371,7 +374,7 @@ fn it_works(){
     </wd:session></wd>"#,""
     ).unwrap();
 
-    wd.exec(r#"<wd><wd:session="hoge">
+    wd.run(r#"<wd><wd:session="hoge">
         <wd:select>
             <wd:stack var="hoge:true">
                 <wd:script>

@@ -17,7 +17,7 @@ let mut wd=WildDoc::new(
 ).unwrap();
 
 //update data.
-/*wd.exec(r#"<wd><wd:session name="hoge">
+/*wd.run(r#"<wd><wd:session name="hoge">
     <wd:update commit="1">
         <collection name="person">
             <field name="name">Noah</field>
@@ -42,21 +42,21 @@ let update_xml=r#"<wd><wd:session name="hoge">
     </collection>
 </wd:update>
 </wd:session></wd>"#;
-wd.exec(update_xml,r#"{
+wd.run(update_xml,r#"{
     "name":"Noah"
     ,"from":"US"
 }"#).unwrap();
-wd.exec(update_xml,r#"{
+wd.run(update_xml,r#"{
     "name":"Liam"
     ,"from":"US"
 }"#).unwrap();
-wd.exec(update_xml,r#"{
+wd.run(update_xml,r#"{
     "name":"Olivia"
     ,"from":"UK"
 }"#).unwrap();
 
 //select data.
-let r=wd.exec(r#"<wd>
+let r=wd.run(r#"<wd>
     <wd:search name="p" collection="person">
     </wd:search>
     <wd:result var="q" search="p">
@@ -75,7 +75,7 @@ let r=wd.exec(r#"<wd>
 println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //seaech data
-let r=wd.exec(r#"<wd>
+let r=wd.run(r#"<wd>
     <wd:search name="p" collection="person">
         <field name="country" method="match" value="US" />
     </wd:search>
@@ -93,8 +93,11 @@ let r=wd.exec(r#"<wd>
 println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //use javascript
-let r=wd.exec(r#"<wd>
+let r=wd.run(r#"<wd>
     <wd:script>
+        import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
+
+        const uuid=uuidv4();
         const ymd=function(){
             const now=new Date();
             return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
@@ -123,7 +126,7 @@ let r=wd.exec(r#"<wd>
 println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
 
 //search in update section.
-wd.exec(r#"<wd><wd:session name="hoge">
+wd.run(r#"<wd><wd:session name="hoge">
     <wd:update commit="1">
         <wd:search name="person" collection="person"></wd:search>
         <wd:result var="q" search="person">
@@ -137,7 +140,7 @@ wd.exec(r#"<wd><wd:session name="hoge">
         </wd:result>
     </wd:update>
 </wd:session></wd>"#,"").unwrap();
-let r=wd.exec(r#"<wd>
+let r=wd.run(r#"<wd>
     <wd:search name="p" collection="person"></wd:search>
     <wd:result var="q" search="p">
         <div>
