@@ -1,45 +1,7 @@
-use std::{convert::TryFrom, sync::{Arc, RwLock}};
+use std::{sync::{Arc, RwLock}};
 use deno_runtime::deno_core::v8;
 use semilattice_database::Database;
 
-pub fn v(
-    scope: &mut v8::HandleScope
-    ,args: v8::FunctionCallbackArguments
-    ,mut rv: v8::ReturnValue
-){
-    if let (
-        Some(v8str_var)
-        ,Some(v8str_wd)
-        ,Some(v8str_stack)
-    )=(
-        args.get(0).to_string(scope)
-        ,v8::String::new(scope,"wd")
-        ,v8::String::new(scope,"stack")
-    ){
-        let context=scope.get_current_context();
-        let global=context.global(scope);
-        if let Some(wd)=global.get(scope,v8str_wd.into()){
-            if let Ok(wd)=v8::Local::<v8::Object>::try_from(wd){
-                if let Some(stack)=wd.get(scope,v8str_stack.into()){
-                    if let Ok(stack)=v8::Local::<v8::Array>::try_from(stack){
-                        for i in (0..stack.length()).rev(){
-                            if let Some(cs)=stack.get_index(scope,i){
-                                if let Ok(cs)=v8::Local::<v8::Object>::try_from(cs){
-                                    if let Some(v)=cs.get(scope,v8str_var.into()){
-                                        if v.is_undefined()==false{
-                                            rv.set(v);
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 pub fn field(
     scope: &mut v8::HandleScope
     ,args: v8::FunctionCallbackArguments

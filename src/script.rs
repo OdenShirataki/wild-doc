@@ -7,7 +7,7 @@ use deno_runtime::{
     deno_core
     ,deno_core::{
         v8
-        ,JsRuntime
+        ,ModuleSpecifier
         ,FsModuleLoader
         ,error::AnyError
     }
@@ -16,6 +16,7 @@ use deno_runtime::{
     ,deno_web::BlobStore
     ,permissions::Permissions
     ,worker::{WorkerOptions, MainWorker}
+    ,ops
 };
 use quick_xml::events::{Event, BytesStart};
 
@@ -37,6 +38,13 @@ fn get_error_class_name(e: &AnyError) -> &'static str {
 pub struct Script{
     database:Arc<RwLock<Database>>
     ,sessions:Vec<Session>
+    ,main_module:ModuleSpecifier
+    ,module_loader:Rc<FsModuleLoader>
+    ,bootstrap:BootstrapOptions
+    ,permissions:Permissions
+    ,create_web_worker_cb: Arc<ops::worker_host::CreateWebWorkerCb>
+    ,web_worker_event_cb: Arc<ops::worker_host::WorkerEventCb>
+    
 }
 impl Script{
     pub fn new(
@@ -46,60 +54,62 @@ impl Script{
         Self{
             database
             ,sessions:vec![session]
+            ,main_module:deno_core::resolve_path("mainworker").unwrap()
+            ,module_loader:Rc::new(FsModuleLoader)
+            ,bootstrap: BootstrapOptions {
+                args: vec![],
+                cpu_count: 1,
+                debug_flag: false,
+                enable_testing_features: false,
+                locale: v8::icu::get_language_tag(),
+                location: None,
+                no_color: false,
+                is_tty: false,
+                runtime_version: "x".to_string(),
+                ts_version: "x".to_string(),
+                unstable: false,
+                user_agent: "hello_runtime".to_string(),
+                inspect: false,
+            }
+            ,permissions:Permissions::allow_all()
+            ,create_web_worker_cb: Arc::new(|_| {
+                todo!("Web workers are not supported in the example");
+            })
+            ,web_worker_event_cb: Arc::new(|_| {
+                todo!("Web workers are not supported in the example");
+            })
         }
     }
     pub fn parse_xml<T:IncludeAdaptor>(&mut self,input_json:&str,reader: &mut Reader<&[u8]>,include_adaptor:&mut T)->Result<super::WildDocResult,std::io::Error>{
-        let module_loader = Rc::new(FsModuleLoader);
-        let create_web_worker_cb = Arc::new(|_| {
-            todo!("Web workers are not supported in the example");
-          });
-          let web_worker_event_cb = Arc::new(|_| {
-            todo!("Web workers are not supported in the example");
-          });
-        
-          let options = WorkerOptions {
-                bootstrap: BootstrapOptions {
-                    args: vec![],
-                    cpu_count: 1,
-                    debug_flag: false,
-                    enable_testing_features: false,
-                    locale: v8::icu::get_language_tag(),
-                    location: None,
-                    no_color: false,
-                    is_tty: false,
-                    runtime_version: "x".to_string(),
-                    ts_version: "x".to_string(),
-                    unstable: false,
-                    user_agent: "hello_runtime".to_string(),
-                    inspect: false,
-                },
-                extensions: vec![],
-                startup_snapshot: None,
-                unsafely_ignore_certificate_errors: None,
-                root_cert_store: None,
-                seed: None,
-                source_map_getter: None,
-                format_js_error_fn: None,
-                web_worker_preload_module_cb: web_worker_event_cb.clone(),
-                web_worker_pre_execute_module_cb: web_worker_event_cb,
-                create_web_worker_cb,
-                maybe_inspector_server: None,
-                should_break_on_first_statement: false,
-                module_loader,
-                npm_resolver: None,
-                get_error_class_fn: Some(&get_error_class_name),
-                cache_storage_dir: None,
-                origin_storage_dir: None,
-                blob_store: BlobStore::default(),
-                broadcast_channel: InMemoryBroadcastChannel::default(),
-                shared_array_buffer_store: None,
-                compiled_wasm_module_store: None,
-                stdio: Default::default(),
+        let options = WorkerOptions {
+            bootstrap: self.bootstrap.clone(),
+            extensions: vec![],
+            startup_snapshot: None,
+            unsafely_ignore_certificate_errors: None,
+            root_cert_store: None,
+            seed: None,
+            source_map_getter: None,
+            format_js_error_fn: None,
+            web_worker_preload_module_cb: self.web_worker_event_cb.clone(),
+            web_worker_pre_execute_module_cb: self.web_worker_event_cb.clone(),
+            create_web_worker_cb:self.create_web_worker_cb.clone(),
+            maybe_inspector_server: None,
+            should_break_on_first_statement: false,
+            module_loader:self.module_loader.clone(),
+            npm_resolver: None,
+            get_error_class_fn: Some(&get_error_class_name),
+            cache_storage_dir: None,
+            origin_storage_dir: None,
+            blob_store: BlobStore::default(),
+            broadcast_channel: InMemoryBroadcastChannel::default(),
+            shared_array_buffer_store: None,
+            compiled_wasm_module_store: None,
+            stdio: Default::default(),
         };
 
         let mut worker = MainWorker::bootstrap_from_options(
-            deno_core::resolve_path("mainworker").unwrap()
-            ,Permissions::allow_all()
+            self.main_module.clone()
+            ,self.permissions.clone()
             ,options
         );
         worker.js_runtime.v8_isolate().set_slot(self.database.clone());
@@ -116,23 +126,14 @@ impl Script{
                     }
                 )+r#"
             };
+            wd.v=key=>{
+                for(let i=wd.stack.length-1;i>=0;i--){
+                    if(wd.stack[i][key]!==void 0){
+                        return wd.stack[i][key];
+                    }
+                }
+            };
         "#));
-        {
-            let scope=&mut worker.js_runtime.handle_scope();
-            let context=scope.get_current_context();
-            let scope=&mut v8::ContextScope::new(scope,context);
-            if let(
-                Some(wd)
-                ,Some(v8str_v)
-                ,Some(func_v)
-            )=(
-                JsRuntime::eval::<v8::Object>(scope,"wd")
-                ,v8::String::new(scope,"v")
-                ,v8::Function::new(scope,v)
-            ){
-                wd.set(scope,v8str_v.into(),func_v.into());
-            }
-        }
         let result_body={
             self.parse(
                 &mut worker
