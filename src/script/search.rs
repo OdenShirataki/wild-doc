@@ -10,12 +10,14 @@ use semilattice_database::{
     ,search
 };
 
+use deno_runtime::worker::MainWorker;
+
 use crate::xml_util::{self, XmlAttr};
 
 use super::Script;
 
-pub(super) fn make_conditions(script:&Script,attr:&XmlAttr,reader: &mut Reader<&[u8]>,scope: &mut v8::HandleScope)->Vec<Condition>{
-    let mut conditions=condition_loop(script,reader,scope);
+pub(super) fn make_conditions(script:&Script,attr:&XmlAttr,reader: &mut Reader<&[u8]>,worker: &mut MainWorker)->Vec<Condition>{
+    let mut conditions=condition_loop(script,reader,worker);
 
     let activity=attr.get("activity").map_or(
         Some(Activity::Active)
@@ -69,7 +71,7 @@ pub(super) fn make_conditions(script:&Script,attr:&XmlAttr,reader: &mut Reader<&
     conditions
 }
 
-fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::HandleScope)->Vec<Condition>{
+fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,worker: &mut MainWorker)->Vec<Condition>{
     let mut conditions=Vec::new();
     loop{
         if let Ok(next)=reader.read_event(){
@@ -77,21 +79,21 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
                 Event::Start(ref e)=>{
                     match e.name().as_ref(){
                         b"row"=>{
-                            if let Some(c)=condition_row(xml_util::attr2hash_map(&e),scope){
+                            if let Some(c)=condition_row(xml_util::attr2hash_map(&e),worker){
                                 conditions.push(c);
                             }
                             reader.read_to_end(e.name()).unwrap();
                         }
                         ,b"narrow"=>{
-                            conditions.push(Condition::Narrow(condition_loop(script,reader,scope)));
+                            conditions.push(Condition::Narrow(condition_loop(script,reader,worker)));
                         }
                         ,b"wide"=>{
-                            conditions.push(Condition::Wide(condition_loop(script,reader,scope)));
+                            conditions.push(Condition::Wide(condition_loop(script,reader,worker)));
                         }
                         ,b"depend"=>{
                             let attr=xml_util::attr2hash_map(e);
-                            let row=crate::attr_parse_or_static(scope,&attr,"row");
-                            let collection_name=crate::attr_parse_or_static(scope,&attr,"collection");
+                            let row=crate::attr_parse_or_static(worker,&attr,"row");
+                            let collection_name=crate::attr_parse_or_static(worker,&attr,"collection");
                             
                             if row!="" && collection_name!=""{
                                 if let (
@@ -101,7 +103,7 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
                                     row.parse::<u32>()
                                     ,script.database.clone().read().unwrap().collection_id(&collection_name)
                                 ){
-                                    let key=crate::attr_parse_or_static(scope,&attr,"key");
+                                    let key=crate::attr_parse_or_static(worker,&attr,"key");
                                     conditions.push(Condition::Depend(
                                         search::Depend::new(
                                             key,CollectionRow::new(
@@ -119,7 +121,7 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
                 ,Event::Empty(e)=>{
                     match e.name().as_ref(){
                         b"field"=>{
-                            if let Some(c)=condition_field(xml_util::attr2hash_map(&e),scope){
+                            if let Some(c)=condition_field(xml_util::attr2hash_map(&e),worker){
                                 conditions.push(c);
                             }
                             //reader.read_to_end(e.name()).unwrap();
@@ -141,9 +143,10 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,scope: &mut v8::Hand
     }
     conditions
 }
-fn condition_row<'a>(attr:XmlAttr,scope: &mut v8::HandleScope)->Option<Condition>{
-    let method=crate::attr_parse_or_static(scope,&attr,"method");
-    let value=crate::attr_parse_or_static(scope,&attr,"value");
+
+fn condition_row<'a>(attr:XmlAttr,worker: &mut MainWorker)->Option<Condition>{
+    let method=crate::attr_parse_or_static(worker,&attr,"method");
+    let value=crate::attr_parse_or_static(worker,&attr,"value");
     if value!=""{
         match &*method{
             "in"=>{
@@ -186,10 +189,10 @@ fn condition_row<'a>(attr:XmlAttr,scope: &mut v8::HandleScope)->Option<Condition
     }
     None
 }
-fn condition_field<'a>(attr:XmlAttr,scope: &mut v8::HandleScope)->Option<Condition>{
-    let name=crate::attr_parse_or_static(scope,&attr,"name");
-    let method=crate::attr_parse_or_static(scope,&attr,"method");
-    let value=crate::attr_parse_or_static(scope,&attr,"value");
+fn condition_field<'a>(attr:XmlAttr,worker: &mut MainWorker)->Option<Condition>{
+    let name=crate::attr_parse_or_static(worker,&attr,"name");
+    let method=crate::attr_parse_or_static(worker,&attr,"method");
+    let value=crate::attr_parse_or_static(worker,&attr,"value");
     
     if name!="" && method!="" && value!=""{
         let method_pair:Vec<&str>=method.split('!').collect();

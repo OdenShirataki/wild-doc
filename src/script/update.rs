@@ -14,6 +14,8 @@ use semilattice_database::{
     ,Depends
 };
 
+use deno_runtime:: worker::MainWorker;
+
 use crate::xml_util;
 
 use super::Script;
@@ -21,7 +23,7 @@ use super::Script;
 pub fn make_update_struct(
     script:&mut Script
     ,reader:&mut Reader<&[u8]>
-    ,scope: &mut v8::HandleScope
+    ,worker: &mut MainWorker
 )->Vec<Record>{
     let mut updates=Vec::new();
     loop{
@@ -44,7 +46,7 @@ pub fn make_update_struct(
                                             }
                                         }else if e.name().as_ref()==b"pends"{
                                             let inner_xml=xml_util::inner(reader);
-                                            let pends_tmp=make_update_struct(script,&mut Reader::from_str(&inner_xml),scope);
+                                            let pends_tmp=make_update_struct(script,&mut Reader::from_str(&inner_xml),worker);
                                             if let Ok(Some(key))=e.try_get_attribute("key"){
                                                 if let Ok(key)=std::str::from_utf8(&key.value){
                                                     pends.push(Pend::new(key,pends_tmp));
@@ -61,15 +63,15 @@ pub fn make_update_struct(
                                 }
                             }
                             let attr=xml_util::attr2hash_map(&e);
-                            let row=crate::attr_parse_or_static(scope,&attr,"row").parse().unwrap_or(0);
+                            let row=crate::attr_parse_or_static(worker,&attr,"row").parse().unwrap_or(0);
                             
-                            let activity=crate::attr_parse_or_static(scope,&attr,"activity");
+                            let activity=crate::attr_parse_or_static(worker,&attr,"activity");
                             let activity=match &*activity{
                                 "inactive"=>Activity::Inactive
                                 ,"0"=>Activity::Inactive
                                 ,_=>Activity::Active
                             };
-                            let term_begin=crate::attr_parse_or_static(scope,&attr,"term_begin");
+                            let term_begin=crate::attr_parse_or_static(worker,&attr,"term_begin");
                             let term_begin=if term_begin!=""{
                                 if let Some(t)=chrono::Local.datetime_from_str(&term_begin,"%Y-%m-%d %H:%M:%S").map_or(None,|v|Some(v.timestamp())){
                                     Term::Overwrite(t)
@@ -79,7 +81,7 @@ pub fn make_update_struct(
                             }else{
                                 Term::Defalut
                             };
-                            let term_end=crate::attr_parse_or_static(scope,&attr,"term_end");
+                            let term_end=crate::attr_parse_or_static(worker,&attr,"term_end");
                             let term_end=if term_end!=""{
                                 if let Some(t)=chrono::Local.datetime_from_str(&term_end,"%Y-%m-%d %H:%M:%S").map_or(None,|v|Some(v.timestamp())){
                                     Term::Overwrite(t)

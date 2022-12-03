@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.13.0"
+version = "0.14.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -16,12 +16,12 @@ categories = ["database","database-implementations","text-processing","web-progr
 
 [dependencies]
 libc="0.2"
+rustc-hash = { version = "1.0", default-features = false }
+rand="0.8"
 natord="1.0"
 memmap2="0.5"
 quick-xml="0.26"
 chrono="0.4"
-v8="0.55"
-rustc-hash = { version = "1.0", default-features = false }
-rand="0.8"
+deno_runtime = "0.88.0"
 
-semilattice-database={path="../semilattice-database" , version="0.31"}
+semilattice-database={version="0.31",path="../semilattice-database"}

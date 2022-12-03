@@ -12,9 +12,10 @@ use script::Script;
 mod xml_util;
 use xml_util::XmlAttr;
 
+use deno_runtime::{deno_core::v8, worker::MainWorker};
+
 mod include;
 pub use include::{IncludeAdaptor,IncludeLocal};
-
 
 pub struct WildDocResult{
     body:Vec<u8>
@@ -101,11 +102,11 @@ fn eval_result(scope:&mut v8::HandleScope,value:&str)->String{
     }
 }
 
-fn attr_parse_or_static(scope:&mut v8::HandleScope,attr:&XmlAttr,key:&str)->String{
+fn attr_parse_or_static(worker:&mut MainWorker,attr:&XmlAttr,key:&str)->String{
     let wdkey="wd:".to_owned()+key;
     if let Some(value)=attr.get(&wdkey){
         if let Ok(value)=std::str::from_utf8(value){
-            crate::eval_result(scope,value)
+            crate::eval_result(&mut worker.js_runtime.handle_scope(),value)
         }else{
             "".to_owned()
         }

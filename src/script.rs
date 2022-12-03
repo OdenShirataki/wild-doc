@@ -1,21 +1,38 @@
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::convert::TryFrom;
-use std::sync::{Once, RwLock};
+use std::sync::{Arc,RwLock};
 
+use deno_runtime::{
+    deno_core
+    ,deno_core::{
+        v8
+        ,JsRuntime
+        ,FsModuleLoader
+        ,error::AnyError
+    }
+    ,BootstrapOptions
+    ,deno_broadcast_channel::InMemoryBroadcastChannel
+    ,deno_web::BlobStore
+    ,permissions::Permissions
+    ,worker::{WorkerOptions, MainWorker}
+};
 use quick_xml::events::{Event, BytesStart};
-use v8;
 
 use quick_xml::Reader;
 use semilattice_database::{Database, Session};
 
 mod process;
 
-use crate::{xml_util, IncludeAdaptor, attr_parse_or_static};
+use crate::{xml_util, IncludeAdaptor};
 mod update;
 mod search;
 mod method;
 use method::*;
+
+fn get_error_class_name(e: &AnyError) -> &'static str {
+    deno_runtime::errors::get_error_class_name(e).unwrap_or("Error")
+}
 
 pub struct Script{
     database:Arc<RwLock<Database>>
@@ -25,14 +42,6 @@ impl Script{
     pub fn new(
         database:Arc<RwLock<Database>>
     )->Self{
-        static START: Once=Once::new();
-        START.call_once(||{
-            v8::V8::set_flags_from_string("--expose_gc");
-            v8::V8::initialize_platform(
-                v8::new_default_platform(0,false).make_shared()
-            );
-            v8::V8::initialize();
-        });
         let session=database.clone().read().unwrap().blank_session().unwrap();
         Self{
             database
@@ -40,79 +49,119 @@ impl Script{
         }
     }
     pub fn parse_xml<T:IncludeAdaptor>(&mut self,input_json:&str,reader: &mut Reader<&[u8]>,include_adaptor:&mut T)->Result<super::WildDocResult,std::io::Error>{
-        let params = v8::Isolate::create_params();
-        let mut isolate = v8::Isolate::new(params);
+        let module_loader = Rc::new(FsModuleLoader);
+        let create_web_worker_cb = Arc::new(|_| {
+            todo!("Web workers are not supported in the example");
+          });
+          let web_worker_event_cb = Arc::new(|_| {
+            todo!("Web workers are not supported in the example");
+          });
+        
+          let options = WorkerOptions {
+                bootstrap: BootstrapOptions {
+                    args: vec![],
+                    cpu_count: 1,
+                    debug_flag: false,
+                    enable_testing_features: false,
+                    locale: v8::icu::get_language_tag(),
+                    location: None,
+                    no_color: false,
+                    is_tty: false,
+                    runtime_version: "x".to_string(),
+                    ts_version: "x".to_string(),
+                    unstable: false,
+                    user_agent: "hello_runtime".to_string(),
+                    inspect: false,
+                },
+                extensions: vec![],
+                startup_snapshot: None,
+                unsafely_ignore_certificate_errors: None,
+                root_cert_store: None,
+                seed: None,
+                source_map_getter: None,
+                format_js_error_fn: None,
+                web_worker_preload_module_cb: web_worker_event_cb.clone(),
+                web_worker_pre_execute_module_cb: web_worker_event_cb,
+                create_web_worker_cb,
+                maybe_inspector_server: None,
+                should_break_on_first_statement: false,
+                module_loader,
+                npm_resolver: None,
+                get_error_class_fn: Some(&get_error_class_name),
+                cache_storage_dir: None,
+                origin_storage_dir: None,
+                blob_store: BlobStore::default(),
+                broadcast_channel: InMemoryBroadcastChannel::default(),
+                shared_array_buffer_store: None,
+                compiled_wasm_module_store: None,
+                stdio: Default::default(),
+        };
 
-        isolate.set_slot(self.database.clone());
-
-        let scope=&mut v8::HandleScope::new(&mut isolate);
-        let context=v8::Context::new(scope);
-        let scope=&mut v8::ContextScope::new(scope,context);
-
-        let global=context.global(scope);
-
-        let mut ret=Vec::new();
-
-        if let(
-            Some(v8str_wd)
-            ,Some(v8str_stack)
-            ,Some(v8str_v)
-            ,Some(func_v)
-            ,Some(v8str_result_options)
-        )=(
-            v8::String::new(scope,"wd")
-            ,v8::String::new(scope,"stack")
-            ,v8::String::new(scope,"v")
-            ,v8::Function::new(scope,v)
-            ,v8::String::new(scope,"result_options")
-        ){
-            let wd=v8::Object::new(scope);
-            let stack=v8::Array::new(scope,0);
-            wd.set(scope,v8str_stack.into(),stack.into());
-            wd.set(scope,v8str_v.into(),func_v.into());
-
-            let v8str_result_options_object=v8::Object::new(scope);
-            wd.set(scope,v8str_result_options.into(),v8str_result_options_object.into());
-
-            if input_json.len()>0{
-                if let Some(v8str_input)=v8::String::new(scope,"input"){
-                    if let Some(input_json)=v8::String::new(scope,input_json){
-                        if let Some(input_json)=v8::json::parse(scope, input_json.into()){
-                            wd.set(scope,v8str_input.into(),input_json.into());
-                        }
+        let mut worker = MainWorker::bootstrap_from_options(
+            deno_core::resolve_path("mainworker").unwrap()
+            ,Permissions::allow_all()
+            ,options
+        );
+        worker.js_runtime.v8_isolate().set_slot(self.database.clone());
+        let _=worker.execute_script("init",&(r#"
+            wd={
+                general:{}
+                ,stack:[]
+                ,result_options:{}
+                ,input:"#.to_owned()+(
+                    if input_json.len()>0{
+                        input_json
+                    }else{
+                        "{}"
                     }
-                }
+                )+r#"
+            };
+        "#));
+        {
+            let scope=&mut worker.js_runtime.handle_scope();
+            let context=scope.get_current_context();
+            let scope=&mut v8::ContextScope::new(scope,context);
+            if let(
+                Some(wd)
+                ,Some(v8str_v)
+                ,Some(func_v)
+            )=(
+                JsRuntime::eval::<v8::Object>(scope,"wd")
+                ,v8::String::new(scope,"v")
+                ,v8::Function::new(scope,v)
+            ){
+                wd.set(scope,v8str_v.into(),func_v.into());
             }
-            
-            global.set(
-                scope
-                ,v8str_wd.into()
-                ,wd.into()
-            );
-            
-            ret=self.parse(
-                scope
+        }
+        let result_body={
+            self.parse(
+                &mut worker
                 ,reader
                 ,"wd"
                 ,include_adaptor
-            )?;
-        }
-        let mut result_options=String::new();
-        if let Some(v)=v8::String::new(scope,"wd.result_options")
-            .and_then(|code|v8::Script::compile(scope, code, None))
-            .and_then(|v|v.run(scope))
-        {
-            if let Some(json)=v8::json::stringify(scope,v){
-                result_options=json.to_rust_string_lossy(scope);
+            )?
+        };
+        let result_options={
+            let mut result_options=String::new();
+            let scope=&mut worker.js_runtime.handle_scope();
+            let context=scope.get_current_context();
+            let scope=&mut v8::ContextScope::new(scope,context);
+            if let Some(v)=v8::String::new(scope,"wd.result_options")
+                .and_then(|code|v8::Script::compile(scope, code, None))
+                .and_then(|v|v.run(scope))
+            {
+                if let Some(json)=v8::json::stringify(scope,v){
+                    result_options=json.to_rust_string_lossy(scope);
+                }
             }
-        }
+            result_options
+        };
         Ok(super::WildDocResult{
-            body:ret
+            body:result_body
             ,options_json:result_options
         })
     }
-
-    pub fn parse<T:IncludeAdaptor>(&mut self,scope: &mut v8::HandleScope,reader: &mut Reader<&[u8]>,break_tag:&str,include_adaptor:&mut T)->Result<Vec<u8>,std::io::Error>{
+    pub fn parse<T:IncludeAdaptor>(&mut self,worker: &mut MainWorker,reader: &mut Reader<&[u8]>,break_tag:&str,include_adaptor:&mut T)->Result<Vec<u8>,std::io::Error>{
         let mut search_map=HashMap::new();
         let mut r=Vec::new();
         loop{
@@ -124,7 +173,7 @@ impl Script{
                         match name{
                             b"wd:session"=>{
                                 let attr=xml_util::attr2hash_map(&e);
-                                let session_name=crate::attr_parse_or_static(scope,&attr,"name");
+                                let session_name=crate::attr_parse_or_static(worker,&attr,"name");
                                 if let Ok(mut session)=Session::new(&self.database.clone().read().unwrap(),&session_name){
                                     if session_name!=""{
                                         if let Ok(Some(value))=e.try_get_attribute(b"initialize"){
@@ -140,11 +189,11 @@ impl Script{
                             }
                             ,b"wd:update"=>{
                                 let attr=xml_util::attr2hash_map(&e);
-                                let with_commit=crate::attr_parse_or_static(scope,&attr,"commit")=="1";
+                                let with_commit=crate::attr_parse_or_static(worker,&attr,"commit")=="1";
                                 
-                                let inner_xml=self.parse(scope,reader,"wd:update",include_adaptor)?;
+                                let inner_xml=self.parse(worker,reader,"wd:update",include_adaptor)?;
                                 let mut inner_reader=Reader::from_str(std::str::from_utf8(&inner_xml).unwrap());
-                                let updates=update::make_update_struct(self,&mut inner_reader,scope);
+                                let updates=update::make_update_struct(self,&mut inner_reader,worker);
                                 if let Some(session)=self.sessions.last_mut(){
                                     if !session.is_blank(){
                                         self.database.clone().read().unwrap().update(session,updates)?;
@@ -156,20 +205,24 @@ impl Script{
                             }
                             ,b"wd:search"=>{
                                 let attr=xml_util::attr2hash_map(&e);
-                                let name=crate::attr_parse_or_static(scope,&attr,"name");
-                                let collection_name=crate::attr_parse_or_static(scope,&attr,"collection");
+                                let name=crate::attr_parse_or_static(worker,&attr,"name");
+                                let collection_name=crate::attr_parse_or_static(worker,&attr,"collection");
                                 
                                 if name!="" && collection_name!=""{
                                     if let Some(collection_id)=self.database.clone().read().unwrap().collection_id(&collection_name){
-                                        let condition=search::make_conditions(self,&attr,reader,scope);
+                                        let condition=search::make_conditions(self,&attr,reader,worker);
                                         search_map.insert(name.to_owned(),(collection_id,condition));
                                     }
                                 }
                             }
                             ,b"wd:result"=>{
                                 let attr=xml_util::attr2hash_map(&e);
-                                let search=crate::attr_parse_or_static(scope,&attr,"search");
-                                let var=crate::attr_parse_or_static(scope,&attr,"var");
+                                let search=crate::attr_parse_or_static(worker,&attr,"search");
+                                let var=crate::attr_parse_or_static(worker,&attr,"var");
+
+                                let scope=&mut worker.js_runtime.handle_scope();
+                                let context=scope.get_current_context();
+                                let scope=&mut v8::ContextScope::new(scope,context);
                                 if search!="" && var!=""{
                                     if let (
                                         Some(str_collection_id)
@@ -238,6 +291,9 @@ impl Script{
                             }
                             ,b"wd:stack"=>{
                                 if let Ok(Some(var))=e.try_get_attribute(b"var"){
+                                    let scope=&mut worker.js_runtime.handle_scope();
+                                    let context=scope.get_current_context();
+                                    let scope=&mut v8::ContextScope::new(scope,context);
                                     std::str::from_utf8(&var.value).ok()
                                         .and_then(|code|v8::String::new(scope,&("wd.stack.push({".to_owned()+&code+"});"))
                                         .and_then(|code|v8::Script::compile(scope, code, None))
@@ -246,24 +302,32 @@ impl Script{
                                 }
                             }
                             ,b"wd:script"=>{
-                                v8::String::new(scope,&match reader.read_event(){
+                                let src=match reader.read_event(){
                                     Ok(Event::Text(c))=>std::str::from_utf8(&c.into_inner()).unwrap_or("").trim().to_string()
                                     ,Ok(Event::CData(c))=>std::str::from_utf8(&c.into_inner()).unwrap_or("").trim().to_string()
                                     ,_=> "".to_string()
-                                })
-                                    .and_then(|code|v8::Script::compile(scope, code, None))
-                                    .and_then(|v|v.run(scope))
-                                ;
+                                };
+                                let n=deno_core::resolve_path("script").unwrap();
+                                deno_core::futures::executor::block_on(async{
+                                    if let Ok(mod_id) = worker.js_runtime.load_side_module(&n, Some(src)).await{
+                                        let result = worker.js_runtime.mod_evaluate(mod_id);
+                                        let _=worker.run_event_loop(false).await;
+                                        let _=result.await;
+                                    }
+                                });
                             }
                             ,b"wd:case"=>{
-                                r.append(&mut process::case(self,&e,&xml_util::outer(&next,reader),scope,include_adaptor)?);
+                                r.append(&mut process::case(self,&e,&xml_util::outer(&next,reader),worker,include_adaptor)?);
                             }
                             ,b"wd:for"=>{
                                 let outer=xml_util::outer(&next,reader);
-                                r.append(&mut process::r#for(self,&e,&outer,scope,include_adaptor)?);
+                                r.append(&mut process::r#for(self,&e,&outer,worker,include_adaptor)?);
                             }
                             ,_=>{
                                 if !name.starts_with(b"wd:"){
+                                    let scope=&mut worker.js_runtime.handle_scope();
+                                    let context=scope.get_current_context();
+                                    let scope=&mut v8::ContextScope::new(scope,context);
                                     let html_attr=Self::html_attr(e,scope);
                                     r.push(b'<');
                                     r.append(&mut name.to_vec());
@@ -279,11 +343,11 @@ impl Script{
                         match name{
                             b"wd:print"=>{
                                 let attr=xml_util::attr2hash_map(e);
-                                r.append(&mut crate::attr_parse_or_static(scope,&attr,"value").as_bytes().to_vec());
+                                r.append(&mut crate::attr_parse_or_static(worker,&attr,"value").as_bytes().to_vec());
                             }
                             ,b"wd:include"=>{
                                 let attr=xml_util::attr2hash_map(e);
-                                let src=attr_parse_or_static(scope,&attr,"src");
+                                let src=crate::attr_parse_or_static(worker,&attr,"src");
                                 let xml=include_adaptor.include(&src);
                                 if xml.len()>0{
                                     let str_xml="<root>".to_owned()+&xml+"</root>";
@@ -292,7 +356,7 @@ impl Script{
                                         match event_reader_inner.read_event(){
                                             Ok(Event::Start(e))=>{
                                                 if e.name().as_ref()==b"root"{
-                                                    r.append(&mut self.parse(scope,&mut event_reader_inner,"root",include_adaptor)?);
+                                                    r.append(&mut self.parse(worker,&mut event_reader_inner,"root",include_adaptor)?);
                                                     break;
                                                 }
                                             }
@@ -303,6 +367,9 @@ impl Script{
                             }
                             ,_=>{
                                 if !name.starts_with(b"wd:"){
+                                    let scope=&mut worker.js_runtime.handle_scope();
+                                    let context=scope.get_current_context();
+                                    let scope=&mut v8::ContextScope::new(scope,context);
                                     let html_attr=Self::html_attr(e,scope);
                                     r.push(b'<');
                                     r.append(&mut name.to_vec());
@@ -320,6 +387,9 @@ impl Script{
                         }else{
                             if name.starts_with(b"wd:"){
                                 if name==b"wd:stack"{
+                                    let scope=&mut worker.js_runtime.handle_scope();
+                                    let context=scope.get_current_context();
+                                    let scope=&mut v8::ContextScope::new(scope,context);
                                     v8::String::new(scope,"wd.stack.pop();")
                                         .and_then(|code|v8::Script::compile(scope, code, None))
                                         .and_then(|v|v.run(scope))
@@ -381,4 +451,3 @@ impl Script{
         html_attr
     }
 }
-

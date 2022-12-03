@@ -95,26 +95,26 @@ println!("{}",std::str::from_utf8(r.body()).unwrap());
 //use javascript
 let r=wd.run(r#"<wd>
     <wd:script>
-        import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
-
-        const uuid=uuidv4();
         const ymd=function(){
             const now=new Date();
             return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
         };
-        const uk="UK";
-
+        wd.general.uk="UK";
+        wd.general.ymd=function(){
+            const now=new Date();
+            return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
+        };
         wd.result_options['test']="OK";
     </wd:script>
     <wd:search name="p" collection="person">
-        <field name="country" method="match" wd:value="uk" />
+        <field name="country" method="match" wd:value="wd.general.uk" />
     </wd:search>
     <wd:result var="q" search="p">
         <div>
-            <wd:print wd:value="ymd()" />
+            <wd:print wd:value="wd.general.ymd()" />
         </div>
         <div>
-            find <wd:print wd:value="wd.v('q').length" /> persons from the <wd:print wd:value="uk" />.
+            find <wd:print wd:value="wd.v('q').length" /> persons from the <wd:print wd:value="wd.general.uk" />.
         </div>
         <ul>
             <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
@@ -154,6 +154,35 @@ let r=wd.run(r#"<wd>
     </wd:result>
 </wd>"#,"").unwrap();
 println!("{}",std::str::from_utf8(r.body()).unwrap());
+
+//use WebAPI
+let r=wd.run(r#"<wd>
+    <wd:script>
+        wd.general.a="OK";
+        wd.stack.push({
+            hoge:{
+                hoge:"A"
+            }
+            ,a:1
+        });
+        console.log(crypto.randomUUID());
+        wd.result_options.test="TEST";
+        wd.result_options.test2=crypto.randomUUID();
+    </wd:script>
+    a:<wd:print wd:value="wd.general.a" />
+    v:<wd:print wd:value="wd.v('a')" />
+    input:<wd:print wd:value="wd.input.name" />
+    <wd:script>
+        wd.stack.pop();
+        wd.general.a="OK2";
+    </wd:script>
+    a:<wd:print wd:value="wd.general.a" />
+    v:<wd:print wd:value="wd.v('a')" />
+</wd>"#,r#"{
+    "name":"Ken"
+    ,"from":"US"
+}"#).unwrap();
+println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
 ```
 
 ## Include file
