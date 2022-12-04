@@ -4,11 +4,10 @@ use std::convert::TryFrom;
 use std::sync::{Arc,RwLock};
 
 use deno_runtime::{
-    deno_core
-    ,deno_core::{
-        v8
+    deno_core::{
+        self
+        ,v8
         ,ModuleSpecifier
-        ,FsModuleLoader
         ,error::AnyError
     }
     ,BootstrapOptions
@@ -31,6 +30,9 @@ mod search;
 mod method;
 use method::*;
 
+mod module_loader;
+use module_loader::WdModuleLoader;
+
 fn get_error_class_name(e: &AnyError) -> &'static str {
     deno_runtime::errors::get_error_class_name(e).unwrap_or("Error")
 }
@@ -39,12 +41,11 @@ pub struct Script{
     database:Arc<RwLock<Database>>
     ,sessions:Vec<Session>
     ,main_module:ModuleSpecifier
-    ,module_loader:Rc<FsModuleLoader>
+    ,module_loader:Rc<WdModuleLoader>
     ,bootstrap:BootstrapOptions
     ,permissions:Permissions
     ,create_web_worker_cb: Arc<ops::worker_host::CreateWebWorkerCb>
     ,web_worker_event_cb: Arc<ops::worker_host::WorkerEventCb>
-    
 }
 impl Script{
     pub fn new(
@@ -55,7 +56,7 @@ impl Script{
             database
             ,sessions:vec![session]
             ,main_module:deno_core::resolve_path("mainworker").unwrap()
-            ,module_loader:Rc::new(FsModuleLoader)
+            ,module_loader:WdModuleLoader::new()
             ,bootstrap: BootstrapOptions {
                 args: vec![],
                 cpu_count: 1,
@@ -113,35 +114,28 @@ impl Script{
             ,options
         );
         worker.js_runtime.v8_isolate().set_slot(self.database.clone());
-        let _=worker.execute_script("init",&(r#"
-            wd={
-                general:{}
-                ,stack:[]
-                ,result_options:{}
-                ,input:"#.to_owned()+(
-                    if input_json.len()>0{
-                        input_json
-                    }else{
-                        "{}"
-                    }
-                )+r#"
-            };
-            wd.v=key=>{
-                for(let i=wd.stack.length-1;i>=0;i--){
-                    if(wd.stack[i][key]!==void 0){
-                        return wd.stack[i][key];
-                    }
-                }
-            };
-        "#));
-        let result_body={
-            self.parse(
-                &mut worker
-                ,reader
-                ,"wd"
-                ,include_adaptor
-            )?
-        };
+        let _=worker.execute_script("init",&(
+r#"wd={
+    general:{}
+    ,stack:[]
+    ,result_options:{}
+    ,input:"#.to_owned()+(
+        if input_json.len()>0{
+            input_json
+        }else{
+            "{}"
+        }
+    )+r#"
+};
+wd.v=key=>{
+    for(let i=wd.stack.length-1;i>=0;i--){
+        if(wd.stack[i][key]!==void 0){
+            return wd.stack[i][key];
+        }
+    }
+};"#
+        ));
+        let result_body=self.parse(&mut worker,reader,"wd",include_adaptor)?;
         let result_options={
             let mut result_options=String::new();
             let scope=&mut worker.js_runtime.handle_scope();
@@ -303,13 +297,14 @@ impl Script{
                                 }
                             }
                             ,b"wd:script"=>{
+                                //TODO: use reader.read_to_end
                                 let src=match reader.read_event(){
                                     Ok(Event::Text(c))=>std::str::from_utf8(&c.into_inner()).unwrap_or("").trim().to_string()
                                     ,Ok(Event::CData(c))=>std::str::from_utf8(&c.into_inner()).unwrap_or("").trim().to_string()
                                     ,_=> "".to_string()
                                 };
-                                let n=deno_core::resolve_path("script").unwrap();
                                 deno_core::futures::executor::block_on(async{
+                                    let n=ModuleSpecifier::parse("wd://script").unwrap();
                                     if let Ok(mod_id) = worker.js_runtime.load_side_module(&n, Some(src)).await{
                                         let result = worker.js_runtime.mod_evaluate(mod_id);
                                         let _=worker.run_event_loop(false).await;
