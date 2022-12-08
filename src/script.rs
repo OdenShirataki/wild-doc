@@ -324,14 +324,9 @@ wd.v=key=>{
                             }
                             ,b"wd:stack"=>{
                                 if let Ok(Some(var))=e.try_get_attribute(b"var"){
-                                    let scope=&mut worker.js_runtime.handle_scope();
-                                    let context=scope.get_current_context();
-                                    let scope=&mut v8::ContextScope::new(scope,context);
-                                    std::str::from_utf8(&var.value).ok()
-                                        .and_then(|code|v8::String::new(scope,&("wd.stack.push({".to_owned()+&code+"});"))
-                                        .and_then(|code|v8::Script::compile(scope, code, None))
-                                        .and_then(|v|v.run(scope)))
-                                    ;
+                                    if let Ok(var)=std::str::from_utf8(&var.value){
+                                        let _=worker.execute_script("stack.push",&("wd.stack.push({".to_owned()+var+"});"));
+                                    }
                                 }
                             }
                             ,b"wd:script"=>{
@@ -356,10 +351,7 @@ wd.v=key=>{
                             }
                             ,_=>{
                                 if !name_ref.starts_with(b"wd:"){
-                                    let scope=&mut worker.js_runtime.handle_scope();
-                                    let context=scope.get_current_context();
-                                    let scope=&mut v8::ContextScope::new(scope,context);
-                                    let html_attr=Self::html_attr(e,scope);
+                                    let html_attr=Self::html_attr(e,worker);
                                     r.push(b'<');
                                     r.append(&mut name_ref.to_vec());
                                     r.append(&mut html_attr.as_bytes().to_vec());
@@ -398,10 +390,7 @@ wd.v=key=>{
                             }
                             ,_=>{
                                 if !name.starts_with(b"wd:"){
-                                    let scope=&mut worker.js_runtime.handle_scope();
-                                    let context=scope.get_current_context();
-                                    let scope=&mut v8::ContextScope::new(scope,context);
-                                    let html_attr=Self::html_attr(e,scope);
+                                    let html_attr=Self::html_attr(e,worker);
                                     r.push(b'<');
                                     r.append(&mut name.to_vec());
                                     r.append(&mut html_attr.as_bytes().to_vec());
@@ -418,13 +407,7 @@ wd.v=key=>{
                         }else{
                             if name.starts_with(b"wd:"){
                                 if name==b"wd:stack"{
-                                    let scope=&mut worker.js_runtime.handle_scope();
-                                    let context=scope.get_current_context();
-                                    let scope=&mut v8::ContextScope::new(scope,context);
-                                    v8::String::new(scope,"wd.stack.pop();")
-                                        .and_then(|code|v8::Script::compile(scope, code, None))
-                                        .and_then(|v|v.run(scope))
-                                    ;
+                                    let _=worker.execute_script("stack.pop","wd.stack.pop();");
                                 }else if name==b"wd:session"{
                                     self.sessions.pop();
                                 }
@@ -451,7 +434,10 @@ wd.v=key=>{
         Ok(r)
     }
 
-    fn html_attr(e:&BytesStart,scope:&mut v8::HandleScope)->String{
+    fn html_attr(e:&BytesStart,worker: &mut MainWorker)->String{
+        let scope=&mut worker.js_runtime.handle_scope();
+        let context=scope.get_current_context();
+        let scope=&mut v8::ContextScope::new(scope,context);
         let mut html_attr="".to_string();
         for attr in e.attributes(){
             if let Ok(attr)=attr{
