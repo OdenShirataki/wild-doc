@@ -59,7 +59,7 @@ wd.run(update_xml,r#"{
 let r=wd.run(r#"<wd>
     <wd:search name="p" collection="person">
     </wd:search>
-    <wd:result var="q" search="p">
+    <wd:result var="q" search="p" sort="field.name ASC,serial">
         <div>
             find <wd:print wd:value="wd.v('q').length" /> persons.
         </div>
@@ -158,6 +158,9 @@ println!("{}",std::str::from_utf8(r.body()).unwrap());
 //use WebAPI
 let r=wd.run(r#"<wd>
     <wd:script>
+        import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
+        console.log(uuidv4());
+
         wd.general.a="OK";
         wd.stack.push({
             hoge:{
@@ -175,9 +178,10 @@ let r=wd.run(r#"<wd>
     <wd:script>
         wd.stack.pop();
         wd.general.a="OK2";
+        wd.general.b=1>2;
     </wd:script>
     a:<wd:print wd:value="wd.general.a" />
-    v:<wd:print wd:value="wd.v('a')" />
+    v:<wd:print wd:value="wd.general.b" />
 </wd>"#,r#"{
     "name":"Ken"
     ,"from":"US"

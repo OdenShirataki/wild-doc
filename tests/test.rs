@@ -58,7 +58,7 @@ fn it_works(){
     let r=wd.run(r#"<wd>
         <wd:search name="p" collection="person">
         </wd:search>
-        <wd:result var="q" search="p">
+        <wd:result var="q" search="p" sort="field.name ASC,serial">
             <div>
                 find <wd:print wd:value="wd.v('q').length" /> persons.
             </div>
@@ -93,7 +93,7 @@ fn it_works(){
 
     //use javascript
     let r=wd.run(r#"<wd>
-        <wd:script><![CDATA[
+        <wd:script>
             const ymd=function(){
                 const now=new Date();
                 return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
@@ -104,7 +104,7 @@ fn it_works(){
                 return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
             };
             wd.result_options['test']="OK";
-        ]]></wd:script>
+        </wd:script>
         <wd:search name="p" collection="person">
             <field name="country" method="match" wd:value="wd.general.uk" />
         </wd:search>
@@ -156,7 +156,7 @@ fn it_works(){
 
     //use WebAPI
     let r=wd.run(r#"<wd>
-        <wd:script><![CDATA[
+        <wd:script>
             import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
             console.log(uuidv4());
 
@@ -170,16 +170,17 @@ fn it_works(){
             console.log(crypto.randomUUID());
             wd.result_options.test="TEST";
             wd.result_options.test2=crypto.randomUUID();
-        ]]></wd:script>
+        </wd:script>
         a:<wd:print wd:value="wd.general.a" />
         v:<wd:print wd:value="wd.v('a')" />
         input:<wd:print wd:value="wd.input.name" />
         <wd:script>
             wd.stack.pop();
             wd.general.a="OK2";
+            wd.general.b=1>2;
         </wd:script>
         a:<wd:print wd:value="wd.general.a" />
-        v:<wd:print wd:value="wd.v('a')" />
+        v:<wd:print wd:value="wd.general.b" />
     </wd>"#,r#"{
         "name":"Ken"
         ,"from":"US"

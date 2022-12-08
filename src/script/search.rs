@@ -124,7 +124,6 @@ fn condition_loop(script:&Script,reader: &mut Reader<&[u8]>,worker: &mut MainWor
                             if let Some(c)=condition_field(xml_util::attr2hash_map(&e),worker){
                                 conditions.push(c);
                             }
-                            //reader.read_to_end(e.name()).unwrap();
                         }
                         ,_=>{}
                     }
@@ -198,7 +197,6 @@ fn condition_field<'a>(attr:XmlAttr,worker: &mut MainWorker)->Option<Condition>{
         let method_pair:Vec<&str>=method.split('!').collect();
         let len=method_pair.len();
         let i=len-1;
-        //let not=len>1;
 
         if let Some(method)=match method_pair[i]{
             "match"=>Some(search::Field::Match(value.as_bytes().to_vec()))

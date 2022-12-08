@@ -20,7 +20,7 @@ use deno_runtime::{
 use quick_xml::events::{Event, BytesStart};
 
 use quick_xml::Reader;
-use semilattice_database::{Database, Session};
+use semilattice_database::{Database, Session, Order, OrderKey};
 
 mod process;
 
@@ -114,8 +114,7 @@ impl Script{
             ,options
         );
         worker.js_runtime.v8_isolate().set_slot(self.database.clone());
-        let _=worker.execute_script("init",&(
-r#"wd={
+        let _=worker.execute_script("init",&(r#"wd={
     general:{}
     ,stack:[]
     ,result_options:{}
@@ -164,8 +163,8 @@ wd.v=key=>{
                 match next{
                     Event::Start(ref e)=>{
                         let name=e.name();
-                        let name=name.as_ref();
-                        match name{
+                        let name_ref=name.as_ref();
+                        match name_ref{
                             b"wd:session"=>{
                                 let attr=xml_util::attr2hash_map(&e);
                                 let session_name=crate::attr_parse_or_static(worker,&attr,"name");
@@ -215,6 +214,41 @@ wd.v=key=>{
                                 let search=crate::attr_parse_or_static(worker,&attr,"search");
                                 let var=crate::attr_parse_or_static(worker,&attr,"var");
 
+                                let mut orders=vec![];
+                                let sort=crate::attr_parse_or_static(worker,&attr,"sort");
+                                if sort.len()>0{
+                                    for o in sort.trim().split(","){
+                                        let o=o.trim();
+                                        let is_desc=o.ends_with(" DESC");
+                                        let o_split: Vec<&str>=o.split(" ").collect();
+                                        let field=o_split[0];
+                                        let order_key=if field.starts_with("field."){
+                                            if let Some(field_name)=field.strip_prefix("field."){
+                                                Some(OrderKey::Field(field_name.to_owned()))
+                                            }else{
+                                                None
+                                            }
+                                        }else{
+                                            match field{
+                                                "serial"=>Some(OrderKey::Serial)
+                                                ,"row"=>Some(OrderKey::Row)
+                                                ,"term_begin"=>Some(OrderKey::TermBegin)
+                                                ,"term_end"=>Some(OrderKey::TermEnd)
+                                                ,"last_update"=>Some(OrderKey::LastUpdated)
+                                                ,_=>None
+                                            }
+                                        };
+                                        if let Some(order_key)=order_key{
+                                            orders.push(
+                                                if is_desc{
+                                                    Order::Desc(order_key)
+                                                }else{
+                                                    Order::Asc(order_key)
+                                                }
+                                            );
+                                        }
+                                    }
+                                }
                                 let scope=&mut worker.js_runtime.handle_scope();
                                 let context=scope.get_current_context();
                                 let scope=&mut v8::ContextScope::new(scope,context);
@@ -254,9 +288,13 @@ wd.v=key=>{
                                                                     search=search.search(c.clone());
                                                                 }
                                                                 let rowset=self.database.clone().read().unwrap().result(&search);
-                                                        
+                                                                let rows=if orders.len()>0{
+                                                                    collection.sort(rowset,orders)
+                                                                }else{
+                                                                    rowset.into_iter().collect()
+                                                                };
                                                                 let mut i=0;
-                                                                for d in rowset{
+                                                                for d in rows{
                                                                     let obj=v8::Object::new(scope);
                                                                     let row=v8::Integer::new(scope, d as i32);
                                                                     let collection_id=v8::Integer::new(scope,collection_id as i32);
@@ -297,20 +335,17 @@ wd.v=key=>{
                                 }
                             }
                             ,b"wd:script"=>{
-                                //TODO: use reader.read_to_end
-                                let src=match reader.read_event(){
-                                    Ok(Event::Text(c))=>std::str::from_utf8(&c.into_inner()).unwrap_or("").trim().to_string()
-                                    ,Ok(Event::CData(c))=>std::str::from_utf8(&c.into_inner()).unwrap_or("").trim().to_string()
-                                    ,_=> "".to_string()
-                                };
-                                deno_core::futures::executor::block_on(async{
-                                    let n=ModuleSpecifier::parse("wd://script").unwrap();
-                                    if let Ok(mod_id) = worker.js_runtime.load_side_module(&n, Some(src)).await{
-                                        let result = worker.js_runtime.mod_evaluate(mod_id);
-                                        let _=worker.run_event_loop(false).await;
-                                        let _=result.await;
-                                    }
-                                });
+                                if let Ok(src)=reader.read_text(name){
+                                    let src=src.to_string();
+                                    deno_core::futures::executor::block_on(async{
+                                        let n=ModuleSpecifier::parse("wd://script").unwrap();
+                                        if let Ok(mod_id) = worker.js_runtime.load_side_module(&n, Some(src)).await{
+                                            let result = worker.js_runtime.mod_evaluate(mod_id);
+                                            let _=worker.run_event_loop(false).await;
+                                            let _=result.await;
+                                        }
+                                    });
+                                }
                             }
                             ,b"wd:case"=>{
                                 r.append(&mut process::case(self,&e,&xml_util::outer(&next,reader),worker,include_adaptor)?);
@@ -320,13 +355,13 @@ wd.v=key=>{
                                 r.append(&mut process::r#for(self,&e,&outer,worker,include_adaptor)?);
                             }
                             ,_=>{
-                                if !name.starts_with(b"wd:"){
+                                if !name_ref.starts_with(b"wd:"){
                                     let scope=&mut worker.js_runtime.handle_scope();
                                     let context=scope.get_current_context();
                                     let scope=&mut v8::ContextScope::new(scope,context);
                                     let html_attr=Self::html_attr(e,scope);
                                     r.push(b'<');
-                                    r.append(&mut name.to_vec());
+                                    r.append(&mut name_ref.to_vec());
                                     r.append(&mut html_attr.as_bytes().to_vec());
                                     r.push(b'>');
                                 }
