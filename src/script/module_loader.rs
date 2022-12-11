@@ -47,7 +47,6 @@ impl ModuleLoader for WdModuleLoader {
                 ModuleType::JavaScript
             };
             let body=reqwest::blocking::get(url)?.text()?;
-            //println!("load: {}",url);
             let module=ModuleSource {
                 code: body.as_bytes().to_vec().into_boxed_slice()
                 ,module_type

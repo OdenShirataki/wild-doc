@@ -46,7 +46,9 @@ pub fn make_update_struct(
                                             }
                                         }else if e.name().as_ref()==b"pends"{
                                             let inner_xml=xml_util::inner(reader);
-                                            let pends_tmp=make_update_struct(script,&mut Reader::from_str(&inner_xml),worker);
+                                            let mut reader_inner=Reader::from_str(&inner_xml);
+                                            reader_inner.check_end_names(false);
+                                            let pends_tmp=make_update_struct(script,&mut reader_inner,worker);
                                             if let Ok(Some(key))=e.try_get_attribute("key"){
                                                 if let Ok(key)=std::str::from_utf8(&key.value){
                                                     pends.push(Pend::new(key,pends_tmp));

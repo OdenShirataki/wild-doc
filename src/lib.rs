@@ -45,6 +45,7 @@ impl<T:IncludeAdaptor> WildDoc<T>{
     }
     pub fn run(&mut self,xml:&str,input_json:&str)->Result<WildDocResult,std::io::Error>{
         let mut reader=Reader::from_str(xml);
+        reader.check_end_names(false);
         loop{
             match reader.read_event(){
                 Ok(Event::Start(e))=>{
@@ -61,6 +62,7 @@ impl<T:IncludeAdaptor> WildDoc<T>{
     }
     pub fn run_specify_include_adaptor(&mut self,xml:&str,input_json:&str,index_adaptor:&mut impl IncludeAdaptor)->Result<WildDocResult,std::io::Error>{
         let mut reader=Reader::from_str(xml);
+        reader.check_end_names(false);
         loop{
             match reader.read_event(){
                 Ok(Event::Start(e))=>{

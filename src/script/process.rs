@@ -21,6 +21,7 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
     let cmp_value=crate::attr_parse_or_static(worker,&attr,"value");
     if cmp_value!=""{
         let mut event_reader=Reader::from_str(&xml_str.trim());
+        event_reader.check_end_names(false);
         loop{
             match event_reader.read_event(){
                 Ok(Event::Start(e))=>{
@@ -36,6 +37,7 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
                                                 if wv==cmp_value{
                                                     let xml_str=xml_util::outer(&next,&mut event_reader);
                                                     let mut event_reader_inner=Reader::from_str(&xml_str.trim());
+                                                    event_reader_inner.check_end_names(false);
                                                     loop{
                                                         match event_reader_inner.read_event(){
                                                             Ok(Event::Start(e))=>{
@@ -52,6 +54,7 @@ pub(super) fn case<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&s
                                             ,b"wd:else"=>{
                                                 let xml_str=xml_util::outer(&next,&mut event_reader);
                                                 let mut event_reader_inner=Reader::from_str(&xml_str.trim());
+                                                event_reader_inner.check_end_names(false);
                                                 loop{
                                                     match event_reader_inner.read_event(){
                                                         Ok(Event::Start(e))=>{
@@ -104,6 +107,7 @@ pub(super) fn r#for<T:IncludeAdaptor>(script:&mut Script,e:&BytesStart,xml_str:&
                     let length=rs.length();
                     for i in 0..length {
                         let mut ev=Reader::from_str(&xml_str);
+                        ev.check_end_names(false);
                         loop{
                             match ev.read_event(){
                                 Ok(Event::Start(e))=>{

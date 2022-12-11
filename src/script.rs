@@ -191,6 +191,7 @@ wd.v=key=>{
                                 )=="1";
                                 let inner_xml=self.parse(worker,reader,"wd:update",include_adaptor)?;
                                 let mut inner_reader=Reader::from_str(std::str::from_utf8(&inner_xml).unwrap());
+                                inner_reader.check_end_names(false);
                                 let updates=update::make_update_struct(self,&mut inner_reader,worker);
                                 if let Some(session)=self.sessions.last_mut(){
                                     self.database.clone().read().unwrap().update(&mut session.clone().write().unwrap(),updates)?;
@@ -264,6 +265,7 @@ wd.v=key=>{
                                 if xml.len()>0{
                                     let str_xml="<root>".to_owned()+&xml+"</root>";
                                     let mut event_reader_inner=Reader::from_str(&str_xml);
+                                    event_reader_inner.check_end_names(false);
                                     loop{
                                         match event_reader_inner.read_event(){
                                             Ok(Event::Start(e))=>{
