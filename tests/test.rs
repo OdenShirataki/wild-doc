@@ -58,7 +58,7 @@ fn it_works(){
     let r=wd.run(r#"<wd>
         <wd:search name="p" collection="person">
         </wd:search>
-        <wd:result var="q" search="p" sort="field.name ASC,serial">
+        <wd:result var="q" search="p">
             <div>
                 find <wd:print wd:value="wd.v('q').length" /> persons.
             </div>
@@ -186,6 +186,20 @@ fn it_works(){
         ,"from":"US"
     }"#).unwrap();
     println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
+
+    let update_xml=r#"<wd><wd:session name="login"><wd:update commit="0">
+        <collection name="login">
+            <field name="id">3</field>
+        </collection>
+    </wd:update></wd:session></wd>"#;
+    wd.run(update_xml,"").unwrap();
+    let r=wd.run(r#"<wd><wd:session name="login">
+        <wd:search name="login" collection="login">
+        </wd:search><wd:result var="login" search="login"><wd:for var="r" index="i" wd:in="wd.v('login')">
+            <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('id')" />
+        </wd:for></wd:result>
+    </wd:session></wd>"#,"").unwrap();
+    println!("{}",std::str::from_utf8(r.body()).unwrap());
     /*
 
     //search in update section.

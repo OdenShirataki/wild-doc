@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::convert::TryFrom;
 use std::sync::{Arc,RwLock};
 
 use deno_runtime::{
@@ -20,15 +19,14 @@ use deno_runtime::{
 use quick_xml::events::{Event, BytesStart};
 
 use quick_xml::Reader;
-use semilattice_database::{Database, Session, Order, OrderKey};
+use semilattice_database::{Database, Session};
 
 mod process;
 
 use crate::{xml_util, IncludeAdaptor};
 mod update;
 mod search;
-mod method;
-use method::*;
+mod result;
 
 mod module_loader;
 use module_loader::WdModuleLoader;
@@ -39,7 +37,7 @@ fn get_error_class_name(e: &AnyError) -> &'static str {
 
 pub struct Script{
     database:Arc<RwLock<Database>>
-    ,sessions:Vec<Session>
+    ,sessions:Vec<Arc<RwLock<Session>>>
     ,main_module:ModuleSpecifier
     ,module_loader:Rc<WdModuleLoader>
     ,bootstrap:BootstrapOptions
@@ -51,10 +49,9 @@ impl Script{
     pub fn new(
         database:Arc<RwLock<Database>>
     )->Self{
-        let session=database.clone().read().unwrap().blank_session().unwrap();
         Self{
             database
-            ,sessions:vec![session]
+            ,sessions:vec![]
             ,main_module:deno_core::resolve_path("mainworker").unwrap()
             ,module_loader:WdModuleLoader::new()
             ,bootstrap: BootstrapOptions {
@@ -113,7 +110,7 @@ impl Script{
             ,self.permissions.clone()
             ,options
         );
-        worker.js_runtime.v8_isolate().set_slot(self.database.clone());
+        //worker.js_runtime.v8_isolate().set_slot(self.database.clone());
         let _=worker.execute_script("init",&(r#"wd={
     general:{}
     ,stack:[]
@@ -155,7 +152,13 @@ wd.v=key=>{
             ,options_json:result_options
         })
     }
-    pub fn parse<T:IncludeAdaptor>(&mut self,worker: &mut MainWorker,reader: &mut Reader<&[u8]>,break_tag:&str,include_adaptor:&mut T)->Result<Vec<u8>,std::io::Error>{
+    pub fn parse<T:IncludeAdaptor>(
+        &mut self
+        ,worker: &mut MainWorker
+        ,reader: &mut Reader<&[u8]>
+        ,break_tag:&str
+        ,include_adaptor:&mut T
+    )->Result<Vec<u8>,std::io::Error>{
         let mut search_map=HashMap::new();
         let mut r=Vec::new();
         loop{
@@ -166,8 +169,9 @@ wd.v=key=>{
                         let name_ref=name.as_ref();
                         match name_ref{
                             b"wd:session"=>{
-                                let attr=xml_util::attr2hash_map(&e);
-                                let session_name=crate::attr_parse_or_static(worker,&attr,"name");
+                                let session_name=crate::attr_parse_or_static(
+                                    worker,&xml_util::attr2hash_map(&e),"name"
+                                );
                                 if let Ok(mut session)=Session::new(&self.database.clone().read().unwrap(),&session_name){
                                     if session_name!=""{
                                         if let Ok(Some(value))=e.try_get_attribute(b"initialize"){
@@ -176,24 +180,22 @@ wd.v=key=>{
                                             }
                                         }
                                     }
-                                    self.sessions.push(session);
+                                    self.sessions.push(Arc::new(RwLock::new(session)));
                                 }else{
                                     xml_util::outer(&next,reader);
                                 }
                             }
                             ,b"wd:update"=>{
-                                let attr=xml_util::attr2hash_map(&e);
-                                let with_commit=crate::attr_parse_or_static(worker,&attr,"commit")=="1";
-                                
+                                let with_commit=crate::attr_parse_or_static(
+                                    worker,&xml_util::attr2hash_map(&e),"commit"
+                                )=="1";
                                 let inner_xml=self.parse(worker,reader,"wd:update",include_adaptor)?;
                                 let mut inner_reader=Reader::from_str(std::str::from_utf8(&inner_xml).unwrap());
                                 let updates=update::make_update_struct(self,&mut inner_reader,worker);
                                 if let Some(session)=self.sessions.last_mut(){
-                                    if !session.is_blank(){
-                                        self.database.clone().read().unwrap().update(session,updates)?;
-                                        if with_commit{
-                                            self.database.clone().write().unwrap().commit(session)?;
-                                        }
+                                    self.database.clone().read().unwrap().update(&mut session.clone().write().unwrap(),updates)?;
+                                    if with_commit{
+                                        self.database.clone().write().unwrap().commit(&mut session.clone().write().unwrap())?;
                                     }
                                 }
                             }
@@ -201,7 +203,6 @@ wd.v=key=>{
                                 let attr=xml_util::attr2hash_map(&e);
                                 let name=crate::attr_parse_or_static(worker,&attr,"name");
                                 let collection_name=crate::attr_parse_or_static(worker,&attr,"collection");
-                                
                                 if name!="" && collection_name!=""{
                                     if let Some(collection_id)=self.database.clone().read().unwrap().collection_id(&collection_name){
                                         let condition=search::make_conditions(self,&attr,reader,worker);
@@ -210,117 +211,7 @@ wd.v=key=>{
                                 }
                             }
                             ,b"wd:result"=>{
-                                let attr=xml_util::attr2hash_map(&e);
-                                let search=crate::attr_parse_or_static(worker,&attr,"search");
-                                let var=crate::attr_parse_or_static(worker,&attr,"var");
-
-                                let mut orders=vec![];
-                                let sort=crate::attr_parse_or_static(worker,&attr,"sort");
-                                if sort.len()>0{
-                                    for o in sort.trim().split(","){
-                                        let o=o.trim();
-                                        let is_desc=o.ends_with(" DESC");
-                                        let o_split: Vec<&str>=o.split(" ").collect();
-                                        let field=o_split[0];
-                                        let order_key=if field.starts_with("field."){
-                                            if let Some(field_name)=field.strip_prefix("field."){
-                                                Some(OrderKey::Field(field_name.to_owned()))
-                                            }else{
-                                                None
-                                            }
-                                        }else{
-                                            match field{
-                                                "serial"=>Some(OrderKey::Serial)
-                                                ,"row"=>Some(OrderKey::Row)
-                                                ,"term_begin"=>Some(OrderKey::TermBegin)
-                                                ,"term_end"=>Some(OrderKey::TermEnd)
-                                                ,"last_update"=>Some(OrderKey::LastUpdated)
-                                                ,_=>None
-                                            }
-                                        };
-                                        if let Some(order_key)=order_key{
-                                            orders.push(
-                                                if is_desc{
-                                                    Order::Desc(order_key)
-                                                }else{
-                                                    Order::Asc(order_key)
-                                                }
-                                            );
-                                        }
-                                    }
-                                }
-                                let scope=&mut worker.js_runtime.handle_scope();
-                                let context=scope.get_current_context();
-                                let scope=&mut v8::ContextScope::new(scope,context);
-                                if search!="" && var!=""{
-                                    if let (
-                                        Some(str_collection_id)
-                                        ,Some(v8str_session_key)
-                                        ,Some(v8str_func_field)
-                                        ,Some(v8str_row)
-                                        ,Some(v8str_wd)
-                                        ,Some(v8str_stack)
-                                        ,Some(var)
-                                        ,Some(v8func_field)
-                                    )=(
-                                        v8::String::new(scope,"collection_id")
-                                        ,v8::String::new(scope,"session_key")
-                                        ,v8::String::new(scope,"field")
-                                        ,v8::String::new(scope,"row")
-                                        ,v8::String::new(scope,"wd")
-                                        ,v8::String::new(scope,"stack")
-                                        ,v8::String::new(scope,&var)
-                                        ,v8::Function::new(scope,field)
-                                    ){
-                                        let context=scope.get_current_context();
-                                        let global=context.global(scope);
-                                        if let Some(wd)=global.get(scope,v8str_wd.into()){
-                                            if let Ok(wd)=v8::Local::<v8::Object>::try_from(wd){
-                                                if let Some(stack)=wd.get(scope,v8str_stack.into()){
-                                                    if let Ok(stack)=v8::Local::<v8::Array>::try_from(stack){
-                                                        let obj=v8::Object::new(scope);
-                                                        let return_obj=v8::Array::new(scope,0); 
-                                                        if let Some((collection_id,conditions))=search_map.get(&search){
-                                                            let collection_id=*collection_id;
-                                                            if let Some(collection)=self.database.clone().read().unwrap().collection(collection_id){
-                                                                let mut search=self.database.clone().read().unwrap().search(collection);
-                                                                for c in conditions{
-                                                                    search=search.search(c.clone());
-                                                                }
-                                                                let rowset=self.database.clone().read().unwrap().result(&search);
-                                                                let rows=if orders.len()>0{
-                                                                    collection.sort(rowset,orders)
-                                                                }else{
-                                                                    rowset.into_iter().collect()
-                                                                };
-                                                                let mut i=0;
-                                                                for d in rows{
-                                                                    let obj=v8::Object::new(scope);
-                                                                    let row=v8::Integer::new(scope, d as i32);
-                                                                    let collection_id=v8::Integer::new(scope,collection_id as i32);
-                                                                    obj.set(scope,v8str_row.into(),row.into());
-                                                                    obj.set(scope,v8str_func_field.into(),v8func_field.into());
-                                                                    obj.set(scope,str_collection_id.into(),collection_id.into());
-                                                                    if let Some(session_key)=obj.get(scope,v8str_session_key.into()){ 
-                                                                        obj.set(
-                                                                            scope
-                                                                            ,v8str_session_key.into()
-                                                                            ,session_key.into()
-                                                                        );
-                                                                    }
-                                                                    return_obj.set_index(scope,i,obj.into());
-                                                                    i+=1;
-                                                                }
-                                                            }
-                                                        }
-                                                        obj.set(scope,var.into(),return_obj.into());
-                                                        stack.set_index(scope,stack.length(),obj.into());
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                result::result(self,worker,e,&search_map);
                             }
                             ,b"wd:stack"=>{
                                 if let Ok(Some(var))=e.try_get_attribute(b"var"){
@@ -346,15 +237,13 @@ wd.v=key=>{
                                 r.append(&mut process::case(self,&e,&xml_util::outer(&next,reader),worker,include_adaptor)?);
                             }
                             ,b"wd:for"=>{
-                                let outer=xml_util::outer(&next,reader);
-                                r.append(&mut process::r#for(self,&e,&outer,worker,include_adaptor)?);
+                                r.append(&mut process::r#for(self,&e,&xml_util::outer(&next,reader),worker,include_adaptor)?);
                             }
                             ,_=>{
                                 if !name_ref.starts_with(b"wd:"){
-                                    let html_attr=Self::html_attr(e,worker);
                                     r.push(b'<');
                                     r.append(&mut name_ref.to_vec());
-                                    r.append(&mut html_attr.as_bytes().to_vec());
+                                    r.append(&mut Self::html_attr(e,worker).as_bytes().to_vec());
                                     r.push(b'>');
                                 }
                             }
@@ -365,12 +254,12 @@ wd.v=key=>{
                         let name=name.as_ref();
                         match name{
                             b"wd:print"=>{
-                                let attr=xml_util::attr2hash_map(e);
-                                r.append(&mut crate::attr_parse_or_static(worker,&attr,"value").as_bytes().to_vec());
+                                r.append(&mut crate::attr_parse_or_static(
+                                    worker,&xml_util::attr2hash_map(e),"value"
+                                ).as_bytes().to_vec());
                             }
                             ,b"wd:include"=>{
-                                let attr=xml_util::attr2hash_map(e);
-                                let src=crate::attr_parse_or_static(worker,&attr,"src");
+                                let src=crate::attr_parse_or_static(worker,&xml_util::attr2hash_map(e),"src");
                                 let xml=include_adaptor.include(&src);
                                 if xml.len()>0{
                                     let str_xml="<root>".to_owned()+&xml+"</root>";
@@ -379,7 +268,9 @@ wd.v=key=>{
                                         match event_reader_inner.read_event(){
                                             Ok(Event::Start(e))=>{
                                                 if e.name().as_ref()==b"root"{
-                                                    r.append(&mut self.parse(worker,&mut event_reader_inner,"root",include_adaptor)?);
+                                                    r.append(&mut self.parse(
+                                                        worker,&mut event_reader_inner,"root",include_adaptor
+                                                    )?);
                                                     break;
                                                 }
                                             }
@@ -390,10 +281,9 @@ wd.v=key=>{
                             }
                             ,_=>{
                                 if !name.starts_with(b"wd:"){
-                                    let html_attr=Self::html_attr(e,worker);
                                     r.push(b'<');
                                     r.append(&mut name.to_vec());
-                                    r.append(&mut html_attr.as_bytes().to_vec());
+                                    r.append(&mut Self::html_attr(e,worker).as_bytes().to_vec());
                                     r.append(&mut b" />".to_vec());
                                 }
                             }
