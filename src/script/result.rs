@@ -205,7 +205,6 @@ pub(super) fn result(
             }else{
                 worker.js_runtime.v8_isolate().set_slot(script.database.clone());
             }
-            
 
             let scope=&mut worker.js_runtime.handle_scope();
             let context=scope.get_current_context();
@@ -228,7 +227,6 @@ pub(super) fn result(
                 ,v8::String::new(scope,"stack")
                 ,v8::String::new(scope,&var)
             ){
-                let context=scope.get_current_context();
                 let global=context.global(scope);
                 if let Some(wd)=global.get(scope,v8str_wd.into()){
                     if let Ok(wd)=v8::Local::<v8::Object>::try_from(wd){
@@ -295,6 +293,33 @@ pub(super) fn result(
                                         }
                                     }
                                 }
+                                obj.set(scope,var.into(),return_obj.into());
+                                stack.set_index(scope,stack.length(),obj.into());
+                            }
+                        }
+                    }
+                }
+            }
+        }else{
+            let scope=&mut worker.js_runtime.handle_scope();
+            let context=scope.get_current_context();
+            let scope=&mut v8::ContextScope::new(scope,context);
+            if let (
+                Some(v8str_wd)
+                ,Some(v8str_stack)
+                ,Some(var)
+            )=(
+                v8::String::new(scope,"wd")
+                ,v8::String::new(scope,"stack")
+                ,v8::String::new(scope,&var)
+            ){
+                let global=context.global(scope);
+                if let Some(wd)=global.get(scope,v8str_wd.into()){
+                    if let Ok(wd)=v8::Local::<v8::Object>::try_from(wd){
+                        if let Some(stack)=wd.get(scope,v8str_stack.into()){
+                            if let Ok(stack)=v8::Local::<v8::Array>::try_from(stack){
+                                let obj=v8::Object::new(scope);
+                                let return_obj=v8::Array::new(scope,0);
                                 obj.set(scope,var.into(),return_obj.into());
                                 stack.set_index(scope,stack.length(),obj.into());
                             }
