@@ -1,9 +1,6 @@
-use std::sync::{Arc,RwLock};
+use std::sync::{Arc, RwLock};
 
-use quick_xml::{
-    Reader
-    ,events::Event
-};
+use quick_xml::{events::Event, Reader};
 use semilattice_database::Database;
 
 mod script;
@@ -15,68 +12,70 @@ use xml_util::XmlAttr;
 use deno_runtime::{deno_core::v8, worker::MainWorker};
 
 mod include;
-pub use include::{IncludeAdaptor,IncludeLocal};
+pub use include::{IncludeAdaptor, IncludeLocal};
 
-pub struct WildDocResult{
-    body:Vec<u8>
-    ,options_json:String
+pub struct WildDocResult {
+    body: Vec<u8>,
+    options_json: String,
 }
-impl WildDocResult{
-    pub fn body(&self)->&[u8]{
+impl WildDocResult {
+    pub fn body(&self) -> &[u8] {
         &self.body
     }
-    pub fn options_json(&self)->&str{
+    pub fn options_json(&self) -> &str {
         &self.options_json
     }
 }
-pub struct WildDoc<T:IncludeAdaptor>{
-    database:Arc<RwLock<Database>>
-    ,default_include_adaptor:T
+pub struct WildDoc<T: IncludeAdaptor> {
+    database: Arc<RwLock<Database>>,
+    default_include_adaptor: T,
 }
-impl<T:IncludeAdaptor> WildDoc<T>{
-    pub fn new(
-        dir:&str
-        ,default_include_adaptor:T
-    )->Result<Self,std::io::Error>{
-        Ok(Self{
-            database:Arc::new(RwLock::new(Database::new(dir)?))
-            ,default_include_adaptor
+impl<T: IncludeAdaptor> WildDoc<T> {
+    pub fn new(dir: &str, default_include_adaptor: T) -> Result<Self, std::io::Error> {
+        Ok(Self {
+            database: Arc::new(RwLock::new(Database::new(dir)?)),
+            default_include_adaptor,
         })
     }
-    pub fn run(&mut self,xml:&str,input_json:&str)->Result<WildDocResult,std::io::Error>{
-        let mut reader=Reader::from_str(xml);
+    pub fn run(&mut self, xml: &str, input_json: &str) -> Result<WildDocResult, std::io::Error> {
+        let mut reader = Reader::from_str(xml);
         reader.check_end_names(false);
-        loop{
-            match reader.read_event(){
-                Ok(Event::Start(e))=>{
-                    if e.name().as_ref()==b"wd"{
-                        let mut script=Script::new(
-                            self.database.clone()
+        loop {
+            match reader.read_event() {
+                Ok(Event::Start(e)) => {
+                    if e.name().as_ref() == b"wd" {
+                        let mut script = Script::new(self.database.clone());
+                        return script.parse_xml(
+                            input_json,
+                            &mut reader,
+                            &mut self.default_include_adaptor,
                         );
-                        return script.parse_xml(input_json,&mut reader,&mut self.default_include_adaptor);
                     }
                 }
-                ,_=>{}
+                _ => {}
             }
         }
     }
-    pub fn run_specify_include_adaptor(&mut self,xml:&str,input_json:&str,index_adaptor:&mut impl IncludeAdaptor)->Result<WildDocResult,std::io::Error>{
-        let mut reader=Reader::from_str(xml);
+    pub fn run_specify_include_adaptor(
+        &mut self,
+        xml: &str,
+        input_json: &str,
+        index_adaptor: &mut impl IncludeAdaptor,
+    ) -> Result<WildDocResult, std::io::Error> {
+        let mut reader = Reader::from_str(xml);
         reader.check_end_names(false);
-        loop{
-            match reader.read_event(){
-                Ok(Event::Start(e))=>{
-                    if e.name().as_ref()==b"wd"{
-                        let mut script=Script::new(
-                            self.database.clone()
-                        );
-                        return script.parse_xml(input_json,&mut reader,index_adaptor);
+        loop {
+            match reader.read_event() {
+                Ok(Event::Start(e)) => {
+                    if e.name().as_ref() == b"wd" {
+                        let mut script = Script::new(self.database.clone());
+                        return script.parse_xml(input_json, &mut reader, index_adaptor);
                     }
                 }
-                ,_=>{
-                    return Ok(WildDocResult{
-                        body:xml.into()
-                        ,options_json:"".to_string()
+                _ => {
+                    return Ok(WildDocResult {
+                        body: xml.into(),
+                        options_json: "".to_string(),
                     });
                 }
             }
@@ -84,41 +83,34 @@ impl<T:IncludeAdaptor> WildDoc<T>{
     }
 }
 
-fn eval<'s>(scope: &mut v8::HandleScope<'s>,code: &str) -> Option<v8::Local<'s, v8::Value>> {
-    let scope = &mut v8::EscapableHandleScope::new(scope);
-    let source = v8::String::new(scope, code).unwrap();
-    let script = v8::Script::compile(scope, source, None).unwrap();
-    let r = script.run(scope);
-    r.map(|v| scope.escape(v))
-}
-
-fn eval_result(scope:&mut v8::HandleScope,value:&str)->String{
-    if let Some(v8_value)=v8::String::new(scope,value)
-        .and_then(|code|v8::Script::compile(scope, code, None))
-        .and_then(|v|v.run(scope))
-        .and_then(|v|v.to_string(scope))
+fn eval_result(scope: &mut v8::HandleScope, value: &str) -> String {
+    if let Some(v8_value) = v8::String::new(scope, value)
+        .and_then(|code| v8::Script::compile(scope, code, None))
+        .and_then(|v| v.run(scope))
+        .and_then(|v| v.to_string(scope))
     {
         v8_value.to_rust_string_lossy(scope)
-    }else{
+    } else {
         "".to_string()
     }
 }
 
-fn attr_parse_or_static(worker:&mut MainWorker,attr:&XmlAttr,key:&str)->String{
-    let wdkey="wd:".to_owned()+key;
-    if let Some(value)=attr.get(&wdkey){
-        if let Ok(value)=std::str::from_utf8(value){
-            crate::eval_result(&mut worker.js_runtime.handle_scope(),value)
-        }else{
+fn attr_parse_or_static(worker: &mut MainWorker, attr: &XmlAttr, key: &str) -> String {
+    let wdkey = "wd:".to_owned() + key;
+    if let Some(value) = attr.get(&wdkey) {
+        if let Ok(value) = std::str::from_utf8(value) {
+            crate::eval_result(&mut worker.js_runtime.handle_scope(), value)
+        } else {
             "".to_owned()
         }
-    }else if let Some(value)=attr.get(key){
-        if let Ok(value)=std::str::from_utf8(value){
+    } else if let Some(value) = attr.get(key) {
+        if let Ok(value) = std::str::from_utf8(value) {
             value
-        }else{
+        } else {
             ""
-        }.to_owned()
-    }else{
+        }
+        .to_owned()
+    } else {
         "".to_owned()
     }
 }

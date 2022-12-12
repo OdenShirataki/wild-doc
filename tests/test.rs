@@ -15,6 +15,14 @@ fn it_works(){
         ,IncludeLocal::new("./include/")
     ).unwrap();
 
+    /*
+    let r=wd.run(r#"<wd>
+        <wd:script>
+            console.log(wd);
+        </wd:script>
+    </wd>"#,"").unwrap();
+    return ;
+     */
     //update data.
     /*wd.run(r#"<wd><wd:session name="hoge">
         <wd:update commit="1">
@@ -33,6 +41,7 @@ fn it_works(){
         </wd:update>
     </wd:session></wd>"#,b"").unwrap();*/
 
+    
     let update_xml=r#"<wd><wd:session name="hoge">
     <wd:update commit="1">
         <collection name="person">
@@ -64,7 +73,7 @@ fn it_works(){
             </div>
             <ul>
                 <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
-                    <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
+                    <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').activity" /> : <wd:print wd:value="wd.v('r').uuid" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
                 </li></wd:for>
             </ul>
         </wd:result>
@@ -104,6 +113,7 @@ fn it_works(){
                 return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
             };
             wd.result_options['test']="OK";
+            
         </wd:script>
         <wd:search name="p" collection="person">
             <field name="country" method="match" wd:value="wd.general.uk" />
