@@ -1,19 +1,15 @@
 #[cfg(test)]
-
 #[test]
-fn it_works(){
+fn it_works() {
     use wild_doc::*;
 
-    let dir="./wd-test/";
-    if std::path::Path::new(dir).exists(){
+    let dir = "./wd-test/";
+    if std::path::Path::new(dir).exists() {
         std::fs::remove_dir_all(dir).unwrap();
     }
     std::fs::create_dir_all(dir).unwrap();
 
-    let mut wd=WildDoc::new(
-        dir
-        ,IncludeLocal::new("./include/")
-    ).unwrap();
+    let mut wd = WildDoc::new(dir, IncludeLocal::new("./include/")).unwrap();
 
     /*
     let r=wd.run(r#"<wd>
@@ -41,8 +37,7 @@ fn it_works(){
         </wd:update>
     </wd:session></wd>"#,b"").unwrap();*/
 
-    
-    let update_xml=r#"<wd><wd:session name="hoge">
+    let update_xml = r#"<wd><wd:session name="hoge">
     <wd:update commit="1">
         <collection name="person">
             <field name="name"><wd:print wd:value="wd.input.name" /></field>
@@ -50,18 +45,30 @@ fn it_works(){
         </collection>
     </wd:update>
     </wd:session></wd>"#;
-    wd.run(update_xml,r#"{
+    wd.run(
+        update_xml,
+        r#"{
         "name":"Noah"
         ,"from":"US"
-    }"#).unwrap();
-    wd.run(update_xml,r#"{
+    }"#,
+    )
+    .unwrap();
+    wd.run(
+        update_xml,
+        r#"{
         "name":"Liam"
         ,"from":"US"
-    }"#).unwrap();
-    wd.run(update_xml,r#"{
+    }"#,
+    )
+    .unwrap();
+    wd.run(
+        update_xml,
+        r#"{
         "name":"Olivia"
         ,"from":"UK"
-    }"#).unwrap();
+    }"#,
+    )
+    .unwrap();
 
     //select data.
     let r=wd.run(r#"<wd>
@@ -80,7 +87,7 @@ fn it_works(){
         <input type="text" name="hoge" />
         <wd:include src="body.xml" />
     </wd>"#,"").unwrap();
-    println!("{}",std::str::from_utf8(r.body()).unwrap());
+    println!("{}", std::str::from_utf8(r.body()).unwrap());
 
     //seaech data
     let r=wd.run(r#"<wd>
@@ -98,7 +105,7 @@ fn it_works(){
             </ul>
         </wd:result>
     </wd>"#,"").unwrap();
-    println!("{}",std::str::from_utf8(r.body()).unwrap());
+    println!("{}", std::str::from_utf8(r.body()).unwrap());
 
     //use javascript
     let r=wd.run(r#"<wd>
@@ -132,7 +139,11 @@ fn it_works(){
             </ul>
         </wd:result>
     </wd>"#,"").unwrap();
-    println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
+    println!(
+        "{} : {}",
+        std::str::from_utf8(r.body()).unwrap(),
+        r.options_json()
+    );
 
     //search in update section.
     wd.run(r#"<wd><wd:session name="hoge">
@@ -162,10 +173,12 @@ fn it_works(){
             </ul>
         </wd:result>
     </wd>"#,"").unwrap();
-    println!("{}",std::str::from_utf8(r.body()).unwrap());
+    println!("{}", std::str::from_utf8(r.body()).unwrap());
 
     //use WebAPI
-    let r=wd.run(r#"<wd>
+    let r = wd
+        .run(
+            r#"<wd>
         <wd:script>
             import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
             console.log(uuidv4());
@@ -191,25 +204,32 @@ fn it_works(){
         </wd:script>
         a:<wd:print wd:value="wd.general.a" />
         v:<wd:print wd:value="wd.general.b" />
-    </wd>"#,r#"{
+    </wd>"#,
+            r#"{
         "name":"Ken"
         ,"from":"US"
-    }"#).unwrap();
-    println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
+    }"#,
+        )
+        .unwrap();
+    println!(
+        "{} : {}",
+        std::str::from_utf8(r.body()).unwrap(),
+        r.options_json()
+    );
 
-    let update_xml=r#"<wd><wd:session name="login"><wd:update commit="0">
+    let update_xml = r#"<wd><wd:session name="login"><wd:update commit="0">
         <collection name="login">
             <field name="id">3</field>
         </collection>
     </wd:update></wd:session></wd>"#;
-    wd.run(update_xml,"").unwrap();
+    wd.run(update_xml, "").unwrap();
     let r=wd.run(r#"<wd><wd:session name="login">
         <wd:search name="login" collection="login">
         </wd:search><wd:result var="login" search="login"><wd:for var="r" index="i" wd:in="wd.v('login')">
             <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('id')" />
         </wd:for></wd:result>
     </wd:session></wd>"#,"").unwrap();
-    println!("{}",std::str::from_utf8(r.body()).unwrap());
+    println!("{}", std::str::from_utf8(r.body()).unwrap());
     /*
 
     //search in update section.
@@ -231,7 +251,7 @@ fn it_works(){
     </wd:session></wd>"#);
         */
     return;
-    
+
     /*
     use chrono::TimeZone;
     let now=chrono::Local.timestamp_opt(chrono::Local::now().timestamp()-1000,0).unwrap().format("%Y-%m-%d %H:%M:%S").to_string();
@@ -268,7 +288,7 @@ fn it_works(){
             </collection>
         </wd:update>
     </wd:session></wd>"#,"").unwrap();
-    
+
     wd.run(&(r#"<wd><wd:session name="hoge" initialize="true">
         <wd:update>
             <collection name="sys_ac" row="0" term_begin=""#.to_owned()+&now+r#"" term_end=""#+&end+r#"" activity="active" priority="0">
@@ -286,7 +306,7 @@ fn it_works(){
             </collection>
         </wd:update>
     </wd:session></wd>"#),"").unwrap();
-    
+
     wd.run(&(r#"<wd><wd:session name="hoge">
         <wd:update>
             <collection name="sys_ac">
@@ -303,8 +323,8 @@ fn it_works(){
             </collection>
         </wd:update>
     </wd:session></wd>"#),"").unwrap();
-    
-    
+
+
     wd.run(&(r#"<wd><wd:session name="hoge">
         <wd:update>
             <collection name="sys_ac" term_begin=""#.to_owned()+&now+r#"" row="0">
@@ -313,7 +333,7 @@ fn it_works(){
             </collection>
         </wd:update>
     </session></wd>"#),"").unwrap();
-    
+
     wd.run(r#"<wd><wd:session name="hoge">
         <wd:update commit="1"></wd:update>
     </wd:session></wd>"#,"").unwrap();
@@ -402,7 +422,7 @@ fn it_works(){
         <wd:include src="body.xml" />
     </wd>"#),"").unwrap();
     println!("{}",std::str::from_utf8(r.body()).unwrap());
-    
+
     return;
     wd.run(r#"<wd><wd:session="hoge">
         <wd:update commit="1">
