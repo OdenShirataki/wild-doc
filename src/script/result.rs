@@ -210,95 +210,145 @@ pub(super) fn result(
                                 let obj = v8::Object::new(scope);
                                 let return_obj = v8::Array::new(scope, 0);
 
-                                if let Some(mut session) = session_maybe_has_collection {
-                                    let addr =
-                                        &mut session as *mut Arc<RwLock<Session>> as *mut c_void;
-                                    let v8_ext = v8::External::new(scope, addr);
-                                    if let (
-                                        Some(v8func_field),
-                                        Some(v8str_session),
-                                        Some(temporary_collection),
-                                    ) = (
-                                        v8::Function::new(scope, session_field),
-                                        v8::String::new(scope, "session"),
-                                        session
-                                            .clone()
-                                            .read()
-                                            .unwrap()
-                                            .temporary_collection(collection_id),
-                                    ) {
-                                        let rowset = session
-                                            .clone()
-                                            .read()
-                                            .unwrap()
-                                            .search(collection_id, conditions)
-                                            .result(&script.database.clone().read().unwrap());
-                                        //TODO:セッションデータのソート
-                                        let mut i = 0;
-                                        for r in rowset {
-                                            let obj = v8::Object::new(scope);
+                                if let Some(collection) = script
+                                    .database
+                                    .clone()
+                                    .read()
+                                    .unwrap()
+                                    .collection(collection_id)
+                                {
+                                    if let Some(mut session) = session_maybe_has_collection {
+                                        let addr = &mut session as *mut Arc<RwLock<Session>>
+                                            as *mut c_void;
+                                        let v8_ext = v8::External::new(scope, addr);
+                                        if let (
+                                            Some(v8func_field),
+                                            Some(v8str_session),
+                                            Some(temporary_collection),
+                                        ) = (
+                                            v8::Function::new(scope, session_field),
+                                            v8::String::new(scope, "session"),
+                                            session
+                                                .clone()
+                                                .read()
+                                                .unwrap()
+                                                .temporary_collection(collection_id),
+                                        ) {
+                                            let rowset = session
+                                                .clone()
+                                                .read()
+                                                .unwrap()
+                                                .search(collection_id, conditions)
+                                                .result(&script.database.clone().read().unwrap());
+                                            //TODO:セッションデータのソート
+                                            let mut i = 0;
+                                            for r in rowset {
+                                                let obj = v8::Object::new(scope);
 
-                                            obj.define_own_property(
-                                                scope,
-                                                v8str_session.into(),
-                                                v8_ext.into(),
-                                                READ_ONLY,
-                                            );
-
-                                            let row = v8::BigInt::new_from_i64(scope, r);
-                                            obj.set(scope, v8str_row.into(), row.into());
-                                            obj.set(
-                                                scope,
-                                                v8str_func_field.into(),
-                                                v8func_field.into(),
-                                            );
-
-                                            if let Some(tr) = temporary_collection.get(&r) {
-                                                let activity =
-                                                    v8::Integer::new(scope, tr.activity() as i32);
-                                                let term_begin = v8::BigInt::new_from_i64(
+                                                obj.define_own_property(
                                                     scope,
-                                                    tr.term_begin(),
+                                                    v8str_session.into(),
+                                                    v8_ext.into(),
+                                                    READ_ONLY,
                                                 );
-                                                let term_end =
-                                                    v8::BigInt::new_from_i64(scope, tr.term_end());
 
+                                                let row = v8::BigInt::new_from_i64(scope, r);
+                                                obj.set(scope, v8str_row.into(), row.into());
                                                 obj.set(
                                                     scope,
-                                                    v8str_activity.into(),
-                                                    activity.into(),
+                                                    v8str_func_field.into(),
+                                                    v8func_field.into(),
                                                 );
+
+                                                let collection_id =
+                                                    v8::Integer::new(scope, collection_id as i32);
                                                 obj.set(
                                                     scope,
-                                                    v8str_term_begin.into(),
-                                                    term_begin.into(),
+                                                    v8str_collection_id.into(),
+                                                    collection_id.into(),
                                                 );
-                                                obj.set(
-                                                    scope,
-                                                    v8str_term_end.into(),
-                                                    term_end.into(),
-                                                );
+
+                                                if r > 0 {
+                                                    let last_update = v8::BigInt::new_from_i64(
+                                                        scope,
+                                                        collection.last_updated(r as u32),
+                                                    );
+                                                    let uuid = v8::String::new(
+                                                        scope,
+                                                        &collection.uuid_str(r as u32),
+                                                    )
+                                                    .unwrap();
+                                                    obj.set(
+                                                        scope,
+                                                        v8str_last_update.into(),
+                                                        last_update.into(),
+                                                    );
+                                                    obj.set(scope, v8str_uuid.into(), uuid.into());
+                                                }
+
+                                                if let Some(tr) = temporary_collection.get(&r) {
+                                                    let activity = v8::Integer::new(
+                                                        scope,
+                                                        tr.activity() as i32,
+                                                    );
+                                                    let term_begin = v8::BigInt::new_from_i64(
+                                                        scope,
+                                                        tr.term_begin(),
+                                                    );
+                                                    let term_end = v8::BigInt::new_from_i64(
+                                                        scope,
+                                                        tr.term_end(),
+                                                    );
+                                                    obj.set(
+                                                        scope,
+                                                        v8str_activity.into(),
+                                                        activity.into(),
+                                                    );
+                                                    obj.set(
+                                                        scope,
+                                                        v8str_term_begin.into(),
+                                                        term_begin.into(),
+                                                    );
+                                                    obj.set(
+                                                        scope,
+                                                        v8str_term_end.into(),
+                                                        term_end.into(),
+                                                    );
+                                                } else if r > 0 {
+                                                    let activity = v8::Integer::new(
+                                                        scope,
+                                                        collection.activity(r as u32) as i32,
+                                                    );
+                                                    let term_begin = v8::BigInt::new_from_i64(
+                                                        scope,
+                                                        collection.term_begin(r as u32),
+                                                    );
+                                                    let term_end = v8::BigInt::new_from_i64(
+                                                        scope,
+                                                        collection.term_end(r as u32),
+                                                    );
+                                                    obj.set(
+                                                        scope,
+                                                        v8str_activity.into(),
+                                                        activity.into(),
+                                                    );
+                                                    obj.set(
+                                                        scope,
+                                                        v8str_term_begin.into(),
+                                                        term_begin.into(),
+                                                    );
+                                                    obj.set(
+                                                        scope,
+                                                        v8str_term_end.into(),
+                                                        term_end.into(),
+                                                    );
+                                                }
+
+                                                return_obj.set_index(scope, i, obj.into());
+                                                i += 1;
                                             }
-
-                                            let collection_id =
-                                                v8::Integer::new(scope, collection_id as i32);
-                                            obj.set(
-                                                scope,
-                                                v8str_collection_id.into(),
-                                                collection_id.into(),
-                                            );
-                                            return_obj.set_index(scope, i, obj.into());
-                                            i += 1;
                                         }
-                                    }
-                                } else {
-                                    if let Some(collection) = script
-                                        .database
-                                        .clone()
-                                        .read()
-                                        .unwrap()
-                                        .collection(collection_id)
-                                    {
+                                    } else {
                                         if let Some(v8func_field) = v8::Function::new(scope, field)
                                         {
                                             let mut search = script
