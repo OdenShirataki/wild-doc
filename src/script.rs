@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::rc::Rc;
@@ -172,6 +173,17 @@ wd.v=key=>{
             options_json: result_options,
         })
     }
+    fn run_script(worker: &mut MainWorker, src: Cow<str>) {
+        let src = src.to_string();
+        deno_core::futures::executor::block_on(async {
+            let n = ModuleSpecifier::parse("wd://script").unwrap();
+            if let Ok(mod_id) = worker.js_runtime.load_side_module(&n, Some(src)).await {
+                let result = worker.js_runtime.mod_evaluate(mod_id);
+                let _ = worker.run_event_loop(false).await;
+                let _ = result.await;
+            }
+        });
+    }
     pub fn parse<T: IncludeAdaptor>(
         &mut self,
         worker: &mut MainWorker,
@@ -278,17 +290,7 @@ wd.v=key=>{
                             }
                             b"wd:script" => {
                                 if let Ok(src) = reader.read_text(name) {
-                                    let src = src.to_string();
-                                    deno_core::futures::executor::block_on(async {
-                                        let n = ModuleSpecifier::parse("wd://script").unwrap();
-                                        if let Ok(mod_id) =
-                                            worker.js_runtime.load_side_module(&n, Some(src)).await
-                                        {
-                                            let result = worker.js_runtime.mod_evaluate(mod_id);
-                                            let _ = worker.run_event_loop(false).await;
-                                            let _ = result.await;
-                                        }
-                                    });
+                                    Self::run_script(worker, src);
                                 }
                             }
                             b"wd:case" => {
@@ -318,6 +320,9 @@ wd.v=key=>{
                                 }
                             }
                         }
+                    }
+                    Event::PI(ref e) => {
+                        Self::run_script(worker, e.unescape().expect("Error!"));
                     }
                     Event::Empty(ref e) => {
                         let name = e.name();
