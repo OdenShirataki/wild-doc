@@ -234,12 +234,18 @@ pub(super) fn result(
                                                 .unwrap()
                                                 .temporary_collection(collection_id),
                                         ) {
-                                            let rowset = session
+                                            let rowset = script
+                                                .database
                                                 .clone()
                                                 .read()
                                                 .unwrap()
-                                                .search(collection_id, conditions)
-                                                .result(&script.database.clone().read().unwrap());
+                                                .result_session(
+                                                    session
+                                                        .clone()
+                                                        .read()
+                                                        .unwrap()
+                                                        .search(collection_id, conditions),
+                                                );
                                             //TODO:セッションデータのソート
                                             let mut i = 0;
                                             for r in rowset {
@@ -366,7 +372,7 @@ pub(super) fn result(
                                                 .clone()
                                                 .read()
                                                 .unwrap()
-                                                .result(&search);
+                                                .result(search);
                                             let rows = if orders.len() > 0 {
                                                 collection.sort(rowset, orders)
                                             } else {
