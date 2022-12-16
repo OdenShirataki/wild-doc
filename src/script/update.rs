@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use chrono::TimeZone;
 use quick_xml::{events::Event, Reader};
-use semilattice_database::{Activity, Depends, KeyValue, Pend, Record, Term};
+use semilattice_database::{Activity, Depends, KeyValue, Pend, Record, SessionCollectionRow, Term};
 
 use deno_runtime::worker::MainWorker;
 
@@ -18,18 +18,23 @@ pub fn make_update_struct(
     let mut updates = Vec::new();
     loop {
         match reader.read_event() {
-            Ok(Event::Start(e)) => {
-                if e.name().as_ref() == b"collection" {
+            Ok(Event::Start(ref e)) => {
+                let name = e.name();
+                let name_ref = name.as_ref();
+                if name_ref == b"collection" {
                     if let Ok(Some(collection_name)) = e.try_get_attribute("name") {
                         if let Ok(collection_name) = std::str::from_utf8(&collection_name.value) {
                             let mut pends = Vec::new();
+                            let mut depends = Vec::new();
                             let mut fields = HashMap::new();
                             loop {
                                 match reader.read_event() {
-                                    Ok(Event::Start(e)) => {
-                                        if e.name().as_ref() == b"field" {
+                                    Ok(Event::Start(ref e)) => {
+                                        let name = e.name();
+                                        let name_ref = name.as_ref();
+                                        if name_ref == b"field" {
                                             if let Ok(Some(field_name)) =
-                                                e.try_get_attribute(b"name")
+                                                e.try_get_attribute("name")
                                             {
                                                 if let Ok(field_name) =
                                                     std::str::from_utf8(&field_name.value)
@@ -39,7 +44,7 @@ pub fn make_update_struct(
                                                     fields.insert(field_name.to_owned(), cont);
                                                 }
                                             }
-                                        } else if e.name().as_ref() == b"pends" {
+                                        } else if name_ref == b"pends" {
                                             let inner_xml = xml_util::inner(reader);
                                             let mut reader_inner = Reader::from_str(&inner_xml);
                                             reader_inner.check_end_names(false);
@@ -53,9 +58,43 @@ pub fn make_update_struct(
                                                     pends.push(Pend::new(key, pends_tmp));
                                                 }
                                             }
+                                        } else if name_ref == b"depend" {
+                                            if let (
+                                                Ok(Some(key)),
+                                                Ok(Some(collection_name)),
+                                                Ok(Some(row)),
+                                            ) = (
+                                                e.try_get_attribute("key"),
+                                                e.try_get_attribute("collection"),
+                                                e.try_get_attribute("row"),
+                                            ) {
+                                                if let (Ok(key), Ok(row), Ok(collection_name)) = (
+                                                    std::str::from_utf8(&key.value),
+                                                    std::str::from_utf8(&row.value),
+                                                    std::str::from_utf8(&collection_name.value),
+                                                ) {
+                                                    if let (Ok(row), Some(collection_id)) = (
+                                                        row.parse::<i64>(),
+                                                        script
+                                                            .database
+                                                            .clone()
+                                                            .read()
+                                                            .unwrap()
+                                                            .collection_id(collection_name),
+                                                    ) {
+                                                        depends.push((
+                                                            key.to_owned(),
+                                                            SessionCollectionRow::new(
+                                                                collection_id,
+                                                                row,
+                                                            ),
+                                                        ));
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
-                                    Ok(Event::End(e)) => {
+                                    Ok(Event::End(ref e)) => {
                                         if e.name().as_ref() == b"collection" {
                                             break;
                                         }
@@ -129,7 +168,7 @@ pub fn make_update_struct(
                                     term_begin,
                                     term_end,
                                     fields: f,
-                                    depends: Depends::Default,
+                                    depends: Depends::Overwrite(depends),
                                     pends,
                                 });
                             } else {
@@ -140,7 +179,7 @@ pub fn make_update_struct(
                                     term_begin,
                                     term_end,
                                     fields: f,
-                                    depends: Depends::Default,
+                                    depends: Depends::Overwrite(depends),
                                     pends,
                                 });
                             }
@@ -148,7 +187,7 @@ pub fn make_update_struct(
                     }
                 }
             }
-            Ok(Event::End(e)) => {
+            Ok(Event::End(ref e)) => {
                 if e.name().as_ref() == b"wd:update" {
                     break;
                 }
