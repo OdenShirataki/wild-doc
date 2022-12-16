@@ -22,12 +22,18 @@ fn it_works() {
     let r=wd.run(r#"<wd><wd:session name="logintest">
         <wd:update commit="0">
             <collection name="login">
+                <field name="test">hoge</field>
                 <depend key="account" collection="account" row="1" />
             </collection>
         </wd:update>
         <wd:search name="login" collection="login">
         </wd:search><wd:result var="login" search="login"><wd:for var="r" index="i" wd:in="wd.v('login')">
-            <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').depends('id')" />
+            <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('test')" /><?
+                console.log(wd.v('r').depends('account'));
+            ?>
+            <wd:for var="dep" index="i" wd:in="wd.v('r').depends('account')">
+                dep:<wd:print wd:value="wd.v('dep')" />
+            </wd:for>
         </wd:for></wd:result>
     </wd:session></wd>"#,"").unwrap();
     println!("{}", std::str::from_utf8(r.body()).unwrap());

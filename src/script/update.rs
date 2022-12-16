@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use chrono::TimeZone;
-use quick_xml::{events::Event, Reader};
+use quick_xml::{
+    events::{BytesStart, Event},
+    Reader,
+};
 use semilattice_database::{Activity, Depends, KeyValue, Pend, Record, SessionCollectionRow, Term};
 
 use deno_runtime::worker::MainWorker;
@@ -10,6 +13,34 @@ use crate::xml_util;
 
 use super::Script;
 
+fn depend(script: &mut Script, e: &BytesStart, depends: &mut Vec<(String, SessionCollectionRow)>) {
+    if let (Ok(Some(key)), Ok(Some(collection_name)), Ok(Some(row))) = (
+        e.try_get_attribute("key"),
+        e.try_get_attribute("collection"),
+        e.try_get_attribute("row"),
+    ) {
+        if let (Ok(key), Ok(row), Ok(collection_name)) = (
+            std::str::from_utf8(&key.value),
+            std::str::from_utf8(&row.value),
+            std::str::from_utf8(&collection_name.value),
+        ) {
+            if let (Ok(row), Some(collection_id)) = (
+                row.parse::<i64>(),
+                script
+                    .database
+                    .clone()
+                    .read()
+                    .unwrap()
+                    .collection_id(collection_name),
+            ) {
+                depends.push((
+                    key.to_owned(),
+                    SessionCollectionRow::new(collection_id, row),
+                ));
+            }
+        }
+    }
+}
 pub fn make_update_struct(
     script: &mut Script,
     reader: &mut Reader<&[u8]>,
@@ -19,9 +50,7 @@ pub fn make_update_struct(
     loop {
         match reader.read_event() {
             Ok(Event::Start(ref e)) => {
-                let name = e.name();
-                let name_ref = name.as_ref();
-                if name_ref == b"collection" {
+                if e.name().as_ref() == b"collection" {
                     if let Ok(Some(collection_name)) = e.try_get_attribute("name") {
                         if let Ok(collection_name) = std::str::from_utf8(&collection_name.value) {
                             let mut pends = Vec::new();
@@ -59,39 +88,12 @@ pub fn make_update_struct(
                                                 }
                                             }
                                         } else if name_ref == b"depend" {
-                                            if let (
-                                                Ok(Some(key)),
-                                                Ok(Some(collection_name)),
-                                                Ok(Some(row)),
-                                            ) = (
-                                                e.try_get_attribute("key"),
-                                                e.try_get_attribute("collection"),
-                                                e.try_get_attribute("row"),
-                                            ) {
-                                                if let (Ok(key), Ok(row), Ok(collection_name)) = (
-                                                    std::str::from_utf8(&key.value),
-                                                    std::str::from_utf8(&row.value),
-                                                    std::str::from_utf8(&collection_name.value),
-                                                ) {
-                                                    if let (Ok(row), Some(collection_id)) = (
-                                                        row.parse::<i64>(),
-                                                        script
-                                                            .database
-                                                            .clone()
-                                                            .read()
-                                                            .unwrap()
-                                                            .collection_id(collection_name),
-                                                    ) {
-                                                        depends.push((
-                                                            key.to_owned(),
-                                                            SessionCollectionRow::new(
-                                                                collection_id,
-                                                                row,
-                                                            ),
-                                                        ));
-                                                    }
-                                                }
-                                            }
+                                            depend(script, e, &mut depends);
+                                        }
+                                    }
+                                    Ok(Event::Empty(ref e)) => {
+                                        if e.name().as_ref() == b"depend" {
+                                            depend(script, e, &mut depends);
                                         }
                                     }
                                     Ok(Event::End(ref e)) => {

@@ -35,7 +35,7 @@ fn get_error_class_name(e: &AnyError) -> &'static str {
 
 pub struct Script {
     database: Arc<RwLock<Database>>,
-    sessions: Vec<Arc<RwLock<Session>>>,
+    sessions: Vec<Session>,
     main_module: ModuleSpecifier,
     module_loader: Rc<WdModuleLoader>,
     bootstrap: BootstrapOptions,
@@ -221,7 +221,7 @@ wd.v=key=>{
                                             }
                                         }
                                     }
-                                    self.sessions.push(Arc::new(RwLock::new(session)));
+                                    self.sessions.push(session);
                                 } else {
                                     xml_util::outer(&next, reader);
                                 }
@@ -239,18 +239,18 @@ wd.v=key=>{
                                 inner_reader.check_end_names(false);
                                 let updates =
                                     update::make_update_struct(self, &mut inner_reader, worker);
-                                if let Some(session) = self.sessions.last_mut() {
+                                if let Some(mut session) = self.sessions.last_mut() {
                                     self.database
                                         .clone()
                                         .read()
                                         .unwrap()
-                                        .update(&mut session.clone().write().unwrap(), updates)?;
+                                        .update(&mut session, updates)?;
                                     if with_commit {
                                         self.database
                                             .clone()
                                             .write()
                                             .unwrap()
-                                            .commit(&mut session.clone().write().unwrap())?;
+                                            .commit(&mut session)?;
                                     }
                                 }
                             }

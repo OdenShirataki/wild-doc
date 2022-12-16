@@ -15,7 +15,141 @@ use crate::xml_util;
 
 use super::Script;
 
-pub fn field(
+fn get_wddb<'s>(scope: &mut v8::HandleScope<'s>) -> Option<&'s mut Arc<RwLock<Database>>> {
+    if let Some(db) = v8::String::new(scope, "wd.db")
+        .and_then(|code| v8::Script::compile(scope, code, None))
+        .and_then(|v| v.run(scope))
+    {
+        let db =
+            unsafe { v8::Local::<v8::External>::cast(db) }.value() as *mut Arc<RwLock<Database>>;
+        Some(unsafe { &mut *db })
+    } else {
+        None
+    }
+}
+
+fn get_collection_id<'s>(
+    scope: &mut v8::HandleScope<'s>,
+    this: v8::Local<v8::Object>,
+) -> Option<i32> {
+    if let Some(val) = v8::String::new(scope, "collection_id")
+        .and_then(|s| this.get(scope, s.into()))
+        .and_then(|s| s.to_int32(scope))
+    {
+        Some(val.value())
+    } else {
+        None
+    }
+}
+
+fn get_row<'s>(scope: &mut v8::HandleScope<'s>, this: v8::Local<v8::Object>) -> Option<i64> {
+    if let Some(val) = v8::String::new(scope, "row")
+        .and_then(|s| this.get(scope, s.into()))
+        .and_then(|s| s.to_big_int(scope))
+    {
+        Some(val.i64_value().0)
+    } else {
+        None
+    }
+}
+
+fn get_session<'s>(
+    scope: &mut v8::HandleScope<'s>,
+    this: v8::Local<v8::Object>,
+) -> Option<&'s mut Session> {
+    if let Some(val) = v8::String::new(scope, "session").and_then(|s| this.get(scope, s.into())) {
+        let session = unsafe { v8::Local::<v8::External>::cast(val) }.value() as *mut Session;
+        Some(unsafe { &mut *session })
+    } else {
+        None
+    }
+}
+
+fn depends(
+    scope: &mut v8::HandleScope,
+    args: v8::FunctionCallbackArguments,
+    mut rv: v8::ReturnValue,
+) {
+    let this = args.this();
+    if let (Some(db), Some(collection_id), Some(row)) = (
+        get_wddb(scope),
+        get_collection_id(scope, this),
+        get_row(scope, this),
+    ) {
+        if let Ok(db) = db.clone().read() {
+            let key = args.get(0).to_string(scope);
+            let array = depends_array(scope, &db, key, collection_id, row, None);
+            rv.set(array.into());
+        }
+    }
+}
+
+fn session_depends(
+    scope: &mut v8::HandleScope,
+    args: v8::FunctionCallbackArguments,
+    mut rv: v8::ReturnValue,
+) {
+    let this = args.this();
+    if let (Some(db), Some(collection_id), Some(row), Some(session)) = (
+        get_wddb(scope),
+        get_collection_id(scope, this),
+        get_row(scope, this),
+        get_session(scope, this),
+    ) {
+        if let Ok(db) = db.clone().read() {
+            let key = args.get(0).to_string(scope);
+            let array = depends_array(scope, &db, key, collection_id, row, Some(&session));
+            rv.set(array.into());
+        }
+    }
+}
+
+fn depends_array<'a>(
+    scope: &mut v8::HandleScope<'a>,
+    db: &Database,
+    key: Option<v8::Local<'a, v8::String>>,
+    collection_id: i32,
+    row: i64,
+    session: Option<&Session>,
+) -> v8::Local<'a, v8::Array> {
+    let depends = if let Some(key_name) = key {
+        let key_name = key_name.to_rust_string_lossy(scope);
+        db.depends(Some(&key_name), collection_id, row, session)
+    } else {
+        db.depends(None, collection_id, row, session)
+    };
+
+    let array = v8::Array::new(scope, depends.len() as i32);
+    if let (Some(v8str_key), Some(v8str_collection_id), Some(v8str_row)) = (
+        v8::String::new(scope, "key"),
+        v8::String::new(scope, "collection_id"),
+        v8::String::new(scope, "row"),
+    ) {
+        let mut index: u32 = 0;
+
+        for d in depends {
+            if let Some(key) = v8::String::new(scope, d.key()) {
+                let depend = v8::Object::new(scope);
+                depend.define_own_property(scope, v8str_key.into(), key.into(), READ_ONLY);
+                let collection_id = v8::Integer::new(scope, d.collection_id());
+                depend.define_own_property(
+                    scope,
+                    v8str_collection_id.into(),
+                    collection_id.into(),
+                    READ_ONLY,
+                );
+                let row = v8::BigInt::new_from_i64(scope, d.row());
+                depend.define_own_property(scope, v8str_row.into(), row.into(), READ_ONLY);
+
+                array.set_index(scope, index, depend.into());
+                index += 1;
+            }
+        }
+    }
+    array
+}
+
+fn field(
     scope: &mut v8::HandleScope,
     args: v8::FunctionCallbackArguments,
     mut rv: v8::ReturnValue,
@@ -23,31 +157,16 @@ pub fn field(
     let this = args.this();
 
     if let (Some(db), Some(collection_id), Some(row)) = (
-        v8::String::new(scope, "wd.db")
-            .and_then(|code| v8::Script::compile(scope, code, None))
-            .and_then(|v| v.run(scope)),
-        v8::String::new(scope, "collection_id")
-            .and_then(|s| this.get(scope, s.into()))
-            .and_then(|s| s.to_int32(scope)),
-        v8::String::new(scope, "row")
-            .and_then(|s| this.get(scope, s.into()))
-            .and_then(|s| s.to_big_int(scope)),
+        get_wddb(scope),
+        get_collection_id(scope, this),
+        get_row(scope, this),
     ) {
-        let db =
-            unsafe { v8::Local::<v8::External>::cast(db) }.value() as *mut Arc<RwLock<Database>>;
-        let db = unsafe { &mut *db };
         if let Some(field_name) = args.get(0).to_string(scope) {
             let field_name = field_name.to_rust_string_lossy(scope);
-            if let Some(data) = db
-                .clone()
-                .read()
-                .unwrap()
-                .collection(collection_id.value() as i32)
-            {
+            if let Some(data) = db.clone().read().unwrap().collection(collection_id) {
                 if let Some(str) = v8::String::new(
                     scope,
-                    std::str::from_utf8(data.field_bytes(row.i64_value().0 as u32, &field_name))
-                        .unwrap(),
+                    std::str::from_utf8(data.field_bytes(row as u32, &field_name)).unwrap(),
                 ) {
                     rv.set(str.into());
                 }
@@ -56,7 +175,7 @@ pub fn field(
     }
 }
 
-pub fn session_field(
+fn session_field(
     scope: &mut v8::HandleScope,
     args: v8::FunctionCallbackArguments,
     mut rv: v8::ReturnValue,
@@ -64,41 +183,17 @@ pub fn session_field(
     let this = args.this();
 
     if let (Some(db), Some(collection_id), Some(row), Some(session)) = (
-        v8::String::new(scope, "wd.db")
-            .and_then(|code| v8::Script::compile(scope, code, None))
-            .and_then(|v| v.run(scope)),
-        v8::String::new(scope, "collection_id")
-            .and_then(|s| this.get(scope, s.into()))
-            .and_then(|s| s.to_int32(scope)),
-        v8::String::new(scope, "row")
-            .and_then(|s| this.get(scope, s.into()))
-            .and_then(|s| s.to_big_int(scope)),
-        v8::String::new(scope, "session").and_then(|s| this.get(scope, s.into())),
+        get_wddb(scope),
+        get_collection_id(scope, this),
+        get_row(scope, this),
+        get_session(scope, this),
     ) {
-        let db =
-            unsafe { v8::Local::<v8::External>::cast(db) }.value() as *mut Arc<RwLock<Database>>;
-        let db = unsafe { &mut *db };
-
-        let session = unsafe { v8::Local::<v8::External>::cast(session) }.value()
-            as *mut Arc<RwLock<Session>>;
-        let session = unsafe { &mut *session };
-
         if let Some(field_name) = args.get(0).to_string(scope) {
             let field_name = field_name.to_rust_string_lossy(scope);
-
-            if let Ok(session) = session.clone().read() {
-                if let Some(data) = db
-                    .clone()
-                    .read()
-                    .unwrap()
-                    .collection(collection_id.value() as i32)
-                {
-                    let bytes =
-                        session.collection_field_bytes(&data, row.i64_value().0, &field_name);
-                    if let Some(str) = v8::String::new(scope, std::str::from_utf8(&bytes).unwrap())
-                    {
-                        rv.set(str.into());
-                    }
+            if let Some(data) = db.clone().read().unwrap().collection(collection_id) {
+                let bytes = session.collection_field_bytes(&data, row, &field_name);
+                if let Some(str) = v8::String::new(scope, std::str::from_utf8(&bytes).unwrap()) {
+                    rv.set(str.into());
                 }
             }
         }
@@ -211,7 +306,7 @@ fn set_uuid<'s>(scope: &mut HandleScope<'s>, object: v8::Local<'s, v8::Object>, 
 }
 
 pub(super) fn result(
-    script: &Script,
+    script: &mut Script,
     worker: &mut MainWorker,
     e: &BytesStart,
     search_map: &HashMap<String, (i32, Vec<Condition>)>,
@@ -227,27 +322,25 @@ pub(super) fn result(
 
             let mut session_maybe_has_collection = None;
             for i in (0..script.sessions.len()).rev() {
-                if let Some(_) = script.sessions[i]
-                    .clone()
-                    .read()
-                    .unwrap()
-                    .temporary_collection(collection_id)
-                {
-                    session_maybe_has_collection = Some(script.sessions[i].clone());
+                if let Some(_) = script.sessions[i].temporary_collection(collection_id) {
+                    session_maybe_has_collection = Some(i);
                     break;
                 }
-            }
-
-            if let Some(ref session) = session_maybe_has_collection {
-                worker.js_runtime.v8_isolate().set_slot(session.clone());
             }
 
             let scope = &mut worker.js_runtime.handle_scope();
             let context = scope.get_current_context();
             let scope = &mut v8::ContextScope::new(scope, context);
 
-            if let (Some(v8str_field), Some(v8str_wd), Some(v8str_stack), Some(var)) = (
+            if let (
+                Some(v8str_field),
+                Some(v8str_depends),
+                Some(v8str_wd),
+                Some(v8str_stack),
+                Some(var),
+            ) = (
                 v8::String::new(scope, "field"),
+                v8::String::new(scope, "depends"),
                 v8::String::new(scope, "wd"),
                 v8::String::new(scope, "stack"),
                 v8::String::new(scope, &var),
@@ -267,22 +360,20 @@ pub(super) fn result(
                                     .unwrap()
                                     .collection(collection_id)
                                 {
-                                    if let Some(mut session) = session_maybe_has_collection {
-                                        let addr = &mut session as *mut Arc<RwLock<Session>>
-                                            as *mut c_void;
-                                        let v8_ext = v8::External::new(scope, addr);
+                                    if let Some(session_index) = session_maybe_has_collection {
+                                        let session = &mut script.sessions[session_index];
+                                        let addr = session as *mut Session as *mut c_void;
+                                        let v8ext_session = v8::External::new(scope, addr);
                                         if let (
                                             Some(v8func_field),
+                                            Some(v8func_depends),
                                             Some(v8str_session),
                                             Some(temporary_collection),
                                         ) = (
                                             v8::Function::new(scope, session_field),
+                                            v8::Function::new(scope, session_depends),
                                             v8::String::new(scope, "session"),
-                                            session
-                                                .clone()
-                                                .read()
-                                                .unwrap()
-                                                .temporary_collection(collection_id),
+                                            session.temporary_collection(collection_id),
                                         ) {
                                             let rowset = script
                                                 .database
@@ -290,11 +381,7 @@ pub(super) fn result(
                                                 .read()
                                                 .unwrap()
                                                 .result_session(
-                                                    session
-                                                        .clone()
-                                                        .read()
-                                                        .unwrap()
-                                                        .search(collection_id, conditions),
+                                                    session.search(collection_id, conditions),
                                                 );
                                             //TODO:セッションデータのソート
                                             let mut i = 0;
@@ -331,7 +418,7 @@ pub(super) fn result(
                                                 obj.define_own_property(
                                                     scope,
                                                     v8str_session.into(),
-                                                    v8_ext.into(),
+                                                    v8ext_session.into(),
                                                     READ_ONLY,
                                                 );
 
@@ -339,6 +426,12 @@ pub(super) fn result(
                                                     scope,
                                                     v8str_field.into(),
                                                     v8func_field.into(),
+                                                    READ_ONLY,
+                                                );
+                                                obj.define_own_property(
+                                                    scope,
+                                                    v8str_depends.into(),
+                                                    v8func_depends.into(),
                                                     READ_ONLY,
                                                 );
 
@@ -360,8 +453,10 @@ pub(super) fn result(
                                             }
                                         }
                                     } else {
-                                        if let Some(v8func_field) = v8::Function::new(scope, field)
-                                        {
+                                        if let (Some(v8func_field), Some(v8func_depends)) = (
+                                            v8::Function::new(scope, field),
+                                            v8::Function::new(scope, depends),
+                                        ) {
                                             let mut search = script
                                                 .database
                                                 .clone()
@@ -405,6 +500,12 @@ pub(super) fn result(
                                                     scope,
                                                     v8str_field.into(),
                                                     v8func_field.into(),
+                                                    READ_ONLY,
+                                                );
+                                                obj.define_own_property(
+                                                    scope,
+                                                    v8str_depends.into(),
+                                                    v8func_depends.into(),
                                                     READ_ONLY,
                                                 );
 
