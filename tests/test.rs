@@ -11,6 +11,27 @@ fn it_works() {
 
     let mut wd = WildDoc::new(dir, IncludeLocal::new("./include/")).unwrap();
 
+    let update_xml = r#"<wd><wd:session name="account"><wd:update commit="1">
+        <collection name="account">
+            <field name="id">admin</field>
+            <field name="password">admin</field>
+        </collection>
+    </wd:update></wd:session></wd>"#;
+    wd.run(update_xml, "").unwrap();
+
+    let r=wd.run(r#"<wd><wd:session name="logintest">
+        <wd:update commit="0">
+            <collection name="login">
+                <depend key="account" collection="account" row="1" />
+            </collection>
+        </wd:update>
+        <wd:search name="login" collection="login">
+        </wd:search><wd:result var="login" search="login"><wd:for var="r" index="i" wd:in="wd.v('login')">
+            <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').depends('id')" />
+        </wd:for></wd:result>
+    </wd:session></wd>"#,"").unwrap();
+    println!("{}", std::str::from_utf8(r.body()).unwrap());
+
     /*
     let r=wd.run(r#"<wd>
         <wd:script>
@@ -217,19 +238,6 @@ fn it_works() {
         r.options_json()
     );
 
-    let update_xml = r#"<wd><wd:session name="login"><wd:update commit="0">
-        <collection name="login">
-            <field name="id">3</field>
-        </collection>
-    </wd:update></wd:session></wd>"#;
-    wd.run(update_xml, "").unwrap();
-    let r=wd.run(r#"<wd><wd:session name="login">
-        <wd:search name="login" collection="login">
-        </wd:search><wd:result var="login" search="login"><wd:for var="r" index="i" wd:in="wd.v('login')">
-            <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('id')" />
-        </wd:for></wd:result>
-    </wd:session></wd>"#,"").unwrap();
-    println!("{}", std::str::from_utf8(r.body()).unwrap());
     /*
 
     //search in update section.

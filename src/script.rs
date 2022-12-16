@@ -111,7 +111,6 @@ impl Script {
             self.permissions.clone(),
             options,
         );
-        //worker.js_runtime.v8_isolate().set_slot(self.database.clone());
         let _ = worker.execute_script(
             "init",
             &(r#"wd={

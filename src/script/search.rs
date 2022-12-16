@@ -1,6 +1,6 @@
 use chrono::NaiveDateTime;
 use quick_xml::{events::Event, Reader};
-use semilattice_database::{search, Activity, CollectionRow, Condition};
+use semilattice_database::{search, Activity, CollectionRow, Condition, Depend};
 
 use deno_runtime::worker::MainWorker;
 
@@ -103,7 +103,7 @@ fn condition_loop(
                                     .collection_id(&collection_name),
                             ) {
                                 let key = crate::attr_parse_or_static(worker, &attr, "key");
-                                conditions.push(Condition::Depend(search::Depend::new(
+                                conditions.push(Condition::Depend(Depend::new(
                                     key,
                                     CollectionRow::new(collection_id, row),
                                 )));

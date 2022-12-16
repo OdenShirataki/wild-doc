@@ -165,23 +165,51 @@ fn set_values<'s>(
         v8::String::new(scope, "term_end"),
     ) {
         let row = v8::BigInt::new_from_i64(scope, row);
-        obj.set(scope, v8str_row.into(), row.into());
+        obj.define_own_property(scope, v8str_row.into(), row.into(), READ_ONLY);
 
         let collection_id = v8::Integer::new(scope, collection_id as i32);
-        obj.set(scope, v8str_collection_id.into(), collection_id.into());
+        obj.define_own_property(
+            scope,
+            v8str_collection_id.into(),
+            collection_id.into(),
+            READ_ONLY,
+        );
 
         let activity = v8::Integer::new(scope, activity);
-        obj.set(scope, v8str_activity.into(), activity.into());
+        obj.define_own_property(scope, v8str_activity.into(), activity.into(), READ_ONLY);
 
         let term_begin = v8::BigInt::new_from_i64(scope, term_begin);
-        obj.set(scope, v8str_term_begin.into(), term_begin.into());
+        obj.define_own_property(scope, v8str_term_begin.into(), term_begin.into(), READ_ONLY);
 
         let term_end = v8::BigInt::new_from_i64(scope, term_end);
-        obj.set(scope, v8str_term_end.into(), term_end.into());
+        obj.define_own_property(scope, v8str_term_end.into(), term_end.into(), READ_ONLY);
     }
 
     obj
 }
+
+fn set_last_update<'s>(
+    scope: &mut HandleScope<'s>,
+    object: v8::Local<'s, v8::Object>,
+    last_update: i64,
+) {
+    if let Some(v8str_last_update) = v8::String::new(scope, "last_update") {
+        let last_update = v8::BigInt::new_from_i64(scope, last_update);
+        object.define_own_property(
+            scope,
+            v8str_last_update.into(),
+            last_update.into(),
+            READ_ONLY,
+        );
+    }
+}
+fn set_uuid<'s>(scope: &mut HandleScope<'s>, object: v8::Local<'s, v8::Object>, uuid: &str) {
+    if let Some(v8str_uuid) = v8::String::new(scope, "uuid") {
+        let uuid = v8::String::new(scope, uuid).unwrap();
+        object.define_own_property(scope, v8str_uuid.into(), uuid.into(), READ_ONLY);
+    }
+}
+
 pub(super) fn result(
     script: &Script,
     worker: &mut MainWorker,
@@ -218,19 +246,10 @@ pub(super) fn result(
             let context = scope.get_current_context();
             let scope = &mut v8::ContextScope::new(scope, context);
 
-            if let (
-                Some(v8str_field),
-                Some(v8str_wd),
-                Some(v8str_stack),
-                Some(v8str_last_update),
-                Some(v8str_uuid),
-                Some(var),
-            ) = (
+            if let (Some(v8str_field), Some(v8str_wd), Some(v8str_stack), Some(var)) = (
                 v8::String::new(scope, "field"),
                 v8::String::new(scope, "wd"),
                 v8::String::new(scope, "stack"),
-                v8::String::new(scope, "last_update"),
-                v8::String::new(scope, "uuid"),
                 v8::String::new(scope, &var),
             ) {
                 let global = context.global(scope);
@@ -324,21 +343,16 @@ pub(super) fn result(
                                                 );
 
                                                 if r > 0 {
-                                                    let last_update = v8::BigInt::new_from_i64(
+                                                    set_last_update(
                                                         scope,
+                                                        obj,
                                                         collection.last_updated(r as u32),
                                                     );
-                                                    let uuid = v8::String::new(
+                                                    set_uuid(
                                                         scope,
+                                                        obj,
                                                         &collection.uuid_str(r as u32),
-                                                    )
-                                                    .unwrap();
-                                                    obj.set(
-                                                        scope,
-                                                        v8str_last_update.into(),
-                                                        last_update.into(),
                                                     );
-                                                    obj.set(scope, v8str_uuid.into(), uuid.into());
                                                 }
 
                                                 return_obj.set_index(scope, i, obj.into());
@@ -380,25 +394,18 @@ pub(super) fn result(
                                                     collection.term_end(r),
                                                 );
 
-                                                let last_update = v8::BigInt::new_from_i64(
+                                                set_last_update(
                                                     scope,
+                                                    obj,
                                                     collection.last_updated(r),
                                                 );
-                                                obj.set(
-                                                    scope,
-                                                    v8str_last_update.into(),
-                                                    last_update.into(),
-                                                );
+                                                set_uuid(scope, obj, &collection.uuid_str(r));
 
-                                                let uuid =
-                                                    v8::String::new(scope, &collection.uuid_str(r))
-                                                        .unwrap();
-                                                obj.set(scope, v8str_uuid.into(), uuid.into());
-
-                                                obj.set(
+                                                obj.define_own_property(
                                                     scope,
                                                     v8str_field.into(),
                                                     v8func_field.into(),
+                                                    READ_ONLY,
                                                 );
 
                                                 return_obj.set_index(scope, i, obj.into());
