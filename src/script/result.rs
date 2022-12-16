@@ -5,7 +5,7 @@ use std::{
 };
 
 use deno_runtime::{
-    deno_napi::v8::{self, READ_ONLY},
+    deno_napi::v8::{self, HandleScope, READ_ONLY},
     worker::MainWorker,
 };
 use quick_xml::events::BytesStart;
@@ -141,6 +141,47 @@ fn make_order(sort: &str) -> Vec<Order> {
     orders
 }
 
+fn set_values<'s>(
+    scope: &mut HandleScope<'s>,
+    collection_id: i32,
+    row: i64,
+    activity: i32,
+    term_begin: i64,
+    term_end: i64,
+) -> v8::Local<'s, v8::Object> {
+    let obj = v8::Object::new(scope);
+
+    if let (
+        Some(v8str_collection_id),
+        Some(v8str_row),
+        Some(v8str_activity),
+        Some(v8str_term_begin),
+        Some(v8str_term_end),
+    ) = (
+        v8::String::new(scope, "collection_id"),
+        v8::String::new(scope, "row"),
+        v8::String::new(scope, "activity"),
+        v8::String::new(scope, "term_begin"),
+        v8::String::new(scope, "term_end"),
+    ) {
+        let row = v8::BigInt::new_from_i64(scope, row);
+        obj.set(scope, v8str_row.into(), row.into());
+
+        let collection_id = v8::Integer::new(scope, collection_id as i32);
+        obj.set(scope, v8str_collection_id.into(), collection_id.into());
+
+        let activity = v8::Integer::new(scope, activity);
+        obj.set(scope, v8str_activity.into(), activity.into());
+
+        let term_begin = v8::BigInt::new_from_i64(scope, term_begin);
+        obj.set(scope, v8str_term_begin.into(), term_begin.into());
+
+        let term_end = v8::BigInt::new_from_i64(scope, term_end);
+        obj.set(scope, v8str_term_end.into(), term_end.into());
+    }
+
+    obj
+}
 pub(super) fn result(
     script: &Script,
     worker: &mut MainWorker,
@@ -178,26 +219,16 @@ pub(super) fn result(
             let scope = &mut v8::ContextScope::new(scope, context);
 
             if let (
-                Some(v8str_collection_id),
-                Some(v8str_func_field),
-                Some(v8str_row),
+                Some(v8str_field),
                 Some(v8str_wd),
                 Some(v8str_stack),
-                Some(v8str_activity),
-                Some(v8str_term_begin),
-                Some(v8str_term_end),
                 Some(v8str_last_update),
                 Some(v8str_uuid),
                 Some(var),
             ) = (
-                v8::String::new(scope, "collection_id"),
                 v8::String::new(scope, "field"),
-                v8::String::new(scope, "row"),
                 v8::String::new(scope, "wd"),
                 v8::String::new(scope, "stack"),
-                v8::String::new(scope, "activity"),
-                v8::String::new(scope, "term_begin"),
-                v8::String::new(scope, "term_end"),
                 v8::String::new(scope, "last_update"),
                 v8::String::new(scope, "uuid"),
                 v8::String::new(scope, &var),
@@ -249,7 +280,34 @@ pub(super) fn result(
                                             //TODO:セッションデータのソート
                                             let mut i = 0;
                                             for r in rowset {
-                                                let obj = v8::Object::new(scope);
+                                                let (activity, term_begin, term_end) = if let Some(
+                                                    tr,
+                                                ) =
+                                                    temporary_collection.get(&r)
+                                                {
+                                                    (
+                                                        tr.activity() as i32,
+                                                        tr.term_begin(),
+                                                        tr.term_end(),
+                                                    )
+                                                } else if r > 0 {
+                                                    let row = r as u32;
+                                                    (
+                                                        collection.activity(row) as i32,
+                                                        collection.term_begin(row),
+                                                        collection.term_begin(row),
+                                                    )
+                                                } else {
+                                                    unreachable!()
+                                                };
+                                                let obj = set_values(
+                                                    scope,
+                                                    collection_id as i32,
+                                                    r,
+                                                    activity,
+                                                    term_begin,
+                                                    term_end,
+                                                );
 
                                                 obj.define_own_property(
                                                     scope,
@@ -258,20 +316,11 @@ pub(super) fn result(
                                                     READ_ONLY,
                                                 );
 
-                                                let row = v8::BigInt::new_from_i64(scope, r);
-                                                obj.set(scope, v8str_row.into(), row.into());
-                                                obj.set(
+                                                obj.define_own_property(
                                                     scope,
-                                                    v8str_func_field.into(),
+                                                    v8str_field.into(),
                                                     v8func_field.into(),
-                                                );
-
-                                                let collection_id =
-                                                    v8::Integer::new(scope, collection_id as i32);
-                                                obj.set(
-                                                    scope,
-                                                    v8str_collection_id.into(),
-                                                    collection_id.into(),
+                                                    READ_ONLY,
                                                 );
 
                                                 if r > 0 {
@@ -290,64 +339,6 @@ pub(super) fn result(
                                                         last_update.into(),
                                                     );
                                                     obj.set(scope, v8str_uuid.into(), uuid.into());
-                                                }
-
-                                                if let Some(tr) = temporary_collection.get(&r) {
-                                                    let activity = v8::Integer::new(
-                                                        scope,
-                                                        tr.activity() as i32,
-                                                    );
-                                                    let term_begin = v8::BigInt::new_from_i64(
-                                                        scope,
-                                                        tr.term_begin(),
-                                                    );
-                                                    let term_end = v8::BigInt::new_from_i64(
-                                                        scope,
-                                                        tr.term_end(),
-                                                    );
-                                                    obj.set(
-                                                        scope,
-                                                        v8str_activity.into(),
-                                                        activity.into(),
-                                                    );
-                                                    obj.set(
-                                                        scope,
-                                                        v8str_term_begin.into(),
-                                                        term_begin.into(),
-                                                    );
-                                                    obj.set(
-                                                        scope,
-                                                        v8str_term_end.into(),
-                                                        term_end.into(),
-                                                    );
-                                                } else if r > 0 {
-                                                    let activity = v8::Integer::new(
-                                                        scope,
-                                                        collection.activity(r as u32) as i32,
-                                                    );
-                                                    let term_begin = v8::BigInt::new_from_i64(
-                                                        scope,
-                                                        collection.term_begin(r as u32),
-                                                    );
-                                                    let term_end = v8::BigInt::new_from_i64(
-                                                        scope,
-                                                        collection.term_end(r as u32),
-                                                    );
-                                                    obj.set(
-                                                        scope,
-                                                        v8str_activity.into(),
-                                                        activity.into(),
-                                                    );
-                                                    obj.set(
-                                                        scope,
-                                                        v8str_term_begin.into(),
-                                                        term_begin.into(),
-                                                    );
-                                                    obj.set(
-                                                        scope,
-                                                        v8str_term_end.into(),
-                                                        term_end.into(),
-                                                    );
                                                 }
 
                                                 return_obj.set_index(scope, i, obj.into());
@@ -380,64 +371,34 @@ pub(super) fn result(
                                             };
                                             let mut i = 0;
                                             for r in rows {
-                                                let obj = v8::Object::new(scope);
-
-                                                let row = v8::BigInt::new_from_i64(scope, r as i64);
-                                                let activity = v8::Integer::new(
+                                                let obj = set_values(
                                                     scope,
+                                                    collection_id as i32,
+                                                    r as i64,
                                                     collection.activity(r) as i32,
-                                                );
-                                                let term_begin = v8::BigInt::new_from_i64(
-                                                    scope,
                                                     collection.term_begin(r),
-                                                );
-                                                let term_end = v8::BigInt::new_from_i64(
-                                                    scope,
                                                     collection.term_end(r),
                                                 );
+
                                                 let last_update = v8::BigInt::new_from_i64(
                                                     scope,
                                                     collection.last_updated(r),
-                                                );
-                                                let uuid =
-                                                    v8::String::new(scope, &collection.uuid_str(r))
-                                                        .unwrap();
-
-                                                obj.set(scope, v8str_row.into(), row.into());
-                                                obj.set(
-                                                    scope,
-                                                    v8str_activity.into(),
-                                                    activity.into(),
-                                                );
-                                                obj.set(
-                                                    scope,
-                                                    v8str_term_begin.into(),
-                                                    term_begin.into(),
-                                                );
-                                                obj.set(
-                                                    scope,
-                                                    v8str_term_end.into(),
-                                                    term_end.into(),
                                                 );
                                                 obj.set(
                                                     scope,
                                                     v8str_last_update.into(),
                                                     last_update.into(),
                                                 );
+
+                                                let uuid =
+                                                    v8::String::new(scope, &collection.uuid_str(r))
+                                                        .unwrap();
                                                 obj.set(scope, v8str_uuid.into(), uuid.into());
 
                                                 obj.set(
                                                     scope,
-                                                    v8str_func_field.into(),
+                                                    v8str_field.into(),
                                                     v8func_field.into(),
-                                                );
-
-                                                let collection_id =
-                                                    v8::Integer::new(scope, collection_id as i32);
-                                                obj.set(
-                                                    scope,
-                                                    v8str_collection_id.into(),
-                                                    collection_id.into(),
                                                 );
 
                                                 return_obj.set_index(scope, i, obj.into());
