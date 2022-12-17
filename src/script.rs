@@ -1,22 +1,23 @@
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::ffi::c_void;
-use std::rc::Rc;
-use std::sync::{Arc, RwLock};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    ffi::c_void,
+    rc::Rc,
+    sync::{Arc, RwLock},
+};
 
-use deno_runtime::deno_napi::v8::READ_ONLY;
 use deno_runtime::{
     deno_broadcast_channel::InMemoryBroadcastChannel,
-    deno_core::{self, error::AnyError, v8, ModuleSpecifier},
+    deno_core::{self, v8, v8::READ_ONLY, ModuleSpecifier},
     deno_web::BlobStore,
-    ops,
     permissions::Permissions,
     worker::{MainWorker, WorkerOptions},
     BootstrapOptions,
 };
-use quick_xml::events::{BytesStart, Event};
-
-use quick_xml::Reader;
+use quick_xml::{
+    events::{BytesStart, Event},
+    Reader,
+};
 use semilattice_database::{Database, Session};
 
 mod process;
@@ -29,10 +30,6 @@ mod update;
 mod module_loader;
 use module_loader::WdModuleLoader;
 
-fn get_error_class_name(e: &AnyError) -> &'static str {
-    deno_runtime::errors::get_error_class_name(e).unwrap_or("Error")
-}
-
 pub struct Script {
     database: Arc<RwLock<Database>>,
     sessions: Vec<Session>,
@@ -40,8 +37,6 @@ pub struct Script {
     module_loader: Rc<WdModuleLoader>,
     bootstrap: BootstrapOptions,
     permissions: Permissions,
-    create_web_worker_cb: Arc<ops::worker_host::CreateWebWorkerCb>,
-    web_worker_event_cb: Arc<ops::worker_host::WorkerEventCb>,
 }
 impl Script {
     pub fn new(database: Arc<RwLock<Database>>) -> Self {
@@ -50,28 +45,8 @@ impl Script {
             sessions: vec![],
             main_module: deno_core::resolve_path("mainworker").unwrap(),
             module_loader: WdModuleLoader::new(),
-            bootstrap: BootstrapOptions {
-                args: vec![],
-                cpu_count: 1,
-                debug_flag: false,
-                enable_testing_features: false,
-                locale: v8::icu::get_language_tag(),
-                location: None,
-                no_color: false,
-                is_tty: false,
-                runtime_version: "x".to_string(),
-                ts_version: "x".to_string(),
-                unstable: false,
-                user_agent: "hello_runtime".to_string(),
-                inspect: false,
-            },
+            bootstrap: Default::default(),
             permissions: Permissions::allow_all(),
-            create_web_worker_cb: Arc::new(|_| {
-                todo!("Web workers are not supported in the example");
-            }),
-            web_worker_event_cb: Arc::new(|_| {
-                todo!("Web workers are not supported in the example");
-            }),
         }
     }
     pub fn parse_xml<T: IncludeAdaptor>(
@@ -89,15 +64,19 @@ impl Script {
             seed: None,
             module_loader: self.module_loader.clone(),
             npm_resolver: None,
-            create_web_worker_cb: self.create_web_worker_cb.clone(),
-            web_worker_preload_module_cb: self.web_worker_event_cb.clone(),
-            web_worker_pre_execute_module_cb: self.web_worker_event_cb.clone(),
+            create_web_worker_cb: Arc::new(|_| unimplemented!("web workers are not supported")),
+            web_worker_preload_module_cb: Arc::new(|_| {
+                unimplemented!("web workers are not supported")
+            }),
+            web_worker_pre_execute_module_cb: Arc::new(|_| {
+                unimplemented!("web workers are not supported")
+            }),
             format_js_error_fn: None,
             source_map_getter: None,
             maybe_inspector_server: None,
             should_break_on_first_statement: false,
             should_wait_for_inspector_session: false,
-            get_error_class_fn: Some(&get_error_class_name),
+            get_error_class_fn: Default::default(),
             cache_storage_dir: None,
             origin_storage_dir: None,
             blob_store: BlobStore::default(),
@@ -194,8 +173,8 @@ wd.v=key=>{
         let mut search_map = HashMap::new();
         let mut r = Vec::new();
         loop {
-            if let Ok(next) = reader.read_event() {
-                match next {
+            match reader.read_event() {
+                Ok(next) => match next {
                     Event::Start(ref e) => {
                         let name = e.name();
                         let name_ref = name.as_ref();
@@ -321,9 +300,10 @@ wd.v=key=>{
                             }
                         }
                     }
+                    /*
                     Event::PI(ref e) => {
                         Self::run_script(worker, e.unescape().expect("Error!"));
-                    }
+                    }*/
                     Event::Empty(ref e) => {
                         let name = e.name();
                         let name = name.as_ref();
@@ -407,6 +387,9 @@ wd.v=key=>{
                         break;
                     }
                     _ => {}
+                },
+                Err(e) => {
+                    println!("{:?}", e);
                 }
             }
         }

@@ -28,9 +28,9 @@ fn it_works() {
         </wd:update>
         <wd:search name="login" collection="login">
         </wd:search><wd:result var="login" search="login"><wd:for var="r" index="i" wd:in="wd.v('login')">
-            <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('test')" /><?
+            <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('test')" /><wd:script>
                 console.log(wd.v('r').depends('account'));
-            ?>
+            </wd:script>
             <wd:for var="dep" index="i" wd:in="wd.v('r').depends('account')">
                 dep:<wd:print wd:value="wd.v('dep')" />
             </wd:for>

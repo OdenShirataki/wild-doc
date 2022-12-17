@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.21.2"
+version = "0.22.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -14,6 +14,10 @@ license = "MIT/Apache-2.0"
 keywords = ["database","javascript","v8","xml","html"]
 categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
 
+[features]
+# "fake" feature that allows to generate docs on docs.rs
+docsrs = []
+
 [dependencies]
 rustc-hash = { version = "1.0", default-features = false }
 quick-xml="0.26"
@@ -23,3 +27,6 @@ deno_runtime = "0.90.0"
 reqwest = { version = "0.11", features = ["blocking"] }
 
 semilattice-database={version="0.37",path="../semilattice-database"}
+
+[package.metadata.docs.rs]
+features = ["docsrs"]
