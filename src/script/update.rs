@@ -13,32 +13,31 @@ use crate::xml_util;
 
 use super::Script;
 
-fn depend(script: &mut Script, e: &BytesStart, depends: &mut Vec<(String, SessionCollectionRow)>) {
-    if let (Ok(Some(key)), Ok(Some(collection_name)), Ok(Some(row))) = (
-        e.try_get_attribute("key"),
-        e.try_get_attribute("collection"),
-        e.try_get_attribute("row"),
+fn depend(
+    script: &mut Script,
+    e: &BytesStart,
+    depends: &mut Vec<(String, SessionCollectionRow)>,
+    worker: &mut MainWorker,
+) {
+    let attr = xml_util::attr2hash_map(&e);
+
+    let row = crate::attr_parse_or_static(worker, &attr, "row");
+    let key = crate::attr_parse_or_static(worker, &attr, "key");
+    let collection = crate::attr_parse_or_static(worker, &attr, "collection");
+
+    if let (Ok(row), Some(collection_id)) = (
+        row.parse::<i64>(),
+        script
+            .database
+            .clone()
+            .read()
+            .unwrap()
+            .collection_id(&collection),
     ) {
-        if let (Ok(key), Ok(row), Ok(collection_name)) = (
-            std::str::from_utf8(&key.value),
-            std::str::from_utf8(&row.value),
-            std::str::from_utf8(&collection_name.value),
-        ) {
-            if let (Ok(row), Some(collection_id)) = (
-                row.parse::<i64>(),
-                script
-                    .database
-                    .clone()
-                    .read()
-                    .unwrap()
-                    .collection_id(collection_name),
-            ) {
-                depends.push((
-                    key.to_owned(),
-                    SessionCollectionRow::new(collection_id, row),
-                ));
-            }
-        }
+        depends.push((
+            key.to_owned(),
+            SessionCollectionRow::new(collection_id, row),
+        ));
     }
 }
 pub fn make_update_struct(
@@ -88,12 +87,12 @@ pub fn make_update_struct(
                                                 }
                                             }
                                         } else if name_ref == b"depend" {
-                                            depend(script, e, &mut depends);
+                                            depend(script, e, &mut depends, worker);
                                         }
                                     }
                                     Ok(Event::Empty(ref e)) => {
                                         if e.name().as_ref() == b"depend" {
-                                            depend(script, e, &mut depends);
+                                            depend(script, e, &mut depends, worker);
                                         }
                                     }
                                     Ok(Event::End(ref e)) => {
