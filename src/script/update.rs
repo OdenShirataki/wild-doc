@@ -21,9 +21,9 @@ fn depend(
 ) {
     let attr = xml_util::attr2hash_map(&e);
 
-    let row = crate::attr_parse_or_static(worker, &attr, "row");
     let key = crate::attr_parse_or_static(worker, &attr, "key");
     let collection = crate::attr_parse_or_static(worker, &attr, "collection");
+    let row = crate::attr_parse_or_static(worker, &attr, "row");
 
     if let (Ok(row), Some(collection_id)) = (
         row.parse::<i64>(),

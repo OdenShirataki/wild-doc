@@ -120,32 +120,36 @@ fn depends_array<'a>(
     };
 
     let array = v8::Array::new(scope, depends.len() as i32);
-    if let (Some(v8str_key), Some(v8str_collection_id), Some(v8str_row)) = (
+    if let (Some(v8str_key), Some(v8str_collection), Some(v8str_row)) = (
         v8::String::new(scope, "key"),
-        v8::String::new(scope, "collection_id"),
+        v8::String::new(scope, "collection"),
         v8::String::new(scope, "row"),
     ) {
         let mut index: u32 = 0;
-
         for d in depends {
-            if let Some(key) = v8::String::new(scope, d.key()) {
-                let depend = v8::Object::new(scope);
-                depend.define_own_property(scope, v8str_key.into(), key.into(), READ_ONLY);
-                let collection_id = v8::Integer::new(scope, d.collection_id());
-                depend.define_own_property(
-                    scope,
-                    v8str_collection_id.into(),
-                    collection_id.into(),
-                    READ_ONLY,
-                );
-                let row = v8::BigInt::new_from_i64(scope, d.row());
-                depend.define_own_property(scope, v8str_row.into(), row.into(), READ_ONLY);
+            if let (Some(key), Some(collection)) = (
+                v8::String::new(scope, d.key()),
+                db.collection(d.collection_id()),
+            ) {
+                if let Some(collection_name) = v8::String::new(scope, collection.name()) {
+                    let depend = v8::Object::new(scope);
+                    depend.define_own_property(scope, v8str_key.into(), key.into(), READ_ONLY);
+                    depend.define_own_property(
+                        scope,
+                        v8str_collection.into(),
+                        collection_name.into(),
+                        READ_ONLY,
+                    );
+                    let row = v8::BigInt::new_from_i64(scope, d.row());
+                    depend.define_own_property(scope, v8str_row.into(), row.into(), READ_ONLY);
 
-                array.set_index(scope, index, depend.into());
-                index += 1;
+                    array.set_index(scope, index, depend.into());
+                    index += 1;
+                }
             }
         }
     }
+
     array
 }
 
