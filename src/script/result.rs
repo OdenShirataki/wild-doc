@@ -277,11 +277,11 @@ fn set_values<'s>(
         let activity = v8::Integer::new(scope, activity);
         obj.define_own_property(scope, v8str_activity.into(), activity.into(), READ_ONLY);
 
-        if let Some(term_begin) = v8::Date::new(scope, (term_begin as f64)*1000.0){
+        if let Some(term_begin) = v8::Date::new(scope, (term_begin as f64) * 1000.0) {
             obj.define_own_property(scope, v8str_term_begin.into(), term_begin.into(), READ_ONLY);
         }
-        if term_end>0{
-            if let Some(term_end) =v8::Date::new(scope, (term_end as f64)*1000.0){
+        if term_end > 0 {
+            if let Some(term_end) = v8::Date::new(scope, (term_end as f64) * 1000.0) {
                 obj.define_own_property(scope, v8str_term_end.into(), term_end.into(), READ_ONLY);
             }
         }
@@ -296,7 +296,7 @@ fn set_last_update<'s>(
     last_update: i64,
 ) {
     if let Some(v8str_last_update) = v8::String::new(scope, "last_update") {
-        if let Some(last_update) = v8::Date::new(scope, (last_update as f64)*1000.0){
+        if let Some(last_update) = v8::Date::new(scope, (last_update as f64) * 1000.0) {
             object.define_own_property(
                 scope,
                 v8str_last_update.into(),
