@@ -206,7 +206,7 @@ wd.v=key=>{
                                     }
                                     self.sessions.push((session, clear_on_close == "true"));
                                 } else {
-                                    xml_util::outer(&next, reader);
+                                    xml_util::outer(&next, name, reader);
                                 }
                             }
                             b"wd:update" => {
@@ -275,7 +275,7 @@ wd.v=key=>{
                                 r.append(&mut process::case(
                                     self,
                                     &e,
-                                    &xml_util::outer(&next, reader),
+                                    &xml_util::outer(&next, name, reader),
                                     worker,
                                     include_adaptor,
                                 )?);
@@ -284,7 +284,7 @@ wd.v=key=>{
                                 r.append(&mut process::r#for(
                                     self,
                                     &e,
-                                    &xml_util::outer(&next, reader),
+                                    &xml_util::outer(&next, name, reader),
                                     worker,
                                     include_adaptor,
                                 )?);

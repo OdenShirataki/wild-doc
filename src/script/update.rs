@@ -61,29 +61,30 @@ pub fn make_update_struct(
                                         let name = e.name();
                                         let name_ref = name.as_ref();
                                         if name_ref == b"field" {
-                                            if let Ok(Some(field_name)) =
-                                                e.try_get_attribute("name")
-                                            {
+                                            if let (Ok(Some(field_name)), Ok(cont)) = (
+                                                e.try_get_attribute("name"),
+                                                reader.read_text(name),
+                                            ) {
                                                 if let Ok(field_name) =
                                                     std::str::from_utf8(&field_name.value)
                                                 {
-                                                    let cont =
-                                                        xml_util::text_content(reader, e.name());
                                                     fields.insert(field_name.to_owned(), cont);
                                                 }
                                             }
                                         } else if name_ref == b"pends" {
-                                            let inner_xml = xml_util::inner(reader);
-                                            let mut reader_inner = Reader::from_str(&inner_xml);
-                                            reader_inner.check_end_names(false);
-                                            let pends_tmp = make_update_struct(
-                                                script,
-                                                &mut reader_inner,
-                                                worker,
-                                            );
-                                            if let Ok(Some(key)) = e.try_get_attribute("key") {
-                                                if let Ok(key) = std::str::from_utf8(&key.value) {
-                                                    pends.push(Pend::new(key, pends_tmp));
+                                            if let Ok(inner_xml) = reader.read_text(name) {
+                                                let mut reader_inner = Reader::from_str(&inner_xml);
+                                                reader_inner.check_end_names(false);
+                                                let pends_tmp = make_update_struct(
+                                                    script,
+                                                    &mut reader_inner,
+                                                    worker,
+                                                );
+                                                if let Ok(Some(key)) = e.try_get_attribute("key") {
+                                                    if let Ok(key) = std::str::from_utf8(&key.value)
+                                                    {
+                                                        pends.push(Pend::new(key, pends_tmp));
+                                                    }
                                                 }
                                             }
                                         } else if name_ref == b"depend" {
@@ -160,7 +161,7 @@ pub fn make_update_struct(
                                 .unwrap();
                             let mut f = Vec::new();
                             for (key, value) in fields {
-                                f.push(KeyValue::new(key, value))
+                                f.push(KeyValue::new(key, value.as_bytes()))
                             }
                             if row == 0 {
                                 updates.push(Record::New {

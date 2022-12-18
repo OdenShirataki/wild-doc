@@ -30,59 +30,67 @@ pub(super) fn case<T: IncludeAdaptor>(
                         'case: loop {
                             if let Ok(next) = event_reader.read_event() {
                                 match next {
-                                    Event::Start(ref e) => match e.name().as_ref() {
-                                        b"wd:when" => {
-                                            let attr = xml_util::attr2hash_map(&e);
-                                            let wv =
-                                                crate::attr_parse_or_static(worker, &attr, "value");
-                                            if wv == cmp_value {
+                                    Event::Start(ref e) => {
+                                        let name = e.name();
+                                        match name.as_ref() {
+                                            b"wd:when" => {
+                                                let attr = xml_util::attr2hash_map(&e);
+                                                let wv = crate::attr_parse_or_static(
+                                                    worker, &attr, "value",
+                                                );
+                                                if wv == cmp_value {
+                                                    let xml_str = xml_util::outer(
+                                                        &next,
+                                                        name,
+                                                        &mut event_reader,
+                                                    );
+                                                    let mut event_reader_inner =
+                                                        Reader::from_str(&xml_str.trim());
+                                                    event_reader_inner.check_end_names(false);
+                                                    loop {
+                                                        match event_reader_inner.read_event() {
+                                                            Ok(Event::Start(e)) => {
+                                                                if e.name().as_ref() == b"wd:when" {
+                                                                    r.append(&mut script.parse(
+                                                                        worker,
+                                                                        &mut event_reader_inner,
+                                                                        "",
+                                                                        include_adaptor,
+                                                                    )?);
+                                                                    break 'case;
+                                                                }
+                                                            }
+                                                            _ => {}
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            b"wd:else" => {
                                                 let xml_str =
-                                                    xml_util::outer(&next, &mut event_reader);
+                                                    xml_util::outer(&next, name, &mut event_reader);
                                                 let mut event_reader_inner =
                                                     Reader::from_str(&xml_str.trim());
                                                 event_reader_inner.check_end_names(false);
                                                 loop {
                                                     match event_reader_inner.read_event() {
                                                         Ok(Event::Start(e)) => {
-                                                            if e.name().as_ref() == b"wd:when" {
+                                                            if e.name().as_ref() == b"wd:else" {
                                                                 r.append(&mut script.parse(
                                                                     worker,
                                                                     &mut event_reader_inner,
                                                                     "",
                                                                     include_adaptor,
                                                                 )?);
-                                                                break 'case;
+                                                                break;
                                                             }
                                                         }
                                                         _ => {}
                                                     }
                                                 }
                                             }
+                                            _ => {}
                                         }
-                                        b"wd:else" => {
-                                            let xml_str = xml_util::outer(&next, &mut event_reader);
-                                            let mut event_reader_inner =
-                                                Reader::from_str(&xml_str.trim());
-                                            event_reader_inner.check_end_names(false);
-                                            loop {
-                                                match event_reader_inner.read_event() {
-                                                    Ok(Event::Start(e)) => {
-                                                        if e.name().as_ref() == b"wd:else" {
-                                                            r.append(&mut script.parse(
-                                                                worker,
-                                                                &mut event_reader_inner,
-                                                                "",
-                                                                include_adaptor,
-                                                            )?);
-                                                            break;
-                                                        }
-                                                    }
-                                                    _ => {}
-                                                }
-                                            }
-                                        }
-                                        _ => {}
-                                    },
+                                    }
                                     Event::Eof => {
                                         break;
                                     }
