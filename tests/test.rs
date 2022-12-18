@@ -32,12 +32,14 @@ fn it_works() {
                 console.log(wd.v('r').depends('account'));
             </wd:script>
             <wd:for var="dep" index="i" wd:in="wd.v('r').depends('account')">
-                dep:<wd:print wd:value="wd.v('dep')" />
+                dep:<wd:print wd:value="wd.v('dep').row" />@<wd:print wd:value="wd.v('dep').collection" />
             </wd:for>
         </wd:for></wd:result>
     </wd:session></wd>"#,"").unwrap();
     println!("{}", std::str::from_utf8(r.body()).unwrap());
 
+    let update_xml = r#"<wd><wd:session name="logintest" clear_on_close="true"></wd:session></wd>"#;
+    wd.run(update_xml, "").unwrap();
     /*
     let r=wd.run(r#"<wd>
         <wd:script>

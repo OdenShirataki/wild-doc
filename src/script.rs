@@ -32,7 +32,7 @@ use module_loader::WdModuleLoader;
 
 pub struct Script {
     database: Arc<RwLock<Database>>,
-    sessions: Vec<Session>,
+    sessions: Vec<(Session, bool)>,
     main_module: ModuleSpecifier,
     module_loader: Rc<WdModuleLoader>,
     bootstrap: BootstrapOptions,
@@ -180,28 +180,31 @@ wd.v=key=>{
                         let name_ref = name.as_ref();
                         match name_ref {
                             b"wd:session" => {
-                                let session_name = crate::attr_parse_or_static(
-                                    worker,
-                                    &xml_util::attr2hash_map(&e),
-                                    "name",
-                                );
+                                let attr = xml_util::attr2hash_map(&e);
+                                let session_name =
+                                    crate::attr_parse_or_static(worker, &attr, "name");
+                                let clear_on_close =
+                                    crate::attr_parse_or_static(worker, &attr, "clear_on_close");
+
                                 if let Ok(mut session) = Session::new(
                                     &self.database.clone().read().unwrap(),
                                     &session_name,
                                 ) {
                                     if session_name != "" {
-                                        if let Ok(Some(value)) = e.try_get_attribute(b"initialize")
-                                        {
-                                            if value.value.to_vec() == b"true" {
-                                                self.database
-                                                    .clone()
-                                                    .read()
-                                                    .unwrap()
-                                                    .session_restart(&mut session)?;
-                                            }
+                                        let initialize = crate::attr_parse_or_static(
+                                            worker,
+                                            &attr,
+                                            "initialize",
+                                        );
+                                        if initialize == "true" {
+                                            self.database
+                                                .clone()
+                                                .read()
+                                                .unwrap()
+                                                .session_restart(&mut session)?;
                                         }
                                     }
-                                    self.sessions.push(session);
+                                    self.sessions.push((session, clear_on_close == "true"));
                                 } else {
                                     xml_util::outer(&next, reader);
                                 }
@@ -219,18 +222,14 @@ wd.v=key=>{
                                 inner_reader.check_end_names(false);
                                 let updates =
                                     update::make_update_struct(self, &mut inner_reader, worker);
-                                if let Some(mut session) = self.sessions.last_mut() {
+                                if let Some((ref mut session, _)) = self.sessions.last_mut() {
                                     self.database
                                         .clone()
                                         .read()
                                         .unwrap()
-                                        .update(&mut session, updates)?;
+                                        .update(session, updates)?;
                                     if with_commit {
-                                        self.database
-                                            .clone()
-                                            .write()
-                                            .unwrap()
-                                            .commit(&mut session)?;
+                                        self.database.clone().write().unwrap().commit(session)?;
                                     }
                                 }
                             }
@@ -368,7 +367,18 @@ wd.v=key=>{
                                 if name == b"wd:stack" {
                                     let _ = worker.execute_script("stack.pop", "wd.stack.pop();");
                                 } else if name == b"wd:session" {
-                                    self.sessions.pop();
+                                    if let Some((ref mut session, clear_on_close)) =
+                                        self.sessions.pop()
+                                    {
+                                        if clear_on_close {
+                                            let _ = self
+                                                .database
+                                                .clone()
+                                                .write()
+                                                .unwrap()
+                                                .session_clear(session);
+                                        }
+                                    }
                                 }
                             } else {
                                 r.append(&mut b"</".to_vec());

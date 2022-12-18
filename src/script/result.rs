@@ -330,7 +330,7 @@ pub(super) fn result(
 
             let mut session_maybe_has_collection = None;
             for i in (0..script.sessions.len()).rev() {
-                if let Some(_) = script.sessions[i].temporary_collection(collection_id) {
+                if let Some(_) = script.sessions[i].0.temporary_collection(collection_id) {
                     session_maybe_has_collection = Some(i);
                     break;
                 }
@@ -369,7 +369,7 @@ pub(super) fn result(
                                     .collection(collection_id)
                                 {
                                     if let Some(session_index) = session_maybe_has_collection {
-                                        let session = &mut script.sessions[session_index];
+                                        let session = &mut script.sessions[session_index].0;
                                         let addr = session as *mut Session as *mut c_void;
                                         let v8ext_session = v8::External::new(scope, addr);
                                         if let (
