@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.26.0"
+version = "0.27.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -22,4 +22,4 @@ deno_runtime = "0.90.0"
 
 reqwest = { version = "0.11", features = ["blocking"] }
 
-semilattice-database={version="0.37",path="../semilattice-database"}
+semilattice-database={version="0.38",path="../semilattice-database"}
