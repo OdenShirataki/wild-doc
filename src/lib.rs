@@ -1,15 +1,13 @@
-use std::sync::{Arc, RwLock};
-
+use deno_runtime::{deno_core::v8, worker::MainWorker};
 use quick_xml::{events::Event, Reader};
 use semilattice_database::Database;
+use std::sync::{Arc, RwLock};
 
 mod script;
 use script::Script;
 
 mod xml_util;
 use xml_util::XmlAttr;
-
-use deno_runtime::{deno_core::v8, worker::MainWorker};
 
 mod include;
 pub use include::{IncludeAdaptor, IncludeLocal};

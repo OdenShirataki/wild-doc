@@ -1,15 +1,14 @@
-use std::{
-    collections::HashMap,
-    ffi::c_void,
-    sync::{Arc, RwLock},
-};
-
 use deno_runtime::{
     deno_napi::v8::{self, HandleScope, READ_ONLY},
     worker::MainWorker,
 };
 use quick_xml::events::BytesStart;
 use semilattice_database::{Condition, Database, Order, OrderKey, Session};
+use std::{
+    collections::HashMap,
+    ffi::c_void,
+    sync::{Arc, RwLock},
+};
 
 use crate::xml_util;
 

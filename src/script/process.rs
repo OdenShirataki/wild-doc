@@ -1,10 +1,9 @@
+use deno_runtime::{deno_core::v8, worker::MainWorker};
 use quick_xml::{
     events::{BytesStart, Event},
     Reader,
 };
 use std::convert::TryFrom;
-
-use deno_runtime::{deno_core::v8, worker::MainWorker};
 
 use crate::{xml_util, IncludeAdaptor};
 

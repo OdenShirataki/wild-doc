@@ -1,13 +1,11 @@
-use std::collections::HashMap;
-
 use chrono::TimeZone;
+use deno_runtime::worker::MainWorker;
 use quick_xml::{
     events::{BytesStart, Event},
     Reader,
 };
 use semilattice_database::{Activity, Depends, KeyValue, Pend, Record, SessionCollectionRow, Term};
-
-use deno_runtime::worker::MainWorker;
+use std::collections::HashMap;
 
 use crate::xml_util;
 

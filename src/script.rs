@@ -1,11 +1,3 @@
-use std::{
-    borrow::Cow,
-    collections::HashMap,
-    ffi::c_void,
-    rc::Rc,
-    sync::{Arc, RwLock},
-};
-
 use deno_runtime::{
     deno_broadcast_channel::InMemoryBroadcastChannel,
     deno_core::{self, v8, v8::READ_ONLY, ModuleSpecifier},
@@ -19,6 +11,13 @@ use quick_xml::{
     Reader,
 };
 use semilattice_database::{Database, Session};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    ffi::c_void,
+    rc::Rc,
+    sync::{Arc, RwLock},
+};
 
 mod process;
 
@@ -259,10 +258,8 @@ wd.v=key=>{
                             b"wd:stack" => {
                                 if let Ok(Some(var)) = e.try_get_attribute(b"var") {
                                     if let Ok(var) = std::str::from_utf8(&var.value) {
-                                        let _ = worker.execute_script(
-                                            "stack.push",
-                                            &("wd.stack.push({".to_owned() + var + "});"),
-                                        );
+                                        let code = "wd.stack.push({".to_owned() + var + "});";
+                                        let _ = worker.execute_script("stack.push", &code);
                                     }
                                 }
                             }

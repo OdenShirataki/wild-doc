@@ -1,8 +1,7 @@
 use chrono::NaiveDateTime;
+use deno_runtime::worker::MainWorker;
 use quick_xml::{events::Event, Reader};
 use semilattice_database::{search, Activity, CollectionRow, Condition, Depend};
-
-use deno_runtime::worker::MainWorker;
 
 use crate::xml_util::{self, XmlAttr};
 

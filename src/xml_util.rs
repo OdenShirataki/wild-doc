@@ -1,6 +1,7 @@
 use quick_xml::{events::Event, name::QName, Reader, Writer};
 use rustc_hash::FxHasher;
 use std::{borrow::Cow, collections::HashMap, hash::BuildHasherDefault, io::Cursor};
+
 pub type XmlAttr<'a> = HashMap<String, Cow<'a, [u8]>, BuildHasherDefault<FxHasher>>;
 
 pub fn attr2hash_map<'a>(e: &'a quick_xml::events::BytesStart<'a>) -> XmlAttr {
