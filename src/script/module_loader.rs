@@ -1,13 +1,9 @@
-use deno_core::error::AnyError;
-use deno_core::futures::future::FutureExt;
-use deno_core::ModuleLoader;
-use deno_core::ModuleSource;
-use deno_core::ModuleSpecifier;
-use deno_core::ModuleType;
+use deno_core::{
+    error::AnyError, futures::future::FutureExt, ModuleLoader, ModuleSource, ModuleSpecifier,
+    ModuleType,
+};
 use deno_runtime::deno_core;
-use std::pin::Pin;
-use std::rc::Rc;
-use std::str;
+use std::{pin::Pin, rc::Rc, str};
 
 pub struct WdModuleLoader;
 
