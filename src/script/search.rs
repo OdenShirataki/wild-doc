@@ -73,11 +73,15 @@ fn condition_loop(
         if let Ok(next) = reader.read_event() {
             match next {
                 Event::Start(ref e) => match e.name().as_ref() {
+                    b"field" => {
+                        if let Some(c) = condition_field(xml_util::attr2hash_map(&e), worker) {
+                            conditions.push(c);
+                        }
+                    }
                     b"row" => {
                         if let Some(c) = condition_row(xml_util::attr2hash_map(&e), worker) {
                             conditions.push(c);
                         }
-                        reader.read_to_end(e.name()).unwrap();
                     }
                     b"narrow" => {
                         conditions.push(Condition::Narrow(condition_loop(script, reader, worker)));
@@ -114,6 +118,11 @@ fn condition_loop(
                 Event::Empty(e) => match e.name().as_ref() {
                     b"field" => {
                         if let Some(c) = condition_field(xml_util::attr2hash_map(&e), worker) {
+                            conditions.push(c);
+                        }
+                    }
+                    b"row" => {
+                        if let Some(c) = condition_row(xml_util::attr2hash_map(&e), worker) {
                             conditions.push(c);
                         }
                     }
