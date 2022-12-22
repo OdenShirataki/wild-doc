@@ -50,6 +50,14 @@ pub fn make_update_struct(
                 if e.name().as_ref() == b"collection" {
                     if let Ok(Some(collection_name)) = e.try_get_attribute("name") {
                         if let Ok(collection_name) = std::str::from_utf8(&collection_name.value) {
+                            let collection_id = script
+                                .database
+                                .clone()
+                                .write()
+                                .unwrap()
+                                .collection_id_or_create(collection_name)
+                                .unwrap();
+
                             let mut pends = Vec::new();
                             let mut depends = Vec::new();
                             let mut fields = HashMap::new();
@@ -107,81 +115,80 @@ pub fn make_update_struct(
                                 .parse()
                                 .unwrap_or(0);
 
-                            let activity = crate::attr_parse_or_static(worker, &attr, "activity");
-                            let activity = match &*activity {
-                                "inactive" => Activity::Inactive,
-                                "0" => Activity::Inactive,
-                                _ => Activity::Active,
-                            };
-                            let term_begin =
-                                crate::attr_parse_or_static(worker, &attr, "term_begin");
-                            let term_begin = if term_begin != "" {
-                                if let Some(t) = chrono::Local
-                                    .datetime_from_str(&term_begin, "%Y-%m-%d %H:%M:%S")
-                                    .map_or(None, |v| Some(v.timestamp()))
-                                {
-                                    Term::Overwrite(t)
+                            let is_delete = if let Some(v) = attr.get("delete") {
+                                if let Ok(v) = std::str::from_utf8(v) {
+                                    v == "1"
                                 } else {
-                                    Term::Defalut
-                                }
-                            } else {
-                                Term::Defalut
-                            };
-                            let term_end = crate::attr_parse_or_static(worker, &attr, "term_end");
-                            let term_end = if term_end != "" {
-                                if let Some(t) = chrono::Local
-                                    .datetime_from_str(&term_end, "%Y-%m-%d %H:%M:%S")
-                                    .map_or(None, |v| Some(v.timestamp()))
-                                {
-                                    Term::Overwrite(t)
-                                } else {
-                                    Term::Defalut
-                                }
-                            } else {
-                                Term::Defalut
-                            };
-                            /*
-                            let is_delete=if let Some(v)=attr.get("delete"){
-                                if let Ok(v)=std::str::from_utf8(v){
-                                    v=="1"
-                                }else{
                                     false
                                 }
-                            }else{
-                                false
-                            }; */
-                            let collection_id = script
-                                .database
-                                .clone()
-                                .write()
-                                .unwrap()
-                                .collection_id_or_create(collection_name)
-                                .unwrap();
-                            let mut f = Vec::new();
-                            for (key, value) in fields {
-                                f.push(KeyValue::new(key, value.as_bytes()))
-                            }
-                            if row == 0 {
-                                updates.push(Record::New {
-                                    collection_id,
-                                    activity,
-                                    term_begin,
-                                    term_end,
-                                    fields: f,
-                                    depends: Depends::Overwrite(depends),
-                                    pends,
-                                });
                             } else {
-                                updates.push(Record::Update {
-                                    collection_id,
-                                    row,
-                                    activity,
-                                    term_begin,
-                                    term_end,
-                                    fields: f,
-                                    depends: Depends::Overwrite(depends),
-                                    pends,
-                                });
+                                false
+                            };
+                            if is_delete {
+                                updates.push(Record::Delete { collection_id, row });
+                            } else {
+                                let activity =
+                                    crate::attr_parse_or_static(worker, &attr, "activity");
+                                let activity = match &*activity {
+                                    "inactive" => Activity::Inactive,
+                                    "0" => Activity::Inactive,
+                                    _ => Activity::Active,
+                                };
+                                let term_begin =
+                                    crate::attr_parse_or_static(worker, &attr, "term_begin");
+                                let term_begin = if term_begin != "" {
+                                    if let Some(t) = chrono::Local
+                                        .datetime_from_str(&term_begin, "%Y-%m-%d %H:%M:%S")
+                                        .map_or(None, |v| Some(v.timestamp()))
+                                    {
+                                        Term::Overwrite(t)
+                                    } else {
+                                        Term::Defalut
+                                    }
+                                } else {
+                                    Term::Defalut
+                                };
+                                let term_end =
+                                    crate::attr_parse_or_static(worker, &attr, "term_end");
+                                let term_end = if term_end != "" {
+                                    if let Some(t) = chrono::Local
+                                        .datetime_from_str(&term_end, "%Y-%m-%d %H:%M:%S")
+                                        .map_or(None, |v| Some(v.timestamp()))
+                                    {
+                                        Term::Overwrite(t)
+                                    } else {
+                                        Term::Defalut
+                                    }
+                                } else {
+                                    Term::Defalut
+                                };
+
+                                let mut f = Vec::new();
+                                for (key, value) in fields {
+                                    f.push(KeyValue::new(key, value.as_bytes()))
+                                }
+                                if row == 0 {
+                                    updates.push(Record::New {
+                                        collection_id,
+                                        activity,
+                                        term_begin,
+                                        term_end,
+                                        fields: f,
+                                        depends: Depends::Overwrite(depends),
+                                        pends,
+                                    });
+                                } else {
+                                    updates.push(Record::Update {
+                                        collection_id,
+                                        row,
+                                        activity,
+                                        term_begin,
+                                        term_end,
+                                        fields: f,
+                                        depends: Depends::Overwrite(depends),
+                                        pends,
+                                    });
+                                }
                             }
                         }
                     }
