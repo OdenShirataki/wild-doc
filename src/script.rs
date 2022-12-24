@@ -181,7 +181,7 @@ wd.v=key=>{
                             b"wd:session" => {
                                 let attr = xml_util::attr2hash_map(&e);
                                 let session_name =
-                                    crate::attr_parse_or_static(worker, &attr, "name");
+                                    crate::attr_parse_or_static_string(worker, &attr, "name");
                                 let clear_on_close =
                                     crate::attr_parse_or_static(worker, &attr, "clear_on_close");
 
@@ -195,7 +195,7 @@ wd.v=key=>{
                                             &attr,
                                             "initialize",
                                         );
-                                        if initialize == "true" {
+                                        if initialize == b"true" {
                                             self.database
                                                 .clone()
                                                 .read()
@@ -203,7 +203,7 @@ wd.v=key=>{
                                                 .session_restart(&mut session)?;
                                         }
                                     }
-                                    self.sessions.push((session, clear_on_close == "true"));
+                                    self.sessions.push((session, clear_on_close == b"true"));
                                 } else {
                                     xml_util::outer(&next, name, reader);
                                 }
@@ -213,7 +213,7 @@ wd.v=key=>{
                                     worker,
                                     &xml_util::attr2hash_map(&e),
                                     "commit",
-                                ) == "1";
+                                ) == b"1";
                                 let inner_xml =
                                     self.parse(worker, reader, "wd:update", include_adaptor)?;
                                 let mut inner_reader =
@@ -234,9 +234,9 @@ wd.v=key=>{
                             }
                             b"wd:search" => {
                                 let attr = xml_util::attr2hash_map(&e);
-                                let name = crate::attr_parse_or_static(worker, &attr, "name");
+                                let name = crate::attr_parse_or_static_string(worker, &attr, "name");
                                 let collection_name =
-                                    crate::attr_parse_or_static(worker, &attr, "collection");
+                                    crate::attr_parse_or_static_string(worker, &attr, "collection");
                                 if name != "" && collection_name != "" {
                                     if let Some(collection_id) = self
                                         .database
@@ -311,12 +311,10 @@ wd.v=key=>{
                                         &xml_util::attr2hash_map(e),
                                         "value",
                                     )
-                                    .as_bytes()
-                                    .to_vec(),
                                 );
                             }
                             b"wd:include" => {
-                                let src = crate::attr_parse_or_static(
+                                let src = crate::attr_parse_or_static_string(
                                     worker,
                                     &xml_util::attr2hash_map(e),
                                     "src",
@@ -423,7 +421,7 @@ wd.v=key=>{
 
                     if let Ok(value) = std::str::from_utf8(&attr.value) {
                         if is_wd {
-                            html_attr.push_str(&crate::eval_result(scope, value));
+                            html_attr.push_str(&crate::eval_result_string(scope, value));
                         } else {
                             html_attr.push_str(
                                 &value

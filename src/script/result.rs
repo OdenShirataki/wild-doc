@@ -319,13 +319,13 @@ pub(super) fn result(
     search_map: &HashMap<String, (i32, Vec<Condition>)>,
 ) {
     let attr = xml_util::attr2hash_map(&e);
-    let search = crate::attr_parse_or_static(worker, &attr, "search");
-    let var = crate::attr_parse_or_static(worker, &attr, "var");
+    let search = crate::attr_parse_or_static_string(worker, &attr, "search");
+    let var = crate::attr_parse_or_static_string(worker, &attr, "var");
 
     if search != "" && var != "" {
         if let Some((collection_id, conditions)) = search_map.get(&search) {
             let collection_id = *collection_id;
-            let orders = make_order(&crate::attr_parse_or_static(worker, &attr, "sort"));
+            let orders = make_order(&crate::attr_parse_or_static_string(worker, &attr, "sort"));
 
             let mut session_maybe_has_collection = None;
             for i in (0..script.sessions.len()).rev() {

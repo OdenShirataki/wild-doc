@@ -19,9 +19,9 @@ fn depend(
 ) {
     let attr = xml_util::attr2hash_map(&e);
 
-    let key = crate::attr_parse_or_static(worker, &attr, "key");
-    let collection = crate::attr_parse_or_static(worker, &attr, "collection");
-    let row = crate::attr_parse_or_static(worker, &attr, "row");
+    let key = crate::attr_parse_or_static_string(worker, &attr, "key");
+    let collection = crate::attr_parse_or_static_string(worker, &attr, "collection");
+    let row = crate::attr_parse_or_static_string(worker, &attr, "row");
 
     if let (Ok(row), Some(collection_id)) = (
         row.parse::<i64>(),
@@ -111,7 +111,7 @@ pub fn make_update_struct(
                                 }
                             }
                             let attr = xml_util::attr2hash_map(&e);
-                            let row = crate::attr_parse_or_static(worker, &attr, "row")
+                            let row = crate::attr_parse_or_static_string(worker, &attr, "row")
                                 .parse()
                                 .unwrap_or(0);
 
@@ -130,12 +130,12 @@ pub fn make_update_struct(
                                 let activity =
                                     crate::attr_parse_or_static(worker, &attr, "activity");
                                 let activity = match &*activity {
-                                    "inactive" => Activity::Inactive,
-                                    "0" => Activity::Inactive,
+                                    b"inactive" => Activity::Inactive,
+                                    b"0" => Activity::Inactive,
                                     _ => Activity::Active,
                                 };
                                 let term_begin =
-                                    crate::attr_parse_or_static(worker, &attr, "term_begin");
+                                    crate::attr_parse_or_static_string(worker, &attr, "term_begin");
                                 let term_begin = if term_begin != "" {
                                     if let Some(t) = chrono::Local
                                         .datetime_from_str(&term_begin, "%Y-%m-%d %H:%M:%S")
@@ -149,7 +149,7 @@ pub fn make_update_struct(
                                     Term::Defalut
                                 };
                                 let term_end =
-                                    crate::attr_parse_or_static(worker, &attr, "term_end");
+                                    crate::attr_parse_or_static_string(worker, &attr, "term_end");
                                 let term_end = if term_end != "" {
                                     if let Some(t) = chrono::Local
                                         .datetime_from_str(&term_end, "%Y-%m-%d %H:%M:%S")
