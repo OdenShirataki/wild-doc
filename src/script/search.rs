@@ -91,9 +91,9 @@ fn condition_loop(
                     }
                     b"depend" => {
                         let attr = xml_util::attr2hash_map(e);
-                        let row = crate::attr_parse_or_static(worker, &attr, "row");
+                        let row = crate::attr_parse_or_static_string(worker, &attr, "row");
                         let collection_name =
-                            crate::attr_parse_or_static(worker, &attr, "collection");
+                            crate::attr_parse_or_static_string(worker, &attr, "collection");
 
                         if row != "" && collection_name != "" {
                             if let (Ok(row), Some(collection_id)) = (
@@ -105,7 +105,7 @@ fn condition_loop(
                                     .unwrap()
                                     .collection_id(&collection_name),
                             ) {
-                                let key = crate::attr_parse_or_static(worker, &attr, "key");
+                                let key = crate::attr_parse_or_static_string(worker, &attr, "key");
                                 conditions.push(Condition::Depend(Depend::new(
                                     key,
                                     CollectionRow::new(collection_id, row),
@@ -143,10 +143,10 @@ fn condition_loop(
 
 fn condition_row<'a>(attr: XmlAttr, worker: &mut MainWorker) -> Option<Condition> {
     let method = crate::attr_parse_or_static(worker, &attr, "method");
-    let value = crate::attr_parse_or_static(worker, &attr, "value");
+    let value = crate::attr_parse_or_static_string(worker, &attr, "value");
     if value != "" {
         match &*method {
-            "in" => {
+            b"in" => {
                 let mut v = Vec::<isize>::new();
                 for s in value.split(',') {
                     if let Ok(i) = s.parse::<isize>() {
@@ -157,17 +157,17 @@ fn condition_row<'a>(attr: XmlAttr, worker: &mut MainWorker) -> Option<Condition
                     return Some(Condition::Row(search::Number::In(v)));
                 }
             }
-            "min" => {
+            b"min" => {
                 if let Ok(v) = value.parse::<isize>() {
                     return Some(Condition::Row(search::Number::Min(v)));
                 }
             }
-            "max" => {
+            b"max" => {
                 if let Ok(v) = value.parse::<isize>() {
                     return Some(Condition::Row(search::Number::Max(v)));
                 }
             }
-            "range" => {
+            b"range" => {
                 let s: Vec<&str> = value.split("..").collect();
                 if s.len() == 2 {
                     if let (Ok(min), Ok(max)) = (s[0].parse::<u32>(), s[1].parse::<u32>()) {
@@ -183,9 +183,9 @@ fn condition_row<'a>(attr: XmlAttr, worker: &mut MainWorker) -> Option<Condition
     None
 }
 fn condition_field<'a>(attr: XmlAttr, worker: &mut MainWorker) -> Option<Condition> {
-    let name = crate::attr_parse_or_static(worker, &attr, "name");
-    let method = crate::attr_parse_or_static(worker, &attr, "method");
-    let value = crate::attr_parse_or_static(worker, &attr, "value");
+    let name = crate::attr_parse_or_static_string(worker, &attr, "name");
+    let method = crate::attr_parse_or_static_string(worker, &attr, "method");
+    let value = crate::attr_parse_or_static_string(worker, &attr, "value");
 
     if name != "" && method != "" && value != "" {
         let method_pair: Vec<&str> = method.split('!').collect();

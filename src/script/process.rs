@@ -19,7 +19,7 @@ pub(super) fn case<T: IncludeAdaptor>(
     let mut r = Vec::new();
     let attr = xml_util::attr2hash_map(&e);
     let cmp_value = crate::attr_parse_or_static(worker, &attr, "value");
-    if cmp_value != "" {
+    if cmp_value != b"" {
         let mut event_reader = Reader::from_str(&xml_str.trim());
         event_reader.check_end_names(false);
         loop {
@@ -116,7 +116,7 @@ pub(super) fn r#for<T: IncludeAdaptor>(
 ) -> Result<Vec<u8>, std::io::Error> {
     let mut r = Vec::new();
     let attr = xml_util::attr2hash_map(&e);
-    let var = crate::attr_parse_or_static(worker, &attr, "var");
+    let var = crate::attr_parse_or_static_string(worker, &attr, "var");
     if var != "" {
         if let Some(arr) = attr.get("wd:in") {
             if let Ok(arr) = std::str::from_utf8(arr) {

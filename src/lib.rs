@@ -81,7 +81,33 @@ impl<T: IncludeAdaptor> WildDoc<T> {
     }
 }
 
-fn eval_result(scope: &mut v8::HandleScope, value: &str) -> String {
+fn eval_result(scope: &mut v8::HandleScope, value: &str) -> Vec<u8> {
+    if let Some(v8_value) = v8::String::new(scope, value)
+        .and_then(|code| v8::Script::compile(scope, code, None))
+        .and_then(|v| v.run(scope))
+    {
+        if v8_value.is_uint8_array() {
+            if let Ok(a) = v8::Local::<v8::Uint8Array>::try_from(v8_value) {
+                if let Some(buf) = a.buffer(scope) {
+                    let len = buf.byte_length();
+                    if let Some(data) = buf.get_backing_store().data() {
+                        let ptr = data.as_ptr() as *mut u8;
+                        unsafe {
+                            return core::slice::from_raw_parts(ptr, len).to_vec();
+                        }
+                    }
+                }
+            }
+        } else {
+            if let Some(string) = v8_value.to_string(scope) {
+                return string.to_rust_string_lossy(scope).as_bytes().to_owned();
+            }
+        }
+    }
+    vec![]
+}
+
+fn eval_result_string(scope: &mut v8::HandleScope, value: &str) -> String {
     if let Some(v8_value) = v8::String::new(scope, value)
         .and_then(|code| v8::Script::compile(scope, code, None))
         .and_then(|v| v.run(scope))
@@ -93,22 +119,28 @@ fn eval_result(scope: &mut v8::HandleScope, value: &str) -> String {
     }
 }
 
-fn attr_parse_or_static(worker: &mut MainWorker, attr: &XmlAttr, key: &str) -> String {
+fn attr_parse_or_static(worker: &mut MainWorker, attr: &XmlAttr, key: &str) -> Vec<u8> {
     let wdkey = "wd:".to_owned() + key;
     if let Some(value) = attr.get(&wdkey) {
         if let Ok(value) = std::str::from_utf8(value) {
-            crate::eval_result(&mut worker.js_runtime.handle_scope(), value)
-        } else {
-            "".to_owned()
+            return crate::eval_result(&mut worker.js_runtime.handle_scope(), value);
         }
     } else if let Some(value) = attr.get(key) {
-        if let Ok(value) = std::str::from_utf8(value) {
-            value
-        } else {
-            ""
-        }
-        .to_owned()
-    } else {
-        "".to_owned()
+        return value.to_vec();
     }
+    vec![]
+}
+
+fn attr_parse_or_static_string(worker: &mut MainWorker, attr: &XmlAttr, key: &str) -> String {
+    let wdkey = "wd:".to_owned() + key;
+    if let Some(value) = attr.get(&wdkey) {
+        if let Ok(value) = std::str::from_utf8(value) {
+            return crate::eval_result_string(&mut worker.js_runtime.handle_scope(), value);
+        }
+    } else if let Some(value) = attr.get(key) {
+        if let Ok(str) = std::string::String::from_utf8(value.to_vec()) {
+            return str;
+        }
+    }
+    "".to_owned()
 }
