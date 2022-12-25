@@ -234,7 +234,8 @@ wd.v=key=>{
                             }
                             b"wd:search" => {
                                 let attr = xml_util::attr2hash_map(&e);
-                                let name = crate::attr_parse_or_static_string(worker, &attr, "name");
+                                let name =
+                                    crate::attr_parse_or_static_string(worker, &attr, "name");
                                 let collection_name =
                                     crate::attr_parse_or_static_string(worker, &attr, "collection");
                                 if name != "" && collection_name != "" {
@@ -296,22 +297,16 @@ wd.v=key=>{
                             }
                         }
                     }
-                    /*
-                    Event::PI(ref e) => {
-                        Self::run_script(worker, e.unescape().expect("Error!"));
-                    }*/
                     Event::Empty(ref e) => {
                         let name = e.name();
                         let name = name.as_ref();
                         match name {
                             b"wd:print" => {
-                                r.append(
-                                    &mut crate::attr_parse_or_static(
-                                        worker,
-                                        &xml_util::attr2hash_map(e),
-                                        "value",
-                                    )
-                                );
+                                r.append(&mut crate::attr_parse_or_static(
+                                    worker,
+                                    &xml_util::attr2hash_map(e),
+                                    "value",
+                                ));
                             }
                             b"wd:include" => {
                                 let src = crate::attr_parse_or_static_string(
