@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.28.1"
+version = "0.28.2"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -16,7 +16,7 @@ categories = ["database","database-implementations","text-processing","web-progr
 
 [dependencies]
 rustc-hash = { version = "1.0", default-features = false }
-quick-xml="0.26"
+quick-xml="0.27"
 chrono="0.4"
 deno_runtime = "0.90.0"
 

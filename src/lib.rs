@@ -1,7 +1,10 @@
 use deno_runtime::{deno_core::v8, worker::MainWorker};
 use quick_xml::{events::Event, Reader};
 use semilattice_database::Database;
-use std::sync::{Arc, RwLock};
+use std::{
+    io,
+    sync::{Arc, RwLock},
+};
 
 mod script;
 use script::Script;
@@ -29,13 +32,13 @@ pub struct WildDoc<T: IncludeAdaptor> {
     default_include_adaptor: T,
 }
 impl<T: IncludeAdaptor> WildDoc<T> {
-    pub fn new(dir: &str, default_include_adaptor: T) -> Result<Self, std::io::Error> {
+    pub fn new(dir: &str, default_include_adaptor: T) -> io::Result<Self> {
         Ok(Self {
             database: Arc::new(RwLock::new(Database::new(dir)?)),
             default_include_adaptor,
         })
     }
-    pub fn run(&mut self, xml: &str, input_json: &str) -> Result<WildDocResult, std::io::Error> {
+    pub fn run(&mut self, xml: &str, input_json: &str) -> io::Result<WildDocResult> {
         let mut reader = Reader::from_str(xml);
         reader.check_end_names(false);
         loop {
@@ -59,7 +62,7 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         xml: &str,
         input_json: &str,
         index_adaptor: &mut impl IncludeAdaptor,
-    ) -> Result<WildDocResult, std::io::Error> {
+    ) -> io::Result<WildDocResult> {
         let mut reader = Reader::from_str(xml);
         reader.check_end_names(false);
         loop {

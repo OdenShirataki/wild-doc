@@ -16,7 +16,7 @@ use std::{
     collections::HashMap,
     ffi::c_void,
     rc::Rc,
-    sync::{Arc, RwLock},
+    sync::{Arc, RwLock}, io,
 };
 
 mod process;
@@ -53,7 +53,7 @@ impl Script {
         input_json: &str,
         reader: &mut Reader<&[u8]>,
         include_adaptor: &mut T,
-    ) -> Result<super::WildDocResult, std::io::Error> {
+    ) -> io::Result<super::WildDocResult> {
         let options = WorkerOptions {
             bootstrap: self.bootstrap.clone(),
             extensions: vec![],
@@ -168,7 +168,7 @@ wd.v=key=>{
         reader: &mut Reader<&[u8]>,
         break_tag: &str,
         include_adaptor: &mut T,
-    ) -> Result<Vec<u8>, std::io::Error> {
+    ) -> io::Result<Vec<u8>> {
         let mut search_map = HashMap::new();
         let mut r = Vec::new();
         loop {

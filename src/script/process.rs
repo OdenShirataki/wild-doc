@@ -3,7 +3,7 @@ use quick_xml::{
     events::{BytesStart, Event},
     Reader,
 };
-use std::convert::TryFrom;
+use std::{convert::TryFrom, io};
 
 use crate::{xml_util, IncludeAdaptor};
 
@@ -15,7 +15,7 @@ pub(super) fn case<T: IncludeAdaptor>(
     xml_str: &str,
     worker: &mut MainWorker,
     include_adaptor: &mut T,
-) -> Result<Vec<u8>, std::io::Error> {
+) -> io::Result<Vec<u8>> {
     let mut r = Vec::new();
     let attr = xml_util::attr2hash_map(&e);
     let cmp_value = crate::attr_parse_or_static(worker, &attr, "value");
@@ -113,7 +113,7 @@ pub(super) fn r#for<T: IncludeAdaptor>(
     xml_str: &str,
     worker: &mut MainWorker,
     include_adaptor: &mut T,
-) -> Result<Vec<u8>, std::io::Error> {
+) -> io::Result<Vec<u8>> {
     let mut r = Vec::new();
     let attr = xml_util::attr2hash_map(&e);
     let var = crate::attr_parse_or_static_string(worker, &attr, "var");
