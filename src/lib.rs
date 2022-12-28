@@ -3,6 +3,7 @@ use quick_xml::{events::Event, Reader};
 use semilattice_database::Database;
 use std::{
     io,
+    path::PathBuf,
     sync::{Arc, RwLock},
 };
 
@@ -30,38 +31,28 @@ impl WildDocResult {
 pub struct WildDoc<T: IncludeAdaptor> {
     database: Arc<RwLock<Database>>,
     default_include_adaptor: T,
+    module_cache_dir: PathBuf,
 }
 impl<T: IncludeAdaptor> WildDoc<T> {
     pub fn new(dir: &str, default_include_adaptor: T) -> io::Result<Self> {
+        let mut module_cache_dir = std::path::Path::new(dir).to_path_buf();
+        module_cache_dir.push("modules");
+        if !module_cache_dir.exists() {
+            std::fs::create_dir_all(&module_cache_dir)?;
+        }
         Ok(Self {
             database: Arc::new(RwLock::new(Database::new(dir)?)),
             default_include_adaptor,
+            module_cache_dir,
         })
     }
-    pub fn run(&mut self, xml: &str, input_json: &str) -> io::Result<WildDocResult> {
-        let mut reader = Reader::from_str(xml);
-        reader.check_end_names(false);
-        loop {
-            match reader.read_event() {
-                Ok(Event::Start(e)) => {
-                    if e.name().as_ref() == b"wd" {
-                        let mut script = Script::new(self.database.clone());
-                        return script.parse_xml(
-                            input_json,
-                            &mut reader,
-                            &mut self.default_include_adaptor,
-                        );
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    pub fn run_specify_include_adaptor(
-        &mut self,
+
+    fn run_inner(
+        database: Arc<RwLock<Database>>,
         xml: &str,
         input_json: &str,
-        index_adaptor: &mut impl IncludeAdaptor,
+        include_adaptor: &mut impl IncludeAdaptor,
+        module_cache_dir: &PathBuf,
     ) -> io::Result<WildDocResult> {
         let mut reader = Reader::from_str(xml);
         reader.check_end_names(false);
@@ -69,8 +60,8 @@ impl<T: IncludeAdaptor> WildDoc<T> {
             match reader.read_event() {
                 Ok(Event::Start(e)) => {
                     if e.name().as_ref() == b"wd" {
-                        let mut script = Script::new(self.database.clone());
-                        return script.parse_xml(input_json, &mut reader, index_adaptor);
+                        let mut script = Script::new(database, module_cache_dir.clone());
+                        return script.parse_xml(input_json, &mut reader, include_adaptor);
                     }
                 }
                 _ => {
@@ -81,6 +72,29 @@ impl<T: IncludeAdaptor> WildDoc<T> {
                 }
             }
         }
+    }
+    pub fn run(&mut self, xml: &str, input_json: &str) -> io::Result<WildDocResult> {
+        Self::run_inner(
+            self.database.clone(),
+            xml,
+            input_json,
+            &mut self.default_include_adaptor,
+            &self.module_cache_dir,
+        )
+    }
+    pub fn run_specify_include_adaptor(
+        &mut self,
+        xml: &str,
+        input_json: &str,
+        include_adaptor: &mut impl IncludeAdaptor,
+    ) -> io::Result<WildDocResult> {
+        Self::run_inner(
+            self.database.clone(),
+            xml,
+            input_json,
+            include_adaptor,
+            &self.module_cache_dir,
+        )
     }
 }
 

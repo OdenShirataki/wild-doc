@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.28.2"
+version = "0.29.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -16,10 +16,11 @@ categories = ["database","database-implementations","text-processing","web-progr
 
 [dependencies]
 rustc-hash = { version = "1.0", default-features = false }
-quick-xml="0.27"
-chrono="0.4"
+quick-xml = "0.27"
+chrono = "0.4"
+log = "0.4.17"
+ring = "0.16.20"
+tokio = { version = "1.21.1", features = ["full"] }
 deno_runtime = "0.90.0"
-
-reqwest = { version = "0.11", features = ["blocking"] }
 
 semilattice-database={version="0.38",path="../semilattice-database"}

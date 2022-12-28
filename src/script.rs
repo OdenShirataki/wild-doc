@@ -15,8 +15,10 @@ use std::{
     borrow::Cow,
     collections::HashMap,
     ffi::c_void,
+    io,
+    path::PathBuf,
     rc::Rc,
-    sync::{Arc, RwLock}, io,
+    sync::{Arc, RwLock},
 };
 
 mod process;
@@ -38,12 +40,12 @@ pub struct Script {
     permissions: Permissions,
 }
 impl Script {
-    pub fn new(database: Arc<RwLock<Database>>) -> Self {
+    pub fn new(database: Arc<RwLock<Database>>, module_cache_dir: PathBuf) -> Self {
         Self {
             database,
             sessions: vec![],
             main_module: deno_core::resolve_path("mainworker").unwrap(),
-            module_loader: WdModuleLoader::new(),
+            module_loader: WdModuleLoader::new(module_cache_dir),
             bootstrap: Default::default(),
             permissions: Permissions::allow_all(),
         }
@@ -153,7 +155,11 @@ wd.v=key=>{
     }
     fn run_script(worker: &mut MainWorker, src: Cow<str>) {
         let src = src.to_string();
-        deno_core::futures::executor::block_on(async {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
             let n = ModuleSpecifier::parse("wd://script").unwrap();
             if let Ok(mod_id) = worker.js_runtime.load_side_module(&n, Some(src)).await {
                 let result = worker.js_runtime.mod_evaluate(mod_id);
