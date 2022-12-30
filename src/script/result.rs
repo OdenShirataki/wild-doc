@@ -395,7 +395,7 @@ pub(super) fn result(
                                                 .unwrap()
                                                 .result_session(
                                                     session.search(collection_id, conditions),
-                                                );
+                                                ).unwrap();
                                             //TODO:セッションデータのソート
                                             let mut i = 0;
                                             for r in rowset {
@@ -485,7 +485,7 @@ pub(super) fn result(
                                                 .clone()
                                                 .read()
                                                 .unwrap()
-                                                .result(search);
+                                                .result(search).unwrap();
                                             let rows = if orders.len() > 0 {
                                                 collection.sort(rowset, orders)
                                             } else {

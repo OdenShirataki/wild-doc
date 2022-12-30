@@ -3,7 +3,7 @@ use quick_xml::{events::Event, Reader};
 use semilattice_database::Database;
 use std::{
     io,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
 
@@ -34,8 +34,9 @@ pub struct WildDoc<T: IncludeAdaptor> {
     module_cache_dir: PathBuf,
 }
 impl<T: IncludeAdaptor> WildDoc<T> {
-    pub fn new(dir: &str, default_include_adaptor: T) -> io::Result<Self> {
-        let mut module_cache_dir = std::path::Path::new(dir).to_path_buf();
+    pub fn new<P: AsRef<Path>>(dir: P, default_include_adaptor: T) -> io::Result<Self> {
+        let dir = dir.as_ref();
+        let mut module_cache_dir = dir.to_path_buf();
         module_cache_dir.push("modules");
         if !module_cache_dir.exists() {
             std::fs::create_dir_all(&module_cache_dir)?;

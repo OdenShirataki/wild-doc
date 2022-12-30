@@ -2,4 +2,5 @@
 Cargo.lock
 **/*.rs.bk
 /wd-test/
+/script-test/
 .vscode
