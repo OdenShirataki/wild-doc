@@ -37,7 +37,7 @@ impl ModuleLoader for WdModuleLoader {
         if specifier.starts_with("wd://") {
             ModuleSpecifier::parse(specifier).map_err(|err| err.into())
         } else {
-            let referrer = deno_runtime::deno_core::resolve_url_or_path(referrer).unwrap();
+            let referrer = deno_runtime::deno_core::resolve_url_or_path(referrer)?;
             deno_runtime::deno_core::resolve_import(specifier, referrer.as_str())
                 .map_err(|err| err.into())
         }
