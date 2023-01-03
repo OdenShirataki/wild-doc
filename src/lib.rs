@@ -99,8 +99,8 @@ impl<T: IncludeAdaptor> WildDoc<T> {
     }
 }
 
-fn eval_result(scope: &mut v8::HandleScope, value: &str) -> Vec<u8> {
-    if let Some(v8_value) = v8::String::new(scope, value)
+fn eval_result(scope: &mut v8::HandleScope, var: &str) -> Vec<u8> {
+    if let Some(v8_value) = v8::String::new(scope, var)
         .and_then(|code| v8::Script::compile(scope, code, None))
         .and_then(|v| v.run(scope))
     {

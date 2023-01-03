@@ -62,30 +62,40 @@ impl ModuleLoader for WdModuleLoader {
                         }
                         buf
                     } else {
+                        let url = module_specifier.to_string();
+                        //println!("{}", &url);
                         let client =
                             create_http_client("wild-doc".into(), None, vec![], None, None, None)?;
-                        let resp = client.get(module_specifier.to_string()).send().await?;
-                        if let Ok(resp) = resp.bytes().await {
-                            let resp = resp.to_vec();
-                            if let Some(dir) = module_cache_path.parent() {
-                                if let Ok(()) = std::fs::create_dir_all(dir) {
-                                    if let Ok(file) = OpenOptions::new()
-                                        .create(true)
-                                        .write(true)
-                                        .truncate(true)
-                                        .open(module_cache_path)
-                                    {
-                                        let _ = BufWriter::new(file).write_all(&resp);
+                        let resp = client.get(url).send().await?;
+                        //println!("resp1:{:?}", resp);
+                        match resp.bytes().await {
+                            Ok(resp) => {
+                                let resp = resp.to_vec();
+                                //println!("resp2:{:?}", resp);
+                                if resp.len()>0{
+                                    if let Some(dir) = module_cache_path.parent() {
+                                        if let Ok(()) = std::fs::create_dir_all(dir) {
+                                            if let Ok(file) = OpenOptions::new()
+                                                .create(true)
+                                                .write(true)
+                                                .truncate(true)
+                                                .open(module_cache_path)
+                                            {
+                                                let _ = BufWriter::new(file).write_all(&resp);
+                                            }
+                                        }
                                     }
                                 }
+                                resp
                             }
-                            resp
-                        } else {
-                            vec![]
+                            Err(e) => {
+                                println!("{:?}", e);
+                                vec![]
+                            }
                         }
                     }
                 } else {
-                    b"".to_vec()
+                    vec![]
                 }
             } else {
                 let path = module_specifier.to_file_path().map_err(|_| {

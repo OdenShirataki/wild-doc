@@ -1,11 +1,11 @@
 [package]
 name = "wild-doc"
-version = "0.30.1"
+version = "0.30.2"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
 
-description = "You can read and write data using XML and output various structured documents.You can also program using javascript(v8)."
+description = "You can read and write data using XML and output various structured documents.You can also program using javascript.It's Deno compatible."
 
 repository = "https://github.com/OdenShirataki/wild-doc"
 
