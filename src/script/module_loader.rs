@@ -79,7 +79,6 @@ impl ModuleLoader for WdModuleLoader {
                         match resp.bytes().await {
                             Ok(resp) => {
                                 let resp = resp.to_vec();
-                                println!("recv:{:?}", resp.len());
                                 if resp.len() > 0 {
                                     if let Some(dir) = module_cache_path.parent() {
                                         if let Ok(()) = std::fs::create_dir_all(dir) {
