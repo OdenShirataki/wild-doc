@@ -3,8 +3,14 @@ use deno_core::{
     ModuleType,
 };
 use deno_runtime::{
-    deno_core,
-    deno_fetch::{create_http_client, reqwest::Url},
+    deno_core::{
+        self,
+        error::{custom_error, generic_error},
+    },
+    deno_fetch::{
+        create_http_client,
+        reqwest::{self, header::LOCATION, Response, Url},
+    },
 };
 use log::error;
 use ring::digest::{Context, SHA256};
@@ -20,7 +26,6 @@ use std::{
 pub struct WdModuleLoader {
     module_cache_dir: PathBuf,
 }
-
 impl WdModuleLoader {
     pub fn new(module_cache_dir: PathBuf) -> Rc<Self> {
         Rc::new(Self { module_cache_dir })
@@ -49,6 +54,11 @@ impl ModuleLoader for WdModuleLoader {
         _maybe_referrer: Option<ModuleSpecifier>,
         _is_dynamic: bool,
     ) -> Pin<Box<deno_core::ModuleSourceFuture>> {
+        /*
+        println!("load : {}", module_specifier.to_string());
+        if let Some(maybe_referrer) = _maybe_referrer {
+            println!("maybe_referrer : {}", maybe_referrer.to_string());
+        }*/
         let module_specifier = module_specifier.clone();
         let mut module_cache_path = self.module_cache_dir.clone();
         async move {
@@ -63,16 +73,14 @@ impl ModuleLoader for WdModuleLoader {
                         buf
                     } else {
                         let url = module_specifier.to_string();
-                        //println!("{}", &url);
                         let client =
                             create_http_client("wild-doc".into(), None, vec![], None, None, None)?;
-                        let resp = client.get(url).send().await?;
-                        //println!("resp1:{:?}", resp);
+                        let resp = get_redirected_response(&client, url).await?;
                         match resp.bytes().await {
                             Ok(resp) => {
                                 let resp = resp.to_vec();
-                                //println!("resp2:{:?}", resp);
-                                if resp.len()>0{
+                                println!("recv:{:?}", resp.len());
+                                if resp.len() > 0 {
                                     if let Some(dir) = module_cache_path.parent() {
                                         if let Ok(()) = std::fs::create_dir_all(dir) {
                                             if let Ok(file) = OpenOptions::new()
@@ -122,6 +130,78 @@ impl ModuleLoader for WdModuleLoader {
             Ok(module)
         }
         .boxed_local()
+    }
+    /* fn prepare_load(
+        &self,
+        _op_state: Rc<RefCell<OpState>>,
+        module_specifier: &ModuleSpecifier,
+        _maybe_referrer: Option<String>,
+        _is_dyn_import: bool,
+    ) -> Pin<Box<dyn Future<Output = Result<(), Error>>>> {
+        async { Ok(()) }.boxed_local()
+    } */
+}
+
+fn resolve_url_from_location(base_url: &Url, location: &str) -> Url {
+    if location.starts_with("http://") || location.starts_with("https://") {
+        // absolute uri
+        Url::parse(location).expect("provided redirect url should be a valid url")
+    } else if location.starts_with("//") {
+        // "//" authority path-abempty
+        Url::parse(&format!("{}:{}", base_url.scheme(), location))
+            .expect("provided redirect url should be a valid url")
+    } else if location.starts_with('/') {
+        // path-absolute
+        base_url
+            .join(location)
+            .expect("provided redirect url should be a valid url")
+    } else {
+        // assuming path-noscheme | path-empty
+        let base_url_path_str = base_url.path().to_owned();
+        // Pop last part or url (after last slash)
+        let segs: Vec<&str> = base_url_path_str.rsplitn(2, '/').collect();
+        let new_path = format!("{}/{}", segs.last().unwrap_or(&""), location);
+        base_url
+            .join(&new_path)
+            .expect("provided redirect url should be a valid url")
+    }
+}
+fn resolve_redirect_from_response(request_url: &Url, response: &Response) -> Result<Url, AnyError> {
+    debug_assert!(response.status().is_redirection());
+    if let Some(location) = response.headers().get(LOCATION) {
+        let location_string = location.to_str().unwrap();
+        log::debug!("Redirecting to {:?}...", &location_string);
+        let new_url = resolve_url_from_location(request_url, location_string);
+        Ok(new_url)
+    } else {
+        Err(generic_error(format!(
+            "Redirection from '{}' did not provide location header",
+            request_url
+        )))
+    }
+}
+async fn get_redirected_response<U: reqwest::IntoUrl>(
+    client: &reqwest::Client,
+    url: U,
+) -> Result<Response, AnyError> {
+    let mut url = url.into_url()?;
+    let mut response = client.get(url.clone()).send().await?;
+    let status = response.status();
+    if status.is_redirection() {
+        for _ in 0..5 {
+            let new_url = resolve_redirect_from_response(&url, &response)?;
+            let new_response = client.get(new_url.clone()).send().await?;
+            let status = new_response.status();
+            if status.is_redirection() {
+                response = new_response;
+                url = new_url;
+            } else {
+                return Ok(new_response);
+            }
+        }
+        Err(custom_error("Http", "Too many redirects."))
+    } else {
+        Ok(response)
     }
 }
 
