@@ -171,7 +171,7 @@ wd.v=key=>{
             .enable_all()
             .build()
             .unwrap();
-        let r=runtime.block_on(async {
+        let _r=runtime.block_on(async {
             let n = ModuleSpecifier::parse("wd://script").unwrap();
             match worker.js_runtime.load_side_module(&n, Some(src)).await{
                 Ok(mod_id)=>{
