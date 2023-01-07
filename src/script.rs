@@ -31,6 +31,17 @@ mod update;
 mod module_loader;
 use module_loader::WdModuleLoader;
 
+macro_rules! located_script_name {
+    () => {
+        format!(
+            "[deno:{}:{}:{}]",
+            std::file!(),
+            std::line!(),
+            std::column!()
+        )
+    };
+}
+
 pub struct Script {
     database: Arc<RwLock<Database>>,
     sessions: Vec<(Session, bool)>,
@@ -59,6 +70,7 @@ impl Script {
         let options = WorkerOptions {
             bootstrap: self.bootstrap.clone(),
             extensions: vec![],
+            extensions_with_js: vec![],
             startup_snapshot: None,
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
@@ -159,14 +171,25 @@ wd.v=key=>{
             .enable_all()
             .build()
             .unwrap();
-        runtime.block_on(async {
+        let r=runtime.block_on(async {
             let n = ModuleSpecifier::parse("wd://script").unwrap();
-            if let Ok(mod_id) = worker.js_runtime.load_side_module(&n, Some(src)).await {
-                let result = worker.js_runtime.mod_evaluate(mod_id);
-                let _ = worker.run_event_loop(false).await;
-                let _ = result.await;
+            match worker.js_runtime.load_side_module(&n, Some(src)).await{
+                Ok(mod_id)=>{
+                    worker.evaluate_module(mod_id).await.unwrap();
+                    let r=loop {
+                        worker.run_event_loop(false).await.unwrap();
+                        match worker.dispatch_beforeunload_event(&located_script_name!()){
+                            Ok(default_prevented) if default_prevented => {}
+                            Ok(_) => break Ok(()),
+                            Err(error) => break Err(error),
+                        }
+                    };
+                    r
+                }
+                Err(error)=>Err(error)
             }
         });
+        println!("{:?}",r);
     }
     pub fn parse<T: IncludeAdaptor>(
         &mut self,

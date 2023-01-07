@@ -1,3 +1,4 @@
+use deno_ast;
 use deno_core::{
     error::AnyError, futures::future::FutureExt, ModuleLoader, ModuleSource, ModuleSpecifier,
     ModuleType,
@@ -54,11 +55,6 @@ impl ModuleLoader for WdModuleLoader {
         _maybe_referrer: Option<ModuleSpecifier>,
         _is_dynamic: bool,
     ) -> Pin<Box<deno_core::ModuleSourceFuture>> {
-        /*
-        println!("load : {}", module_specifier.to_string());
-        if let Some(maybe_referrer) = _maybe_referrer {
-            println!("maybe_referrer : {}", maybe_referrer.to_string());
-        }*/
         let module_specifier = module_specifier.clone();
         let mut module_cache_path = self.module_cache_dir.clone();
         async move {
@@ -114,12 +110,29 @@ impl ModuleLoader for WdModuleLoader {
                 std::fs::read(path)?
             };
 
-            let module_type = if module_specifier.to_string().ends_with(".json") {
+            let string_specifier = module_specifier.to_string();
+            let module_type = if string_specifier.ends_with(".json") {
                 ModuleType::Json
             } else {
                 ModuleType::JavaScript
             };
-
+            let code = if string_specifier.ends_with(".ts") {
+                let parse_soure = deno_ast::parse_module(deno_ast::ParseParams {
+                    specifier: string_specifier,
+                    text_info: deno_ast::SourceTextInfo::new(
+                        std::str::from_utf8(&code).unwrap().into(),
+                    ),
+                    media_type: deno_ast::MediaType::TypeScript,
+                    capture_tokens: true,
+                    scope_analysis: true,
+                    maybe_syntax: None,
+                })
+                .unwrap();
+                let transpiled_source = parse_soure.transpile(&Default::default()).unwrap();
+                transpiled_source.text.as_bytes().to_vec()
+            } else {
+                code
+            };
             let module = ModuleSource {
                 code: code.into_boxed_slice(),
                 module_type,
