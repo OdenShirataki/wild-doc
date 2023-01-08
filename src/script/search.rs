@@ -63,6 +63,34 @@ pub(super) fn make_conditions(
     conditions
 }
 
+fn condition_depend(
+    script: &Script,
+    worker: &mut MainWorker,
+    e: &quick_xml::events::BytesStart,
+) -> Option<Condition> {
+    let attr = xml_util::attr2hash_map(e);
+    let row = crate::attr_parse_or_static_string(worker, &attr, "row");
+    let collection_name = crate::attr_parse_or_static_string(worker, &attr, "collection");
+
+    if row != "" && collection_name != "" {
+        if let (Ok(row), Some(collection_id)) = (
+            row.parse::<u32>(),
+            script
+                .database
+                .clone()
+                .read()
+                .unwrap()
+                .collection_id(&collection_name),
+        ) {
+            let key = crate::attr_parse_or_static_string(worker, &attr, "key");
+            return Some(Condition::Depend(Depend::new(
+                key,
+                CollectionRow::new(collection_id, row),
+            )));
+        }
+    }
+    None
+}
 fn condition_loop(
     script: &Script,
     reader: &mut Reader<&[u8]>,
@@ -90,39 +118,25 @@ fn condition_loop(
                         conditions.push(Condition::Wide(condition_loop(script, reader, worker)));
                     }
                     b"depend" => {
-                        let attr = xml_util::attr2hash_map(e);
-                        let row = crate::attr_parse_or_static_string(worker, &attr, "row");
-                        let collection_name =
-                            crate::attr_parse_or_static_string(worker, &attr, "collection");
-
-                        if row != "" && collection_name != "" {
-                            if let (Ok(row), Some(collection_id)) = (
-                                row.parse::<u32>(),
-                                script
-                                    .database
-                                    .clone()
-                                    .read()
-                                    .unwrap()
-                                    .collection_id(&collection_name),
-                            ) {
-                                let key = crate::attr_parse_or_static_string(worker, &attr, "key");
-                                conditions.push(Condition::Depend(Depend::new(
-                                    key,
-                                    CollectionRow::new(collection_id, row),
-                                )));
-                            }
+                        if let Some(c) = condition_depend(script, worker, e) {
+                            conditions.push(c);
                         }
                     }
                     _ => {}
                 },
-                Event::Empty(e) => match e.name().as_ref() {
+                Event::Empty(ref e) => match e.name().as_ref() {
                     b"field" => {
-                        if let Some(c) = condition_field(xml_util::attr2hash_map(&e), worker) {
+                        if let Some(c) = condition_field(xml_util::attr2hash_map(e), worker) {
                             conditions.push(c);
                         }
                     }
                     b"row" => {
-                        if let Some(c) = condition_row(xml_util::attr2hash_map(&e), worker) {
+                        if let Some(c) = condition_row(xml_util::attr2hash_map(e), worker) {
+                            conditions.push(c);
+                        }
+                    }
+                    b"depend" => {
+                        if let Some(c) = condition_depend(script, worker, e) {
                             conditions.push(c);
                         }
                     }
