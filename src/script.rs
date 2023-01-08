@@ -171,14 +171,14 @@ wd.v=key=>{
             .enable_all()
             .build()
             .unwrap();
-        let _r=runtime.block_on(async {
-            let n = ModuleSpecifier::parse("wd://script").unwrap();
-            match worker.js_runtime.load_side_module(&n, Some(src)).await{
-                Ok(mod_id)=>{
-                    worker.evaluate_module(mod_id).await.unwrap();
-                    let r=loop {
-                        worker.run_event_loop(false).await.unwrap();
-                        match worker.dispatch_beforeunload_event(&located_script_name!()){
+        let _r = runtime.block_on(async {
+            let n = ModuleSpecifier::parse("wd://script")?;
+            match worker.js_runtime.load_side_module(&n, Some(src)).await {
+                Ok(mod_id) => {
+                    worker.evaluate_module(mod_id).await?;
+                    let r = loop {
+                        worker.run_event_loop(false).await?;
+                        match worker.dispatch_beforeunload_event(&located_script_name!()) {
                             Ok(default_prevented) if default_prevented => {}
                             Ok(_) => break Ok(()),
                             Err(error) => break Err(error),
@@ -186,7 +186,7 @@ wd.v=key=>{
                     };
                     r
                 }
-                Err(error)=>Err(error)
+                Err(error) => Err(error),
             }
         });
     }
