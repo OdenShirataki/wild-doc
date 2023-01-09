@@ -342,25 +342,26 @@ wd.v=key=>{
                                     &xml_util::attr2hash_map(e),
                                     "src",
                                 );
-                                let xml = include_adaptor.include(&src);
-                                if xml.len() > 0 {
-                                    let str_xml = "<root>".to_owned() + &xml + "</root>";
-                                    let mut event_reader_inner = Reader::from_str(&str_xml);
-                                    event_reader_inner.check_end_names(false);
-                                    loop {
-                                        match event_reader_inner.read_event() {
-                                            Ok(Event::Start(e)) => {
-                                                if e.name().as_ref() == b"root" {
-                                                    r.append(&mut self.parse(
-                                                        worker,
-                                                        &mut event_reader_inner,
-                                                        "root",
-                                                        include_adaptor,
-                                                    )?);
-                                                    break;
+                                if let Some(xml) = include_adaptor.include(&src) {
+                                    if xml.len() > 0 {
+                                        let str_xml = "<root>".to_owned() + &xml + "</root>";
+                                        let mut event_reader_inner = Reader::from_str(&str_xml);
+                                        event_reader_inner.check_end_names(false);
+                                        loop {
+                                            match event_reader_inner.read_event() {
+                                                Ok(Event::Start(e)) => {
+                                                    if e.name().as_ref() == b"root" {
+                                                        r.append(&mut self.parse(
+                                                            worker,
+                                                            &mut event_reader_inner,
+                                                            "root",
+                                                            include_adaptor,
+                                                        )?);
+                                                        break;
+                                                    }
                                                 }
+                                                _ => {}
                                             }
-                                            _ => {}
                                         }
                                     }
                                 }
