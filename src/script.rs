@@ -176,15 +176,14 @@ wd.v=key=>{
             match worker.js_runtime.load_side_module(&n, Some(src)).await {
                 Ok(mod_id) => {
                     worker.evaluate_module(mod_id).await?;
-                    let r = loop {
+                    loop {
                         worker.run_event_loop(false).await?;
                         match worker.dispatch_beforeunload_event(&located_script_name!()) {
                             Ok(default_prevented) if default_prevented => {}
                             Ok(_) => break Ok(()),
                             Err(error) => break Err(error),
                         }
-                    };
-                    r
+                    }
                 }
                 Err(error) => Err(error),
             }
@@ -337,12 +336,24 @@ wd.v=key=>{
                                 ));
                             }
                             b"wd:include" => {
-                                let src = crate::attr_parse_or_static_string(
-                                    worker,
-                                    &xml_util::attr2hash_map(e),
-                                    "src",
-                                );
-                                if let Some(xml) = include_adaptor.include(&src) {
+                                let attr = xml_util::attr2hash_map(e);
+                                let xml = if let Some(xml) = include_adaptor.include(
+                                    &crate::attr_parse_or_static_string(worker, &attr, "src"),
+                                ) {
+                                    Some(xml)
+                                } else {
+                                    let substitute = crate::attr_parse_or_static_string(
+                                        worker,
+                                        &attr,
+                                        "substitute",
+                                    );
+                                    if let Some(xml) = include_adaptor.include(&substitute) {
+                                        Some(xml)
+                                    } else {
+                                        None
+                                    }
+                                };
+                                if let Some(xml) = xml {
                                     if xml.len() > 0 {
                                         let str_xml = "<root>".to_owned() + &xml + "</root>";
                                         let mut event_reader_inner = Reader::from_str(&str_xml);
