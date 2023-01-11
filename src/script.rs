@@ -189,6 +189,15 @@ wd.v=key=>{
             }
         });
     }
+    fn session_gc(&mut self, worker: &mut MainWorker, e: &BytesStart) -> io::Result<()> {
+        let str_expire =
+            crate::attr_parse_or_static_string(worker, &xml_util::attr2hash_map(e), "expire");
+        let mut expire = 60 * 60 * 24;
+        if let Ok(parsed) = str_expire.parse::<i64>() {
+            expire = parsed;
+        }
+        self.database.clone().write().unwrap().session_gc(expire)
+    }
     pub fn parse<T: IncludeAdaptor>(
         &mut self,
         worker: &mut MainWorker,
@@ -209,31 +218,39 @@ wd.v=key=>{
                                 let attr = xml_util::attr2hash_map(&e);
                                 let session_name =
                                     crate::attr_parse_or_static_string(worker, &attr, "name");
-                                let clear_on_close =
-                                    crate::attr_parse_or_static(worker, &attr, "clear_on_close");
-
-                                if let Ok(mut session) = Session::new(
-                                    &self.database.clone().read().unwrap(),
-                                    &session_name,
-                                ) {
-                                    if session_name != "" {
-                                        let initialize = crate::attr_parse_or_static(
-                                            worker,
-                                            &attr,
-                                            "initialize",
-                                        );
-                                        if initialize == b"true" {
+                                if session_name != "" {
+                                    let clear_on_close = crate::attr_parse_or_static(
+                                        worker,
+                                        &attr,
+                                        "clear_on_close",
+                                    );
+                                    let expire =
+                                        crate::attr_parse_or_static_string(worker, &attr, "expire");
+                                    let expire = if expire.len() > 0 {
+                                        expire.parse::<i64>().ok()
+                                    } else {
+                                        None
+                                    };
+                                    if let Ok(mut session) = Session::new(
+                                        &self.database.clone().read().unwrap(),
+                                        &session_name,
+                                        expire,
+                                    ) {
+                                        if crate::attr_parse_or_static(worker, &attr, "initialize")
+                                            == b"true"
+                                        {
                                             self.database
                                                 .clone()
                                                 .read()
                                                 .unwrap()
-                                                .session_restart(&mut session)?;
+                                                .session_restart(&mut session, expire)?;
                                         }
+                                        self.sessions.push((session, clear_on_close == b"true"));
                                     }
-                                    self.sessions.push((session, clear_on_close == b"true"));
-                                } else {
-                                    xml_util::outer(&next, name, reader);
                                 }
+                            }
+                            b"wd:session_gc" => {
+                                self.session_gc(worker, e)?;
                             }
                             b"wd:update" => {
                                 let with_commit = crate::attr_parse_or_static(
@@ -334,6 +351,9 @@ wd.v=key=>{
                                     &xml_util::attr2hash_map(e),
                                     "value",
                                 ));
+                            }
+                            b"wd:session_gc" => {
+                                self.session_gc(worker, e)?;
                             }
                             b"wd:include" => {
                                 let attr = xml_util::attr2hash_map(e);
