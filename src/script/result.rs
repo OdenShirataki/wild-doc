@@ -244,8 +244,8 @@ fn set_values<'s>(
     collection_id: i32,
     row: i64,
     activity: i32,
-    term_begin: i64,
-    term_end: i64,
+    term_begin: u64,
+    term_end: u64,
 ) -> v8::Local<'s, v8::Object> {
     let obj = v8::Object::new(scope);
 
@@ -298,7 +298,7 @@ fn set_serial<'s>(scope: &mut HandleScope<'s>, object: v8::Local<'s, v8::Object>
 fn set_last_update<'s>(
     scope: &mut HandleScope<'s>,
     object: v8::Local<'s, v8::Object>,
-    last_update: i64,
+    last_update: u64,
 ) {
     if let Some(v8str_last_update) = v8::String::new(scope, "last_update") {
         if let Some(last_update) = v8::Date::new(scope, (last_update as f64) * 1000.0) {

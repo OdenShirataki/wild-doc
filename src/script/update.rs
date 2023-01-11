@@ -141,7 +141,7 @@ pub fn make_update_struct(
                                         .datetime_from_str(&term_begin, "%Y-%m-%d %H:%M:%S")
                                         .map_or(None, |v| Some(v.timestamp()))
                                     {
-                                        Term::Overwrite(t)
+                                        Term::Overwrite(t as u64)
                                     } else {
                                         Term::Defalut
                                     }
@@ -155,7 +155,7 @@ pub fn make_update_struct(
                                         .datetime_from_str(&term_end, "%Y-%m-%d %H:%M:%S")
                                         .map_or(None, |v| Some(v.timestamp()))
                                     {
-                                        Term::Overwrite(t)
+                                        Term::Overwrite(t as u64)
                                     } else {
                                         Term::Defalut
                                     }

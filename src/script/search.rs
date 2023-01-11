@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 use deno_runtime::worker::MainWorker;
 use quick_xml::{events::Event, Reader};
 use semilattice_database::{search, Activity, CollectionRow, Condition, Depend};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::xml_util::{self, XmlAttr};
 
@@ -30,10 +31,20 @@ pub(super) fn make_conditions(
         conditions.push(Condition::Activity(activity));
     }
     let term = attr.get("term").map_or(
-        Some(search::Term::In(chrono::Local::now().timestamp())),
+        Some(search::Term::In(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        )),
         |v| {
             std::str::from_utf8(v).map_or(
-                Some(search::Term::In(chrono::Local::now().timestamp())),
+                Some(search::Term::In(
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                )),
                 |v| {
                     if v == "all" {
                         None
@@ -41,16 +52,31 @@ pub(super) fn make_conditions(
                         let v: Vec<&str> = v.split("@").collect();
                         if v.len() == 2 {
                             NaiveDateTime::parse_from_str(v[1], "%Y-%m-%d %H:%M:%S").map_or(
-                                Some(search::Term::In(chrono::Local::now().timestamp())),
+                                Some(search::Term::In(
+                                    SystemTime::now()
+                                        .duration_since(UNIX_EPOCH)
+                                        .unwrap()
+                                        .as_secs(),
+                                )),
                                 |t| match v[0] {
-                                    "in" => Some(search::Term::In(t.timestamp())),
-                                    "future" => Some(search::Term::Future(t.timestamp())),
-                                    "past" => Some(search::Term::Past(t.timestamp())),
-                                    _ => Some(search::Term::In(chrono::Local::now().timestamp())),
+                                    "in" => Some(search::Term::In(t.timestamp() as u64)),
+                                    "future" => Some(search::Term::Future(t.timestamp() as u64)),
+                                    "past" => Some(search::Term::Past(t.timestamp() as u64)),
+                                    _ => Some(search::Term::In(
+                                        SystemTime::now()
+                                            .duration_since(UNIX_EPOCH)
+                                            .unwrap()
+                                            .as_secs(),
+                                    )),
                                 },
                             )
                         } else {
-                            Some(search::Term::In(chrono::Local::now().timestamp()))
+                            Some(search::Term::In(
+                                SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_secs(),
+                            ))
                         }
                     }
                 },
