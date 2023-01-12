@@ -310,12 +310,41 @@ wd.v=key=>{
                                 let scope = &mut v8::ContextScope::new(scope, context);
 
                                 let obj = v8::Object::new(scope);
-                                if let Ok(array) = deno_core::serde_v8::to_v8(
-                                    scope,
-                                    self.database.read().unwrap().collections(),
-                                ) {
-                                    if var != "" {
-                                        if let Some(v8str_var) = v8::String::new(scope, &var) {
+                                if var != "" {
+                                    if let (Ok(array), Some(v8str_var)) = (
+                                        deno_core::serde_v8::to_v8(
+                                            scope,
+                                            self.database.read().unwrap().collections(),
+                                        ),
+                                        v8::String::new(scope, &var),
+                                    ) {
+                                        obj.define_own_property(
+                                            scope,
+                                            v8str_var.into(),
+                                            array.into(),
+                                            v8::READ_ONLY,
+                                        );
+                                    }
+                                }
+                                stack::push(context, scope, obj);
+                            }
+                            b"wd:sessions" => {
+                                let attr = xml_util::attr2hash_map(&e);
+                                let var = crate::attr_parse_or_static_string(worker, &attr, "var");
+
+                                let scope = &mut worker.js_runtime.handle_scope();
+                                let context = scope.get_current_context();
+                                let scope = &mut v8::ContextScope::new(scope, context);
+
+                                let obj = v8::Object::new(scope);
+                                if var != "" {
+                                    if let (Ok(sessions), Some(v8str_var)) = (
+                                        self.database.read().unwrap().sessions(),
+                                        v8::String::new(scope, &var),
+                                    ) {
+                                        if let Ok(array) =
+                                            deno_core::serde_v8::to_v8(scope, sessions)
+                                        {
                                             obj.define_own_property(
                                                 scope,
                                                 v8str_var.into(),
@@ -444,6 +473,7 @@ wd.v=key=>{
                                 if name == b"wd:stack"
                                     || name == b"wd:result"
                                     || name == b"wd:collections"
+                                    || name == b"wd:sessions"
                                 {
                                     let _ = worker.execute_script("stack.pop", "wd.stack.pop();");
                                 } else if name == b"wd:session" {
