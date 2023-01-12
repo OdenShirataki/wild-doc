@@ -309,11 +309,11 @@ wd.v=key=>{
                                 let context = scope.get_current_context();
                                 let scope = &mut v8::ContextScope::new(scope, context);
 
+                                let obj = v8::Object::new(scope);
                                 if let Ok(array) = deno_core::serde_v8::to_v8(
                                     scope,
                                     self.database.read().unwrap().collections(),
                                 ) {
-                                    let obj = v8::Object::new(scope);
                                     if var != "" {
                                         if let Some(v8str_var) = v8::String::new(scope, &var) {
                                             obj.define_own_property(
@@ -324,8 +324,8 @@ wd.v=key=>{
                                             );
                                         }
                                     }
-                                    stack::push(context, scope, obj);
                                 }
+                                stack::push(context, scope, obj);
                             }
                             b"wd:stack" => {
                                 if let Ok(Some(var)) = e.try_get_attribute(b"var") {
