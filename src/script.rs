@@ -26,6 +26,7 @@ mod process;
 use crate::{xml_util, IncludeAdaptor};
 mod result;
 mod search;
+mod stack;
 mod update;
 
 mod module_loader;
@@ -307,46 +308,23 @@ wd.v=key=>{
                                 let scope = &mut worker.js_runtime.handle_scope();
                                 let context = scope.get_current_context();
                                 let scope = &mut v8::ContextScope::new(scope, context);
-                                if let (Some(v8str_wd), Some(v8str_stack), Some(v8str_var)) = (
-                                    v8::String::new(scope, "wd"),
-                                    v8::String::new(scope, "stack"),
-                                    v8::String::new(scope, &var),
+
+                                if let Ok(array) = deno_core::serde_v8::to_v8(
+                                    scope,
+                                    self.database.read().unwrap().collections(),
                                 ) {
-                                    let global = context.global(scope);
-                                    if let Some(wd) = global.get(scope, v8str_wd.into()) {
-                                        if let Ok(wd) = v8::Local::<v8::Object>::try_from(wd) {
-                                            if let Some(stack) = wd.get(scope, v8str_stack.into()) {
-                                                if let Ok(stack) =
-                                                    v8::Local::<v8::Array>::try_from(stack)
-                                                {
-                                                    let obj = v8::Object::new(scope);
-                                                    if var != "" {
-                                                        if let Ok(array) =
-                                                            deno_core::serde_v8::to_v8(
-                                                                scope,
-                                                                self.database
-                                                                    .read()
-                                                                    .unwrap()
-                                                                    .collections(),
-                                                            )
-                                                        {
-                                                            obj.define_own_property(
-                                                                scope,
-                                                                v8str_var.into(),
-                                                                array.into(),
-                                                                READ_ONLY,
-                                                            );
-                                                        }
-                                                    }
-                                                    stack.set_index(
-                                                        scope,
-                                                        stack.length(),
-                                                        obj.into(),
-                                                    );
-                                                }
-                                            }
+                                    let obj = v8::Object::new(scope);
+                                    if var != "" {
+                                        if let Some(v8str_var) = v8::String::new(scope, &var) {
+                                            obj.define_own_property(
+                                                scope,
+                                                v8str_var.into(),
+                                                array.into(),
+                                                v8::READ_ONLY,
+                                            );
                                         }
                                     }
+                                    stack::push(context, scope, obj);
                                 }
                             }
                             b"wd:stack" => {
