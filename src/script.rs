@@ -321,35 +321,22 @@ wd.v=key=>{
                                                 {
                                                     let obj = v8::Object::new(scope);
                                                     if var != "" {
-                                                        let collections = self
-                                                            .database
-                                                            .read()
-                                                            .unwrap()
-                                                            .collections();
-
-                                                        let array = v8::Array::new(
-                                                            scope,
-                                                            collections.len() as i32,
-                                                        );
-                                                        for (i, collection) in
-                                                            collections.iter().enumerate()
+                                                        if let Ok(array) =
+                                                            deno_core::serde_v8::to_v8(
+                                                                scope,
+                                                                self.database
+                                                                    .read()
+                                                                    .unwrap()
+                                                                    .collections(),
+                                                            )
                                                         {
-                                                            if let Some(v8_str) =
-                                                                v8::String::new(scope, &collection)
-                                                            {
-                                                                array.set_index(
-                                                                    scope,
-                                                                    i as u32,
-                                                                    v8_str.into(),
-                                                                );
-                                                            }
+                                                            obj.define_own_property(
+                                                                scope,
+                                                                v8str_var.into(),
+                                                                array.into(),
+                                                                READ_ONLY,
+                                                            );
                                                         }
-                                                        obj.define_own_property(
-                                                            scope,
-                                                            v8str_var.into(),
-                                                            array.into(),
-                                                            READ_ONLY,
-                                                        );
                                                     }
                                                     stack.set_index(
                                                         scope,
