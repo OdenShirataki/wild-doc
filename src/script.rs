@@ -470,25 +470,27 @@ wd.v=key=>{
                             break;
                         } else {
                             if name.starts_with(b"wd:") {
-                                if name == b"wd:stack"
-                                    || name == b"wd:result"
-                                    || name == b"wd:collections"
-                                    || name == b"wd:sessions"
-                                {
-                                    let _ = worker.execute_script("stack.pop", "wd.stack.pop();");
-                                } else if name == b"wd:session" {
-                                    if let Some((ref mut session, clear_on_close)) =
-                                        self.sessions.pop()
-                                    {
-                                        if clear_on_close {
-                                            let _ = self
-                                                .database
-                                                .clone()
-                                                .write()
-                                                .unwrap()
-                                                .session_clear(session);
+                                match name {
+                                    b"wd:stack" | b"wd:result" | b"wd:collections"
+                                    | b"wd:sessions" => {
+                                        let _ =
+                                            worker.execute_script("stack.pop", "wd.stack.pop();");
+                                    }
+                                    b"wd:session" => {
+                                        if let Some((ref mut session, clear_on_close)) =
+                                            self.sessions.pop()
+                                        {
+                                            if clear_on_close {
+                                                let _ = self
+                                                    .database
+                                                    .clone()
+                                                    .write()
+                                                    .unwrap()
+                                                    .session_clear(session);
+                                            }
                                         }
                                     }
+                                    _ => {}
                                 }
                             } else {
                                 r.append(&mut b"</".to_vec());
@@ -524,29 +526,36 @@ wd.v=key=>{
         for attr in e.attributes() {
             if let Ok(attr) = attr {
                 if let Ok(attr_key) = std::str::from_utf8(attr.key.as_ref()) {
-                    let is_wd = attr_key.starts_with("wd:");
-                    let attr_key = if is_wd {
-                        attr_key.split_at(3).1
-                    } else {
-                        attr_key
-                    };
-                    html_attr.push(' ');
-                    html_attr.push_str(attr_key);
-                    html_attr.push_str("=\"");
-
-                    if let Ok(value) = std::str::from_utf8(&attr.value) {
-                        if is_wd {
+                    if attr_key == "wd-attr:replace" {
+                        if let Ok(value) = std::str::from_utf8(&attr.value) {
+                            html_attr.push(' ');
                             html_attr.push_str(&crate::eval_result_string(scope, value));
+                        }
+                    } else {
+                        let is_wd = attr_key.starts_with("wd:");
+                        let attr_key = if is_wd {
+                            attr_key.split_at(3).1
                         } else {
-                            html_attr.push_str(
-                                &value
-                                    .replace("&", "&amp;")
-                                    .replace("<", "&lt;")
-                                    .replace(">", "&gt;"),
-                            );
+                            attr_key
+                        };
+                        html_attr.push(' ');
+                        html_attr.push_str(attr_key);
+
+                        if let Ok(value) = std::str::from_utf8(&attr.value) {
+                            html_attr.push_str("=\"");
+                            if is_wd {
+                                html_attr.push_str(&crate::eval_result_string(scope, value));
+                            } else {
+                                html_attr.push_str(
+                                    &value
+                                        .replace("&", "&amp;")
+                                        .replace("<", "&lt;")
+                                        .replace(">", "&gt;"),
+                                );
+                            }
+                            html_attr.push('"');
                         }
                     }
-                    html_attr.push('"');
                 }
             }
         }
