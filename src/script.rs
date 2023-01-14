@@ -2,7 +2,7 @@ use deno_runtime::{
     deno_broadcast_channel::InMemoryBroadcastChannel,
     deno_core::{self, v8, v8::READ_ONLY, ModuleSpecifier},
     deno_web::BlobStore,
-    permissions::Permissions,
+    permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
     BootstrapOptions,
 };
@@ -52,7 +52,7 @@ pub struct Script {
     main_module: ModuleSpecifier,
     module_loader: Rc<WdModuleLoader>,
     bootstrap: BootstrapOptions,
-    permissions: Permissions,
+    permissions: PermissionsContainer,
 }
 impl Script {
     pub fn new(database: Arc<RwLock<Database>>, module_cache_dir: PathBuf) -> Self {
@@ -62,7 +62,7 @@ impl Script {
             main_module: deno_core::resolve_path("mainworker").unwrap(),
             module_loader: WdModuleLoader::new(module_cache_dir),
             bootstrap: Default::default(),
-            permissions: Permissions::allow_all(),
+            permissions: PermissionsContainer::allow_all(),
         }
     }
     pub fn parse_xml<T: IncludeAdaptor>(

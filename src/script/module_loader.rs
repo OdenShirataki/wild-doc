@@ -7,6 +7,7 @@ use deno_runtime::{
     deno_core::{
         self,
         error::{custom_error, generic_error},
+        ResolutionKind,
     },
     deno_fetch::{
         create_http_client,
@@ -38,7 +39,7 @@ impl ModuleLoader for WdModuleLoader {
         &self,
         specifier: &str,
         referrer: &str,
-        _is_main: bool,
+        _kind: ResolutionKind,
     ) -> Result<ModuleSpecifier, AnyError> {
         if specifier.starts_with("wd://") {
             ModuleSpecifier::parse(specifier).map_err(|err| err.into())
