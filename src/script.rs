@@ -199,6 +199,51 @@ wd.v=key=>{
         }
         self.database.clone().write().unwrap().session_gc(expire)
     }
+    fn include<T: IncludeAdaptor>(
+        &mut self,
+        worker: &mut MainWorker,
+        e: &BytesStart,
+        include_adaptor: &mut T,
+    ) -> io::Result<Vec<u8>> {
+        let mut r = Vec::new();
+        let attr = xml_util::attr2hash_map(e);
+        let xml = if let Some(xml) =
+            include_adaptor.include(&crate::attr_parse_or_static_string(worker, &attr, "src"))
+        {
+            Some(xml)
+        } else {
+            let substitute = crate::attr_parse_or_static_string(worker, &attr, "substitute");
+            if let Some(xml) = include_adaptor.include(&substitute) {
+                Some(xml)
+            } else {
+                None
+            }
+        };
+        if let Some(xml) = xml {
+            if xml.len() > 0 {
+                let str_xml = "<root>".to_owned() + &xml + "</root>";
+                let mut event_reader_inner = Reader::from_str(&str_xml);
+                event_reader_inner.check_end_names(false);
+                loop {
+                    match event_reader_inner.read_event() {
+                        Ok(Event::Start(e)) => {
+                            if e.name().as_ref() == b"root" {
+                                r.append(&mut self.parse(
+                                    worker,
+                                    &mut event_reader_inner,
+                                    "root",
+                                    include_adaptor,
+                                )?);
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        Ok(r)
+    }
     pub fn parse<T: IncludeAdaptor>(
         &mut self,
         worker: &mut MainWorker,
@@ -250,8 +295,18 @@ wd.v=key=>{
                                     }
                                 }
                             }
+                            b"wd:print" => {
+                                r.append(&mut crate::attr_parse_or_static(
+                                    worker,
+                                    &xml_util::attr2hash_map(e),
+                                    "value",
+                                ));
+                            }
                             b"wd:session_gc" => {
                                 self.session_gc(worker, e)?;
+                            }
+                            b"wd:include" => {
+                                r.append(&mut self.include(worker, e, include_adaptor)?);
                             }
                             b"wd:update" => {
                                 let with_commit = crate::attr_parse_or_static(
@@ -412,46 +467,7 @@ wd.v=key=>{
                                 self.session_gc(worker, e)?;
                             }
                             b"wd:include" => {
-                                let attr = xml_util::attr2hash_map(e);
-                                let xml = if let Some(xml) = include_adaptor.include(
-                                    &crate::attr_parse_or_static_string(worker, &attr, "src"),
-                                ) {
-                                    Some(xml)
-                                } else {
-                                    let substitute = crate::attr_parse_or_static_string(
-                                        worker,
-                                        &attr,
-                                        "substitute",
-                                    );
-                                    if let Some(xml) = include_adaptor.include(&substitute) {
-                                        Some(xml)
-                                    } else {
-                                        None
-                                    }
-                                };
-                                if let Some(xml) = xml {
-                                    if xml.len() > 0 {
-                                        let str_xml = "<root>".to_owned() + &xml + "</root>";
-                                        let mut event_reader_inner = Reader::from_str(&str_xml);
-                                        event_reader_inner.check_end_names(false);
-                                        loop {
-                                            match event_reader_inner.read_event() {
-                                                Ok(Event::Start(e)) => {
-                                                    if e.name().as_ref() == b"root" {
-                                                        r.append(&mut self.parse(
-                                                            worker,
-                                                            &mut event_reader_inner,
-                                                            "root",
-                                                            include_adaptor,
-                                                        )?);
-                                                        break;
-                                                    }
-                                                }
-                                                _ => {}
-                                            }
-                                        }
-                                    }
-                                }
+                                r.append(&mut self.include(worker, e, include_adaptor)?);
                             }
                             _ => {
                                 if !name.starts_with(b"wd:") {
