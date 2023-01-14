@@ -10,7 +10,7 @@ use quick_xml::{
     events::{BytesStart, Event},
     Reader,
 };
-use semilattice_database::{Database, Session};
+use semilattice_database::{Condition, Database, Session};
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -190,60 +190,7 @@ wd.v=key=>{
             }
         });
     }
-    fn session_gc(&mut self, worker: &mut MainWorker, e: &BytesStart) -> io::Result<()> {
-        let str_expire =
-            crate::attr_parse_or_static_string(worker, &xml_util::attr2hash_map(e), "expire");
-        let mut expire = 60 * 60 * 24;
-        if let Ok(parsed) = str_expire.parse::<i64>() {
-            expire = parsed;
-        }
-        self.database.clone().write().unwrap().session_gc(expire)
-    }
-    fn include<T: IncludeAdaptor>(
-        &mut self,
-        worker: &mut MainWorker,
-        e: &BytesStart,
-        include_adaptor: &mut T,
-    ) -> io::Result<Vec<u8>> {
-        let mut r = Vec::new();
-        let attr = xml_util::attr2hash_map(e);
-        let xml = if let Some(xml) =
-            include_adaptor.include(&crate::attr_parse_or_static_string(worker, &attr, "src"))
-        {
-            Some(xml)
-        } else {
-            let substitute = crate::attr_parse_or_static_string(worker, &attr, "substitute");
-            if let Some(xml) = include_adaptor.include(&substitute) {
-                Some(xml)
-            } else {
-                None
-            }
-        };
-        if let Some(xml) = xml {
-            if xml.len() > 0 {
-                let str_xml = "<root>".to_owned() + &xml + "</root>";
-                let mut event_reader_inner = Reader::from_str(&str_xml);
-                event_reader_inner.check_end_names(false);
-                loop {
-                    match event_reader_inner.read_event() {
-                        Ok(Event::Start(e)) => {
-                            if e.name().as_ref() == b"root" {
-                                r.append(&mut self.parse(
-                                    worker,
-                                    &mut event_reader_inner,
-                                    "root",
-                                    include_adaptor,
-                                )?);
-                                break;
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-        Ok(r)
-    }
+
     pub fn parse<T: IncludeAdaptor>(
         &mut self,
         worker: &mut MainWorker,
@@ -261,39 +208,7 @@ wd.v=key=>{
                         let name_ref = name.as_ref();
                         match name_ref {
                             b"wd:session" => {
-                                let attr = xml_util::attr2hash_map(&e);
-                                let session_name =
-                                    crate::attr_parse_or_static_string(worker, &attr, "name");
-                                if session_name != "" {
-                                    let clear_on_close = crate::attr_parse_or_static(
-                                        worker,
-                                        &attr,
-                                        "clear_on_close",
-                                    );
-                                    let expire =
-                                        crate::attr_parse_or_static_string(worker, &attr, "expire");
-                                    let expire = if expire.len() > 0 {
-                                        expire.parse::<i64>().ok()
-                                    } else {
-                                        None
-                                    };
-                                    if let Ok(mut session) = Session::new(
-                                        &self.database.clone().read().unwrap(),
-                                        &session_name,
-                                        expire,
-                                    ) {
-                                        if crate::attr_parse_or_static(worker, &attr, "initialize")
-                                            == b"true"
-                                        {
-                                            self.database
-                                                .clone()
-                                                .read()
-                                                .unwrap()
-                                                .session_restart(&mut session, expire)?;
-                                        }
-                                        self.sessions.push((session, clear_on_close == b"true"));
-                                    }
-                                }
+                                self.session(worker, e)?;
                             }
                             b"wd:print" => {
                                 r.append(&mut crate::attr_parse_or_static(
@@ -309,107 +224,19 @@ wd.v=key=>{
                                 r.append(&mut self.include(worker, e, include_adaptor)?);
                             }
                             b"wd:update" => {
-                                let with_commit = crate::attr_parse_or_static(
-                                    worker,
-                                    &xml_util::attr2hash_map(&e),
-                                    "commit",
-                                ) == b"1";
-                                let inner_xml =
-                                    self.parse(worker, reader, "wd:update", include_adaptor)?;
-                                let mut inner_reader =
-                                    Reader::from_str(std::str::from_utf8(&inner_xml).unwrap());
-                                inner_reader.check_end_names(false);
-                                let updates =
-                                    update::make_update_struct(self, &mut inner_reader, worker);
-                                if let Some((ref mut session, _)) = self.sessions.last_mut() {
-                                    self.database
-                                        .clone()
-                                        .read()
-                                        .unwrap()
-                                        .update(session, updates)?;
-                                    if with_commit {
-                                        self.database.clone().write().unwrap().commit(session)?;
-                                    }
-                                }
+                                self.update(worker, reader, e, include_adaptor)?;
                             }
                             b"wd:search" => {
-                                let attr = xml_util::attr2hash_map(&e);
-                                let name =
-                                    crate::attr_parse_or_static_string(worker, &attr, "name");
-                                let collection_name =
-                                    crate::attr_parse_or_static_string(worker, &attr, "collection");
-                                if name != "" && collection_name != "" {
-                                    if let Some(collection_id) = self
-                                        .database
-                                        .clone()
-                                        .read()
-                                        .unwrap()
-                                        .collection_id(&collection_name)
-                                    {
-                                        let condition =
-                                            search::make_conditions(self, &attr, reader, worker);
-                                        search_map
-                                            .insert(name.to_owned(), (collection_id, condition));
-                                    }
-                                }
+                                self.search(worker, reader, e, &mut search_map);
                             }
                             b"wd:result" => {
                                 result::result(self, worker, e, &search_map);
                             }
                             b"wd:collections" => {
-                                let attr = xml_util::attr2hash_map(&e);
-                                let var = crate::attr_parse_or_static_string(worker, &attr, "var");
-
-                                let scope = &mut worker.js_runtime.handle_scope();
-                                let context = scope.get_current_context();
-                                let scope = &mut v8::ContextScope::new(scope, context);
-
-                                let obj = v8::Object::new(scope);
-                                if var != "" {
-                                    if let (Ok(array), Some(v8str_var)) = (
-                                        deno_core::serde_v8::to_v8(
-                                            scope,
-                                            self.database.read().unwrap().collections(),
-                                        ),
-                                        v8::String::new(scope, &var),
-                                    ) {
-                                        obj.define_own_property(
-                                            scope,
-                                            v8str_var.into(),
-                                            array.into(),
-                                            v8::READ_ONLY,
-                                        );
-                                    }
-                                }
-                                stack::push(context, scope, obj);
+                                self.collections(worker, e);
                             }
                             b"wd:sessions" => {
-                                let attr = xml_util::attr2hash_map(&e);
-                                let var = crate::attr_parse_or_static_string(worker, &attr, "var");
-
-                                let scope = &mut worker.js_runtime.handle_scope();
-                                let context = scope.get_current_context();
-                                let scope = &mut v8::ContextScope::new(scope, context);
-
-                                let obj = v8::Object::new(scope);
-                                if var != "" {
-                                    if let (Ok(sessions), Some(v8str_var)) = (
-                                        self.database.read().unwrap().sessions(),
-                                        v8::String::new(scope, &var),
-                                    ) {
-                                        if let Ok(array) =
-                                            deno_core::serde_v8::to_v8(scope, sessions)
-                                        {
-                                            obj.define_own_property(
-                                                scope,
-                                                v8str_var.into(),
-                                                array.into(),
-                                                v8::READ_ONLY,
-                                            );
-                                        }
-                                    }
-                                }
-                                stack::push(context, scope, obj);
+                                self.sessions(worker, e);
                             }
                             b"wd:stack" => {
                                 if let Ok(Some(var)) = e.try_get_attribute(b"var") {
@@ -533,7 +360,176 @@ wd.v=key=>{
         }
         Ok(r)
     }
+    fn session(&mut self, worker: &mut MainWorker, e: &BytesStart) -> io::Result<()> {
+        let attr = xml_util::attr2hash_map(&e);
+        let session_name = crate::attr_parse_or_static_string(worker, &attr, "name");
+        if session_name != "" {
+            let clear_on_close = crate::attr_parse_or_static(worker, &attr, "clear_on_close");
+            let expire = crate::attr_parse_or_static_string(worker, &attr, "expire");
+            let expire = if expire.len() > 0 {
+                expire.parse::<i64>().ok()
+            } else {
+                None
+            };
+            if let Ok(mut session) = Session::new(
+                &self.database.clone().read().unwrap(),
+                &session_name,
+                expire,
+            ) {
+                if crate::attr_parse_or_static(worker, &attr, "initialize") == b"true" {
+                    self.database
+                        .clone()
+                        .read()
+                        .unwrap()
+                        .session_restart(&mut session, expire)?;
+                }
+                self.sessions.push((session, clear_on_close == b"true"));
+            }
+        }
+        Ok(())
+    }
+    fn update<T: IncludeAdaptor>(
+        &mut self,
+        worker: &mut MainWorker,
+        reader: &mut Reader<&[u8]>,
+        e: &BytesStart,
+        include_adaptor: &mut T,
+    ) -> io::Result<()> {
+        let with_commit =
+            crate::attr_parse_or_static(worker, &xml_util::attr2hash_map(&e), "commit") == b"1";
+        let inner_xml = self.parse(worker, reader, "wd:update", include_adaptor)?;
+        let mut inner_reader = Reader::from_str(std::str::from_utf8(&inner_xml).unwrap());
+        inner_reader.check_end_names(false);
+        let updates = update::make_update_struct(self, &mut inner_reader, worker);
+        if let Some((ref mut session, _)) = self.sessions.last_mut() {
+            self.database
+                .clone()
+                .read()
+                .unwrap()
+                .update(session, updates)?;
+            if with_commit {
+                self.database.clone().write().unwrap().commit(session)?;
+            }
+        }
+        Ok(())
+    }
+    fn search(
+        &mut self,
+        worker: &mut MainWorker,
+        reader: &mut Reader<&[u8]>,
+        e: &BytesStart,
+        search_map: &mut HashMap<String, (i32, Vec<Condition>)>,
+    ) {
+        let attr = xml_util::attr2hash_map(&e);
+        let name = crate::attr_parse_or_static_string(worker, &attr, "name");
+        let collection_name = crate::attr_parse_or_static_string(worker, &attr, "collection");
+        if name != "" && collection_name != "" {
+            if let Some(collection_id) = self
+                .database
+                .clone()
+                .read()
+                .unwrap()
+                .collection_id(&collection_name)
+            {
+                let condition = search::make_conditions(self, &attr, reader, worker);
+                search_map.insert(name.to_owned(), (collection_id, condition));
+            }
+        }
+    }
+    fn collections(&self, worker: &mut MainWorker, e: &BytesStart) {
+        let attr = xml_util::attr2hash_map(&e);
+        let var = crate::attr_parse_or_static_string(worker, &attr, "var");
 
+        let scope = &mut worker.js_runtime.handle_scope();
+        let context = scope.get_current_context();
+        let scope = &mut v8::ContextScope::new(scope, context);
+
+        let obj = v8::Object::new(scope);
+        if var != "" {
+            if let (Ok(array), Some(v8str_var)) = (
+                deno_core::serde_v8::to_v8(scope, self.database.read().unwrap().collections()),
+                v8::String::new(scope, &var),
+            ) {
+                obj.define_own_property(scope, v8str_var.into(), array.into(), v8::READ_ONLY);
+            }
+        }
+        stack::push(context, scope, obj);
+    }
+    fn sessions(&self, worker: &mut MainWorker, e: &BytesStart) {
+        let attr = xml_util::attr2hash_map(&e);
+        let var = crate::attr_parse_or_static_string(worker, &attr, "var");
+
+        let scope = &mut worker.js_runtime.handle_scope();
+        let context = scope.get_current_context();
+        let scope = &mut v8::ContextScope::new(scope, context);
+
+        let obj = v8::Object::new(scope);
+        if var != "" {
+            if let (Ok(sessions), Some(v8str_var)) = (
+                self.database.read().unwrap().sessions(),
+                v8::String::new(scope, &var),
+            ) {
+                if let Ok(array) = deno_core::serde_v8::to_v8(scope, sessions) {
+                    obj.define_own_property(scope, v8str_var.into(), array.into(), v8::READ_ONLY);
+                }
+            }
+        }
+        stack::push(context, scope, obj);
+    }
+    fn session_gc(&mut self, worker: &mut MainWorker, e: &BytesStart) -> io::Result<()> {
+        let str_expire =
+            crate::attr_parse_or_static_string(worker, &xml_util::attr2hash_map(e), "expire");
+        let mut expire = 60 * 60 * 24;
+        if let Ok(parsed) = str_expire.parse::<i64>() {
+            expire = parsed;
+        }
+        self.database.clone().write().unwrap().session_gc(expire)
+    }
+    fn include<T: IncludeAdaptor>(
+        &mut self,
+        worker: &mut MainWorker,
+        e: &BytesStart,
+        include_adaptor: &mut T,
+    ) -> io::Result<Vec<u8>> {
+        let mut r = Vec::new();
+        let attr = xml_util::attr2hash_map(e);
+        let xml = if let Some(xml) =
+            include_adaptor.include(&crate::attr_parse_or_static_string(worker, &attr, "src"))
+        {
+            Some(xml)
+        } else {
+            let substitute = crate::attr_parse_or_static_string(worker, &attr, "substitute");
+            if let Some(xml) = include_adaptor.include(&substitute) {
+                Some(xml)
+            } else {
+                None
+            }
+        };
+        if let Some(xml) = xml {
+            if xml.len() > 0 {
+                let str_xml = "<root>".to_owned() + &xml + "</root>";
+                let mut event_reader_inner = Reader::from_str(&str_xml);
+                event_reader_inner.check_end_names(false);
+                loop {
+                    match event_reader_inner.read_event() {
+                        Ok(Event::Start(e)) => {
+                            if e.name().as_ref() == b"root" {
+                                r.append(&mut self.parse(
+                                    worker,
+                                    &mut event_reader_inner,
+                                    "root",
+                                    include_adaptor,
+                                )?);
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        Ok(r)
+    }
     fn html_attr(e: &BytesStart, worker: &mut MainWorker) -> String {
         let scope = &mut worker.js_runtime.handle_scope();
         let context = scope.get_current_context();
