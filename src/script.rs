@@ -23,7 +23,10 @@ use std::{
 
 mod process;
 
-use crate::{xml_util, IncludeAdaptor};
+use crate::{
+    xml_util::{self, XmlAttr},
+    IncludeAdaptor,
+};
 mod result;
 mod search;
 mod stack;
@@ -221,7 +224,30 @@ wd.v=key=>{
                                 self.session_gc(worker, e)?;
                             }
                             b"wd:include" => {
-                                r.append(&mut self.include(worker, e, include_adaptor)?);
+                                let attr = xml_util::attr2hash_map(e);
+                                let cont =
+                                    self.get_include_content(worker, include_adaptor, &attr)?;
+                                let var = crate::attr_parse_or_static_string(worker, &attr, "var");
+                                if var.len() > 0 {
+                                    if let Ok(cont) = std::str::from_utf8(&cont) {
+                                        let scope = &mut worker.js_runtime.handle_scope();
+                                        let context = scope.get_current_context();
+                                        let scope = &mut v8::ContextScope::new(scope, context);
+                                        if let (Some(v8str_var), Some(cont)) = (
+                                            v8::String::new(scope, &var),
+                                            v8::String::new(scope, &cont),
+                                        ) {
+                                            let obj = v8::Object::new(scope);
+                                            obj.define_own_property(
+                                                scope,
+                                                v8str_var.into(),
+                                                cont.into(),
+                                                v8::READ_ONLY,
+                                            );
+                                            stack::push(context, scope, obj)
+                                        }
+                                    }
+                                }
                             }
                             b"wd:update" => {
                                 self.update(worker, reader, e, include_adaptor)?;
@@ -294,7 +320,12 @@ wd.v=key=>{
                                 self.session_gc(worker, e)?;
                             }
                             b"wd:include" => {
-                                r.append(&mut self.include(worker, e, include_adaptor)?);
+                                let attr = xml_util::attr2hash_map(e);
+                                r.append(&mut self.get_include_content(
+                                    worker,
+                                    include_adaptor,
+                                    &attr,
+                                )?);
                             }
                             _ => {
                                 if !name.starts_with(b"wd:") {
@@ -315,7 +346,7 @@ wd.v=key=>{
                             if name.starts_with(b"wd:") {
                                 match name {
                                     b"wd:stack" | b"wd:result" | b"wd:collections"
-                                    | b"wd:sessions" => {
+                                    | b"wd:sessions" | b"wd:include" => {
                                         let _ =
                                             worker.execute_script("stack.pop", "wd.stack.pop();");
                                     }
@@ -485,20 +516,19 @@ wd.v=key=>{
         }
         self.database.clone().write().unwrap().session_gc(expire)
     }
-    fn include<T: IncludeAdaptor>(
+    fn get_include_content<T: IncludeAdaptor>(
         &mut self,
         worker: &mut MainWorker,
-        e: &BytesStart,
         include_adaptor: &mut T,
+        attr: &XmlAttr,
     ) -> io::Result<Vec<u8>> {
         let mut r = Vec::new();
-        let attr = xml_util::attr2hash_map(e);
         let xml = if let Some(xml) =
-            include_adaptor.include(&crate::attr_parse_or_static_string(worker, &attr, "src"))
+            include_adaptor.include(&crate::attr_parse_or_static_string(worker, attr, "src"))
         {
             Some(xml)
         } else {
-            let substitute = crate::attr_parse_or_static_string(worker, &attr, "substitute");
+            let substitute = crate::attr_parse_or_static_string(worker, attr, "substitute");
             if let Some(xml) = include_adaptor.include(&substitute) {
                 Some(xml)
             } else {
@@ -530,6 +560,7 @@ wd.v=key=>{
         }
         Ok(r)
     }
+
     fn html_attr(e: &BytesStart, worker: &mut MainWorker) -> String {
         let scope = &mut worker.js_runtime.handle_scope();
         let context = scope.get_current_context();
