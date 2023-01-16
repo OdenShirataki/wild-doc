@@ -11,6 +11,33 @@ use crate::xml_util;
 
 use super::Script;
 
+pub fn update<T: crate::IncludeAdaptor>(
+    script: &mut Script,
+    worker: &mut MainWorker,
+    reader: &mut Reader<&[u8]>,
+    e: &BytesStart,
+    include_adaptor: &mut T,
+) -> std::io::Result<()> {
+    let with_commit =
+        crate::attr_parse_or_static(worker, &xml_util::attr2hash_map(&e), "commit") == b"1";
+    let inner_xml = script.parse(worker, reader, b"wd:update", include_adaptor)?;
+    let mut inner_reader = Reader::from_str(std::str::from_utf8(&inner_xml).unwrap());
+    inner_reader.check_end_names(false);
+    let updates = make_update_struct(script, &mut inner_reader, worker);
+    if let Some((ref mut session, _)) = script.sessions.last_mut() {
+        script
+            .database
+            .clone()
+            .read()
+            .unwrap()
+            .update(session, updates)?;
+        if with_commit {
+            script.database.clone().write().unwrap().commit(session)?;
+        }
+    }
+    Ok(())
+}
+
 fn depend(
     script: &mut Script,
     e: &BytesStart,
@@ -38,7 +65,7 @@ fn depend(
         ));
     }
 }
-pub fn make_update_struct(
+fn make_update_struct(
     script: &mut Script,
     reader: &mut Reader<&[u8]>,
     worker: &mut MainWorker,

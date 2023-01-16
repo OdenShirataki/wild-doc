@@ -1,14 +1,44 @@
 use chrono::TimeZone;
 use deno_runtime::worker::MainWorker;
-use quick_xml::{events::Event, Reader};
+use quick_xml::{
+    events::{BytesStart, Event},
+    Reader,
+};
 use semilattice_database::{search, Activity, CollectionRow, Condition, Depend};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::xml_util::{self, XmlAttr};
 
 use super::Script;
 
-pub(super) fn make_conditions(
+pub fn search(
+    script: &mut Script,
+    worker: &mut MainWorker,
+    reader: &mut Reader<&[u8]>,
+    e: &BytesStart,
+    search_map: &mut HashMap<String, (i32, Vec<Condition>)>,
+) {
+    let attr = xml_util::attr2hash_map(&e);
+    let name = crate::attr_parse_or_static_string(worker, &attr, "name");
+    let collection_name = crate::attr_parse_or_static_string(worker, &attr, "collection");
+    if name != "" && collection_name != "" {
+        if let Some(collection_id) = script
+            .database
+            .clone()
+            .read()
+            .unwrap()
+            .collection_id(&collection_name)
+        {
+            let condition = make_conditions(script, &attr, reader, worker);
+            search_map.insert(name.to_owned(), (collection_id, condition));
+        }
+    }
+}
+
+fn make_conditions(
     script: &Script,
     attr: &XmlAttr,
     reader: &mut Reader<&[u8]>,
