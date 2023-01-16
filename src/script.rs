@@ -397,34 +397,12 @@ wd.v=key=>{
                                 self.session_gc(worker, e)?;
                             }
                             b"wd:include" => {
-                                let attr = xml_util::attr2hash_map(e);
-                                let cont = include::get_include_content(
+                                r.append(&mut include::get_include_content(
                                     self,
                                     worker,
                                     include_adaptor,
-                                    &attr,
-                                )?;
-                                let var = crate::attr_parse_or_static_string(worker, &attr, "var");
-                                if var.len() > 0 {
-                                    if let Ok(cont) = std::str::from_utf8(&cont) {
-                                        let scope = &mut worker.js_runtime.handle_scope();
-                                        let context = scope.get_current_context();
-                                        let scope = &mut v8::ContextScope::new(scope, context);
-                                        if let (Some(v8str_var), Some(cont)) = (
-                                            v8::String::new(scope, &var),
-                                            v8::String::new(scope, &cont),
-                                        ) {
-                                            let obj = v8::Object::new(scope);
-                                            obj.define_own_property(
-                                                scope,
-                                                v8str_var.into(),
-                                                cont.into(),
-                                                v8::READ_ONLY,
-                                            );
-                                            stack::push(context, scope, obj)
-                                        }
-                                    }
-                                }
+                                    &xml_util::attr2hash_map(e),
+                                )?);
                             }
                             b"wd:update" => {
                                 self.update(worker, reader, e, include_adaptor)?;
@@ -497,12 +475,11 @@ wd.v=key=>{
                                 self.session_gc(worker, e)?;
                             }
                             b"wd:include" => {
-                                let attr = xml_util::attr2hash_map(e);
                                 r.append(&mut include::get_include_content(
                                     self,
                                     worker,
                                     include_adaptor,
-                                    &attr,
+                                    &xml_util::attr2hash_map(e),
                                 )?);
                             }
                             _ => {
@@ -524,7 +501,7 @@ wd.v=key=>{
                             if name.starts_with(b"wd:") {
                                 match name {
                                     b"wd:stack" | b"wd:result" | b"wd:collections"
-                                    | b"wd:sessions" | b"wd:include" => {
+                                    | b"wd:sessions" => {
                                         let _ =
                                             worker.execute_script("stack.pop", "wd.stack.pop();");
                                     }
