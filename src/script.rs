@@ -1,6 +1,6 @@
 use deno_runtime::{
     deno_broadcast_channel::InMemoryBroadcastChannel,
-    deno_core::{self, v8, v8::READ_ONLY, ModuleSpecifier},
+    deno_core::{self, error::AnyError, v8, v8::READ_ONLY, ModuleSpecifier},
     deno_web::BlobStore,
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
@@ -23,10 +23,8 @@ use std::{
 
 mod process;
 
-use crate::{
-    xml_util::{self, XmlAttr},
-    IncludeAdaptor,
-};
+use crate::{xml_util, IncludeAdaptor};
+mod include;
 mod result;
 mod search;
 mod stack;
@@ -70,7 +68,7 @@ impl Script {
         input_json: &str,
         reader: &mut Reader<&[u8]>,
         include_adaptor: &mut T,
-    ) -> io::Result<super::WildDocResult> {
+    ) -> Result<super::WildDocResult, AnyError> {
         let options = WorkerOptions {
             bootstrap: self.bootstrap.clone(),
             extensions: vec![],
@@ -108,7 +106,7 @@ impl Script {
             self.permissions.clone(),
             options,
         );
-        let _ = worker.execute_script(
+        worker.execute_script(
             "init",
             &(r#"wd={
     general:{}
@@ -130,21 +128,72 @@ wd.v=key=>{
         }
     }
 };"#),
-        );
+        )?;
         {
             let scope = &mut worker.js_runtime.handle_scope();
             let context = scope.get_current_context();
             let scope = &mut v8::ContextScope::new(scope, context);
-            if let (Some(wd), Some(v8str_db)) = (
+            if let (
+                Some(wd),
+                Some(v8str_db),
+                Some(v8str_include_adaptor),
+                Some(v8str_get_contents),
+                Some(v8func_get_contents),
+            ) = (
                 v8::String::new(scope, "wd")
                     .and_then(|code| v8::Script::compile(scope, code, None))
                     .and_then(|v| v.run(scope)),
                 v8::String::new(scope, "db"),
+                v8::String::new(scope, "include_adaptor"),
+                v8::String::new(scope, "get_contents"),
+                v8::Function::new(
+                    scope,
+                    |scope: &mut v8::HandleScope,
+                     args: v8::FunctionCallbackArguments,
+                     mut retval: v8::ReturnValue| {
+                        let filename = args
+                            .get(0)
+                            .to_string(scope)
+                            .unwrap()
+                            .to_rust_string_lossy(scope);
+
+                        if let Some(include_adaptor) = v8::String::new(scope, "wd.include_adaptor")
+                            .and_then(|code| v8::Script::compile(scope, code, None))
+                            .and_then(|v| v.run(scope))
+                        {
+                            let include_adaptor =
+                                unsafe { v8::Local::<v8::External>::cast(include_adaptor) }.value()
+                                    as *mut T;
+                            let include_adaptor = unsafe { &mut *include_adaptor };
+
+                            if let Some(cont) = include_adaptor.include(filename) {
+                                if let Some(v8str_cont) = v8::String::new(scope, cont) {
+                                    retval.set(v8str_cont.into());
+                                }
+                            }
+                        }
+                    },
+                ),
             ) {
                 if let Ok(wd) = v8::Local::<v8::Object>::try_from(wd) {
                     let addr = &mut self.database as *mut Arc<RwLock<Database>> as *mut c_void;
                     let v8_ext = v8::External::new(scope, addr);
                     wd.define_own_property(scope, v8str_db.into(), v8_ext.into(), READ_ONLY);
+
+                    let addr = include_adaptor as *mut T as *mut c_void;
+                    let v8_ext = v8::External::new(scope, addr);
+                    wd.define_own_property(
+                        scope,
+                        v8str_include_adaptor.into(),
+                        v8_ext.into(),
+                        READ_ONLY,
+                    );
+                    wd.define_own_property(
+                        scope,
+                        v8str_get_contents.into(),
+                        v8func_get_contents.into(),
+                        READ_ONLY,
+                    );
                 }
             }
         }
@@ -225,8 +274,12 @@ wd.v=key=>{
                             }
                             b"wd:include" => {
                                 let attr = xml_util::attr2hash_map(e);
-                                let cont =
-                                    self.get_include_content(worker, include_adaptor, &attr)?;
+                                let cont = include::get_include_content(
+                                    self,
+                                    worker,
+                                    include_adaptor,
+                                    &attr,
+                                )?;
                                 let var = crate::attr_parse_or_static_string(worker, &attr, "var");
                                 if var.len() > 0 {
                                     if let Ok(cont) = std::str::from_utf8(&cont) {
@@ -321,7 +374,8 @@ wd.v=key=>{
                             }
                             b"wd:include" => {
                                 let attr = xml_util::attr2hash_map(e);
-                                r.append(&mut self.get_include_content(
+                                r.append(&mut include::get_include_content(
+                                    self,
                                     worker,
                                     include_adaptor,
                                     &attr,
@@ -515,50 +569,6 @@ wd.v=key=>{
             expire = parsed;
         }
         self.database.clone().write().unwrap().session_gc(expire)
-    }
-    fn get_include_content<T: IncludeAdaptor>(
-        &mut self,
-        worker: &mut MainWorker,
-        include_adaptor: &mut T,
-        attr: &XmlAttr,
-    ) -> io::Result<Vec<u8>> {
-        let mut r = Vec::new();
-        let xml = if let Some(xml) =
-            include_adaptor.include(&crate::attr_parse_or_static_string(worker, attr, "src"))
-        {
-            Some(xml)
-        } else {
-            let substitute = crate::attr_parse_or_static_string(worker, attr, "substitute");
-            if let Some(xml) = include_adaptor.include(&substitute) {
-                Some(xml)
-            } else {
-                None
-            }
-        };
-        if let Some(xml) = xml {
-            if xml.len() > 0 {
-                let str_xml = "<root>".to_owned() + &xml + "</root>";
-                let mut event_reader_inner = Reader::from_str(&str_xml);
-                event_reader_inner.check_end_names(false);
-                loop {
-                    match event_reader_inner.read_event() {
-                        Ok(Event::Start(e)) => {
-                            if e.name().as_ref() == b"root" {
-                                r.append(&mut self.parse(
-                                    worker,
-                                    &mut event_reader_inner,
-                                    "root",
-                                    include_adaptor,
-                                )?);
-                                break;
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-        Ok(r)
     }
 
     fn html_attr(e: &BytesStart, worker: &mut MainWorker) -> String {
