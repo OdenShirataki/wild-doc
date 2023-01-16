@@ -5,11 +5,11 @@ use std::{
 };
 
 pub trait IncludeAdaptor {
-    fn include<P: AsRef<Path>>(&mut self, path: P) -> &Option<String>;
+    fn include<P: AsRef<Path>>(&mut self, path: P) -> &Option<Vec<u8>>;
 }
 pub struct IncludeLocal {
     dir: PathBuf,
-    cache: HashMap<PathBuf, Option<String>>,
+    cache: HashMap<PathBuf, Option<Vec<u8>>>,
 }
 impl IncludeLocal {
     pub fn new<P: AsRef<Path>>(dir: P) -> Self {
@@ -20,21 +20,20 @@ impl IncludeLocal {
     }
 }
 impl IncludeAdaptor for IncludeLocal {
-    fn include<P: AsRef<Path>>(&mut self, path: P) -> &Option<String> {
+    fn include<P: AsRef<Path>>(&mut self, path: P) -> &Option<Vec<u8>> {
         let path = path.as_ref().to_path_buf();
         self.cache
             .entry(path.to_owned())
             .or_insert_with_key(|path| {
                 let mut file_path = self.dir.clone();
                 file_path.push(&path);
-
                 if let Ok(mut f) = std::fs::File::open(file_path) {
-                    let mut contents = String::new();
-                    let _ = f.read_to_string(&mut contents);
-                    Some(contents)
-                } else {
-                    None
+                    let mut contents = Vec::new();
+                    if let Ok(_) = f.read_to_end(&mut contents) {
+                        return Some(contents);
+                    }
                 }
+                None
             })
     }
 }

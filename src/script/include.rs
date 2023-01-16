@@ -23,25 +23,21 @@ pub fn get_include_content<T: IncludeAdaptor>(
     };
     if let Some(xml) = xml {
         if xml.len() > 0 {
-            let str_xml = "<root>".to_owned() + &xml + "</root>";
-            let mut event_reader_inner = quick_xml::Reader::from_str(&str_xml);
-            event_reader_inner.check_end_names(false);
-            loop {
-                match event_reader_inner.read_event() {
-                    Ok(quick_xml::events::Event::Start(e)) => {
-                        if e.name().as_ref() == b"root" {
-                            r.append(&mut script.parse(
-                                worker,
-                                &mut event_reader_inner,
-                                "root",
-                                include_adaptor,
-                            )?);
-                            break;
-                        }
-                    }
-                    _ => {}
+            if let Ok(xml)=std::str::from_utf8(xml){
+                let str_xml = "<root>".to_owned() + xml + "</root>";
+                let mut event_reader_inner = quick_xml::Reader::from_str(&str_xml);
+                event_reader_inner.check_end_names(false);
+
+                if let Ok(quick_xml::events::Event::Start(e)) = event_reader_inner.read_event() {
+                    r.append(&mut script.parse(
+                        worker,
+                        &mut event_reader_inner,
+                        e.name().as_ref(),
+                        include_adaptor,
+                    )?);
                 }
             }
+            
         }
     }
     Ok(r)

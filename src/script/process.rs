@@ -53,7 +53,7 @@ pub(super) fn case<T: IncludeAdaptor>(
                                                                     r.append(&mut script.parse(
                                                                         worker,
                                                                         &mut event_reader_inner,
-                                                                        "",
+                                                                        b"",
                                                                         include_adaptor,
                                                                     )?);
                                                                     break 'case;
@@ -77,7 +77,7 @@ pub(super) fn case<T: IncludeAdaptor>(
                                                                 r.append(&mut script.parse(
                                                                     worker,
                                                                     &mut event_reader_inner,
-                                                                    "",
+                                                                    b"",
                                                                     include_adaptor,
                                                                 )?);
                                                                 break;
@@ -174,7 +174,7 @@ pub(super) fn r#for<T: IncludeAdaptor>(
                                         r.append(&mut script.parse(
                                             worker,
                                             &mut ev,
-                                            "wd:for",
+                                            b"wd:for",
                                             include_adaptor,
                                         )?);
                                         let _ =
