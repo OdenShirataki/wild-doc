@@ -4,29 +4,12 @@ use deno_runtime::{
 };
 use quick_xml::events::BytesStart;
 use semilattice_database::{Condition, Database, Order, OrderKey, Session};
-use std::{
-    collections::HashMap,
-    ffi::c_void,
-    sync::{Arc, RwLock},
-};
+use std::{collections::HashMap, ffi::c_void};
 
 use crate::xml_util;
 
-use super::stack;
 use super::Script;
-
-fn get_wddb<'s>(scope: &mut v8::HandleScope<'s>) -> Option<&'s mut Arc<RwLock<Database>>> {
-    if let Some(db) = v8::String::new(scope, "wd.db")
-        .and_then(|code| v8::Script::compile(scope, code, None))
-        .and_then(|v| v.run(scope))
-    {
-        let db =
-            unsafe { v8::Local::<v8::External>::cast(db) }.value() as *mut Arc<RwLock<Database>>;
-        Some(unsafe { &mut *db })
-    } else {
-        None
-    }
-}
+use super::{get_wddb, stack};
 
 fn get_collection_id<'s>(
     scope: &mut v8::HandleScope<'s>,

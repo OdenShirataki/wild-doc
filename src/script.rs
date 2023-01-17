@@ -24,7 +24,6 @@ use std::{
 mod process;
 
 use crate::{xml_util, IncludeAdaptor};
-mod include;
 mod result;
 mod search;
 mod stack;
@@ -121,6 +120,12 @@ impl Script {
                 })
                 + r#"
 };
+wd.run_get_string=filename=>{
+    return (new TextDecoder).decode(new Uint8Array(wd.get_contents(filename)));
+};
+wd.run_get_json_parse=filename=>{
+    return JSON.parse(wd.run_get_string(filename));
+};
 wd.v=key=>{
     for(let i=wd.stack.length-1;i>=0;i--){
         if(wd.stack[i][key]!==void 0){
@@ -207,7 +212,7 @@ wd.v=key=>{
                     }
                 },
             );
-            let func_parse = v8::Function::new(
+            let func_run = v8::Function::new(
                 scope,
                 |scope: &mut v8::HandleScope,
                  args: v8::FunctionCallbackArguments,
@@ -270,30 +275,24 @@ wd.v=key=>{
             );
             if let (
                 Some(wd),
-                Some(v8str_db),
                 Some(v8str_include_adaptor),
                 Some(v8str_script),
                 Some(v8str_get_contents),
                 Some(v8func_get_contents),
-                Some(v8str_parse),
-                Some(v8func_parse),
+                Some(v8str_run),
+                Some(v8func_run),
             ) = (
                 v8::String::new(scope, "wd")
                     .and_then(|code| v8::Script::compile(scope, code, None))
                     .and_then(|v| v.run(scope)),
-                v8::String::new(scope, "db"),
                 v8::String::new(scope, "include_adaptor"),
                 v8::String::new(scope, "script"),
                 v8::String::new(scope, "get_contents"),
                 func_get_contents,
-                v8::String::new(scope, "parse"),
-                func_parse,
+                v8::String::new(scope, "run"),
+                func_run,
             ) {
                 if let Ok(wd) = v8::Local::<v8::Object>::try_from(wd) {
-                    let addr = &mut self.database as *mut Arc<RwLock<Database>> as *mut c_void;
-                    let v8_ext = v8::External::new(scope, addr);
-                    wd.define_own_property(scope, v8str_db.into(), v8_ext.into(), READ_ONLY);
-
                     let addr = self as *mut Self as *mut c_void;
                     let v8_ext = v8::External::new(scope, addr);
                     wd.define_own_property(scope, v8str_script.into(), v8_ext.into(), READ_ONLY);
@@ -312,12 +311,7 @@ wd.v=key=>{
                         v8func_get_contents.into(),
                         READ_ONLY,
                     );
-                    wd.define_own_property(
-                        scope,
-                        v8str_parse.into(),
-                        v8func_parse.into(),
-                        READ_ONLY,
-                    );
+                    wd.define_own_property(scope, v8str_run.into(), v8func_run.into(), READ_ONLY);
                 }
             }
         }
@@ -396,16 +390,22 @@ wd.v=key=>{
                             b"wd:session_gc" => {
                                 self.session_gc(worker, e)?;
                             }
-                            b"wd:parse" => {}
+                            b"wd:run" => {
+                                r.append(&mut process::run(self, e, worker, include_adaptor)?);
+                            }
                             b"wd:include" => {
-                                r.append(&mut include::get_include_content(
+                                r.append(&mut process::get_include_content(
                                     self,
                                     worker,
                                     include_adaptor,
                                     &xml_util::attr2hash_map(e),
                                 )?);
                             }
-                            b"wd:letitgo" => {}
+                            b"wd:letitgo" => {
+                                if let Ok(cont) = reader.read_text(e.name().to_owned()) {
+                                    r.append(&mut cont.as_bytes().to_vec());
+                                }
+                            }
                             b"wd:update" => {
                                 update::update(self, worker, reader, e, include_adaptor)?;
                             }
@@ -476,9 +476,11 @@ wd.v=key=>{
                             b"wd:session_gc" => {
                                 self.session_gc(worker, e)?;
                             }
-                            b"wd:parse" => {}
+                            b"wd:run" => {
+                                r.append(&mut process::run(self, e, worker, include_adaptor)?);
+                            }
                             b"wd:include" => {
-                                r.append(&mut include::get_include_content(
+                                r.append(&mut process::get_include_content(
                                     self,
                                     worker,
                                     include_adaptor,
@@ -669,5 +671,19 @@ wd.v=key=>{
             }
         }
         html_attr
+    }
+}
+
+fn get_wddb<'s>(scope: &mut v8::HandleScope<'s>) -> Option<&'s mut Arc<RwLock<Database>>> {
+    if let Some(script) = v8::String::new(scope, "wd.script")
+        .and_then(|code| v8::Script::compile(scope, code, None))
+        .and_then(|v| v.run(scope))
+    {
+        Some(
+            &mut unsafe { &mut *(v8::Local::<v8::External>::cast(script).value() as *mut Script) }
+                .database,
+        )
+    } else {
+        None
     }
 }
