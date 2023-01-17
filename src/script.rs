@@ -120,12 +120,6 @@ impl Script {
                 })
                 + r#"
 };
-wd.run_get_string=filename=>{
-    return (new TextDecoder).decode(new Uint8Array(wd.get_contents(filename)));
-};
-wd.run_get_json_parse=filename=>{
-    return JSON.parse(wd.run_get_string(filename));
-};
 wd.v=key=>{
     for(let i=wd.stack.length-1;i>=0;i--){
         if(wd.stack[i][key]!==void 0){
