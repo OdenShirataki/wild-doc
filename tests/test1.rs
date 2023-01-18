@@ -149,7 +149,8 @@ fn test1() {
                 return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
             };
             wd.result_options['test']="OK";
-            
+            let hoge=wd.get_contents('body.xml');
+            console.log("hoge",hoge);
         </wd:script>
         <wd:search name="p" collection="person">
             <field name="country" method="match" wd:value="wd.general.uk" />
