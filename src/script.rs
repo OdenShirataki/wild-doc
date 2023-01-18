@@ -147,120 +147,12 @@ wd.v=key=>{
                             .to_string(scope)
                             .unwrap()
                             .to_rust_string_lossy(scope);
-                        let include_adaptor =
-                            unsafe { v8::Local::<v8::External>::cast(include_adaptor) }.value()
-                                as *mut T;
-                        let include_adaptor = unsafe { &mut *include_adaptor };
-
+                        let include_adaptor = unsafe {
+                            &mut *(v8::Local::<v8::External>::cast(include_adaptor).value()
+                                as *mut T)
+                        };
                         if let Some(contents) = include_adaptor.include(filename) {
-                            if args.get(1).to_boolean(scope).boolean_value(scope) {
-                                if let (Some(script), Some(worker), Ok(contents)) = (
-                                    v8::String::new(scope, "wd.script")
-                                        .and_then(|code| v8::Script::compile(scope, code, None))
-                                        .and_then(|v| v.run(scope)),
-                                    v8::String::new(scope, "wd.worker")
-                                        .and_then(|code| v8::Script::compile(scope, code, None))
-                                        .and_then(|v| v.run(scope)),
-                                    std::str::from_utf8(contents),
-                                ) {
-                                    let script = unsafe { v8::Local::<v8::External>::cast(script) }
-                                        .value()
-                                        as *mut Self;
-                                    let script = unsafe { &mut *script };
-
-                                    let worker = unsafe { v8::Local::<v8::External>::cast(worker) }
-                                        .value()
-                                        as *mut MainWorker;
-                                    let worker = unsafe { &mut *worker };
-
-                                    let mut r: Vec<u8> = Vec::new();
-                                    let contents = "<root>".to_owned() + contents + "</root>";
-                                    let mut event_reader_inner =
-                                        quick_xml::Reader::from_str(&contents);
-                                    event_reader_inner.check_end_names(false);
-
-                                    if let Ok(quick_xml::events::Event::Start(e)) =
-                                        event_reader_inner.read_event()
-                                    {
-                                        if let Ok(mut contents) = script.parse(
-                                            worker,
-                                            &mut event_reader_inner,
-                                            e.name().as_ref(),
-                                            include_adaptor,
-                                        ) {
-                                            r.append(&mut contents);
-                                        }
-                                    }
-                                    if r.len() > 0 {
-                                        if let Ok(r) = serde_v8::to_v8(scope, &r) {
-                                            retval.set(r.into());
-                                        }
-                                    }
-                                }
-                            } else {
-                                if let Ok(r) = serde_v8::to_v8(scope, contents) {
-                                    retval.set(r.into());
-                                }
-                            }
-                        }
-                    }
-                },
-            );
-            let func_run = v8::Function::new(
-                scope,
-                |scope: &mut v8::HandleScope,
-                 args: v8::FunctionCallbackArguments,
-                 mut retval: v8::ReturnValue| {
-                    if let (Some(script), Some(worker), Some(include_adaptor)) = (
-                        v8::String::new(scope, "wd.script")
-                            .and_then(|code| v8::Script::compile(scope, code, None))
-                            .and_then(|v| v.run(scope)),
-                        v8::String::new(scope, "wd.worker")
-                            .and_then(|code| v8::Script::compile(scope, code, None))
-                            .and_then(|v| v.run(scope)),
-                        v8::String::new(scope, "wd.include_adaptor")
-                            .and_then(|code| v8::Script::compile(scope, code, None))
-                            .and_then(|v| v.run(scope)),
-                    ) {
-                        let contents = "<root>".to_owned()
-                            + &args
-                                .get(0)
-                                .to_string(scope)
-                                .unwrap()
-                                .to_rust_string_lossy(scope)
-                            + "</root>";
-
-                        let script =
-                            unsafe { v8::Local::<v8::External>::cast(script) }.value() as *mut Self;
-                        let script = unsafe { &mut *script };
-
-                        let worker = unsafe { v8::Local::<v8::External>::cast(worker) }.value()
-                            as *mut MainWorker;
-                        let worker = unsafe { &mut *worker };
-
-                        let include_adaptor =
-                            unsafe { v8::Local::<v8::External>::cast(include_adaptor) }.value()
-                                as *mut T;
-                        let include_adaptor = unsafe { &mut *include_adaptor };
-
-                        let mut r: Vec<u8> = Vec::new();
-                        let mut event_reader_inner = quick_xml::Reader::from_str(&contents);
-                        event_reader_inner.check_end_names(false);
-
-                        if let Ok(quick_xml::events::Event::Start(e)) =
-                            event_reader_inner.read_event()
-                        {
-                            if let Ok(mut cont) = script.parse(
-                                worker,
-                                &mut event_reader_inner,
-                                e.name().as_ref(),
-                                include_adaptor,
-                            ) {
-                                r.append(&mut cont);
-                            }
-                        }
-                        if r.len() > 0 {
-                            if let Ok(r) = serde_v8::to_v8(scope, &r) {
+                            if let Ok(r) = serde_v8::to_v8(scope, contents) {
                                 retval.set(r.into());
                             }
                         }
@@ -273,8 +165,6 @@ wd.v=key=>{
                 Some(v8str_script),
                 Some(v8str_get_contents),
                 Some(v8func_get_contents),
-                Some(v8str_run),
-                Some(v8func_run),
             ) = (
                 v8::String::new(scope, "wd")
                     .and_then(|code| v8::Script::compile(scope, code, None))
@@ -283,29 +173,32 @@ wd.v=key=>{
                 v8::String::new(scope, "script"),
                 v8::String::new(scope, "get_contents"),
                 func_get_contents,
-                v8::String::new(scope, "run"),
-                func_run,
             ) {
                 if let Ok(wd) = v8::Local::<v8::Object>::try_from(wd) {
-                    let addr = self as *mut Self as *mut c_void;
-                    let v8_ext = v8::External::new(scope, addr);
-                    wd.define_own_property(scope, v8str_script.into(), v8_ext.into(), READ_ONLY);
-
                     let addr = include_adaptor as *mut T as *mut c_void;
-                    let v8_ext = v8::External::new(scope, addr);
+                    let v8ext_include_adaptor = v8::External::new(scope, addr);
                     wd.define_own_property(
                         scope,
                         v8str_include_adaptor.into(),
-                        v8_ext.into(),
+                        v8ext_include_adaptor.into(),
                         READ_ONLY,
                     );
+
+                    let addr = self as *mut Self as *mut c_void;
+                    let v8ext_script = v8::External::new(scope, addr);
+                    wd.define_own_property(
+                        scope,
+                        v8str_script.into(),
+                        v8ext_script.into(),
+                        READ_ONLY,
+                    );
+
                     wd.define_own_property(
                         scope,
                         v8str_get_contents.into(),
                         v8func_get_contents.into(),
                         READ_ONLY,
                     );
-                    wd.define_own_property(scope, v8str_run.into(), v8func_run.into(), READ_ONLY);
                 }
             }
         }
@@ -332,27 +225,27 @@ wd.v=key=>{
     }
     fn run_script(worker: &mut MainWorker, src: Cow<str>) {
         let src = src.to_string();
-        let runtime = tokio::runtime::Builder::new_current_thread()
+        let _r = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .unwrap();
-        let _r = runtime.block_on(async {
-            let n = ModuleSpecifier::parse("wd://script")?;
-            match worker.js_runtime.load_side_module(&n, Some(src)).await {
-                Ok(mod_id) => {
-                    worker.evaluate_module(mod_id).await?;
-                    loop {
-                        worker.run_event_loop(false).await?;
-                        match worker.dispatch_beforeunload_event(&located_script_name!()) {
-                            Ok(default_prevented) if default_prevented => {}
-                            Ok(_) => break Ok(()),
-                            Err(error) => break Err(error),
+            .unwrap()
+            .block_on(async {
+                let n = ModuleSpecifier::parse("wd://script")?;
+                match worker.js_runtime.load_side_module(&n, Some(src)).await {
+                    Ok(mod_id) => {
+                        worker.evaluate_module(mod_id).await?;
+                        loop {
+                            worker.run_event_loop(false).await?;
+                            match worker.dispatch_beforeunload_event(&located_script_name!()) {
+                                Ok(default_prevented) if default_prevented => {}
+                                Ok(_) => break Ok(()),
+                                Err(error) => break Err(error),
+                            }
                         }
                     }
+                    Err(error) => Err(error),
                 }
-                Err(error) => Err(error),
-            }
-        });
+            });
     }
 
     pub fn parse<T: IncludeAdaptor>(
