@@ -168,38 +168,32 @@ wd.v=key=>{
             ) = (
                 v8::String::new(scope, "wd")
                     .and_then(|code| v8::Script::compile(scope, code, None))
-                    .and_then(|v| v.run(scope)),
+                    .and_then(|v| v.run(scope))
+                    .and_then(|v| v8::Local::<v8::Object>::try_from(v).ok()),
                 v8::String::new(scope, "include_adaptor"),
                 v8::String::new(scope, "script"),
                 v8::String::new(scope, "get_contents"),
                 func_get_contents,
             ) {
-                if let Ok(wd) = v8::Local::<v8::Object>::try_from(wd) {
-                    let addr = include_adaptor as *mut T as *mut c_void;
-                    let v8ext_include_adaptor = v8::External::new(scope, addr);
-                    wd.define_own_property(
-                        scope,
-                        v8str_include_adaptor.into(),
-                        v8ext_include_adaptor.into(),
-                        READ_ONLY,
-                    );
+                let addr = include_adaptor as *mut T as *mut c_void;
+                let v8ext_include_adaptor = v8::External::new(scope, addr);
+                wd.define_own_property(
+                    scope,
+                    v8str_include_adaptor.into(),
+                    v8ext_include_adaptor.into(),
+                    READ_ONLY,
+                );
 
-                    let addr = self as *mut Self as *mut c_void;
-                    let v8ext_script = v8::External::new(scope, addr);
-                    wd.define_own_property(
-                        scope,
-                        v8str_script.into(),
-                        v8ext_script.into(),
-                        READ_ONLY,
-                    );
+                let addr = self as *mut Self as *mut c_void;
+                let v8ext_script = v8::External::new(scope, addr);
+                wd.define_own_property(scope, v8str_script.into(), v8ext_script.into(), READ_ONLY);
 
-                    wd.define_own_property(
-                        scope,
-                        v8str_get_contents.into(),
-                        v8func_get_contents.into(),
-                        READ_ONLY,
-                    );
-                }
+                wd.define_own_property(
+                    scope,
+                    v8str_get_contents.into(),
+                    v8func_get_contents.into(),
+                    READ_ONLY,
+                );
             }
         }
         let result_body = self.parse(&mut worker, reader, b"wd", include_adaptor)?;
@@ -208,13 +202,12 @@ wd.v=key=>{
             let scope = &mut worker.js_runtime.handle_scope();
             let context = scope.get_current_context();
             let scope = &mut v8::ContextScope::new(scope, context);
-            if let Some(v) = v8::String::new(scope, "wd.result_options")
+            if let Some(json) = v8::String::new(scope, "wd.result_options")
                 .and_then(|code| v8::Script::compile(scope, code, None))
                 .and_then(|v| v.run(scope))
+                .and_then(|v| v8::json::stringify(scope, v))
             {
-                if let Some(json) = v8::json::stringify(scope, v) {
-                    result_options = json.to_rust_string_lossy(scope);
-                }
+                result_options = json.to_rust_string_lossy(scope);
             }
             result_options
         };

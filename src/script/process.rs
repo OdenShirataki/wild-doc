@@ -3,7 +3,7 @@ use quick_xml::{
     events::{BytesStart, Event},
     Reader,
 };
-use std::{convert::TryFrom, io};
+use std::io;
 
 use crate::{
     xml_util::{self, XmlAttr},
@@ -35,7 +35,7 @@ pub fn get_include_content<T: IncludeAdaptor>(
             if let Ok(xml) = std::str::from_utf8(xml) {
                 return run_xml(
                     script,
-                    "<root>".to_owned() + xml + "</root>",
+                    "<r>".to_owned() + xml + "</r>",
                     worker,
                     include_adaptor,
                 );
@@ -56,7 +56,7 @@ pub(super) fn run<T: IncludeAdaptor>(
     if xml.len() > 0 {
         run_xml(
             script,
-            "<root>".to_owned() + &xml + "</root>",
+            "<r>".to_owned() + &xml + "</r>",
             worker,
             include_adaptor,
         )
@@ -194,73 +194,86 @@ pub(super) fn r#for<T: IncludeAdaptor>(
     let attr = xml_util::attr2hash_map(&e);
     let var = crate::attr_parse_or_static_string(worker, &attr, "var");
     if var != "" {
-        if let Some(arr) = attr.get("wd:in") {
-            if let Ok(arr) = std::str::from_utf8(arr) {
-                let rs = {
+        if let Some(source) = attr.get("wd:in") {
+            if let Ok(source) = std::str::from_utf8(source) {
+                let (is_array, keys) = {
+                    let mut is_array = true;
+                    let mut keys = vec![];
                     let scope = &mut worker.js_runtime.handle_scope();
                     let context = scope.get_current_context();
                     let scope = &mut v8::ContextScope::new(scope, context);
-                    v8::String::new(scope, &arr)
-                        .and_then(|code| v8::Script::compile(scope, code, None))
-                        .and_then(|code| code.run(scope))
-                        .and_then(|v| v8::Local::<v8::Array>::try_from(v).ok())
-                };
-                if let Some(rs) = rs {
-                    let length = rs.length();
-                    for i in 0..length {
-                        let mut ev = Reader::from_str(&xml_str);
-                        ev.check_end_names(false);
-                        loop {
-                            match ev.read_event() {
-                                Ok(Event::Start(e)) => {
-                                    if e.name().as_ref() == b"wd:for" {
-                                        {
-                                            let scope = &mut worker.js_runtime.handle_scope();
-                                            let context = scope.get_current_context();
-                                            let scope = &mut v8::ContextScope::new(scope, context);
-                                            v8::String::new(
-                                                scope,
-                                                &("wd.stack.push({".to_owned()
-                                                    + &var.to_string()
-                                                    + ":"
-                                                    + arr
-                                                    + "["
-                                                    + &i.to_string()
-                                                    + "]"
-                                                    + &(if let Ok(Some(index)) =
-                                                        e.try_get_attribute(b"index")
-                                                    {
-                                                        std::str::from_utf8(&index.value).map_or(
-                                                            "".to_string(),
-                                                            |v| {
-                                                                ",".to_owned()
-                                                                    + v
-                                                                    + ":"
-                                                                    + &i.to_string()
-                                                            },
-                                                        )
-                                                    } else {
-                                                        "".to_owned()
-                                                    })
-                                                    + "})"),
-                                            )
-                                            .and_then(|code| v8::Script::compile(scope, code, None))
-                                            .and_then(|v| v.run(scope));
-                                        }
-                                        r.append(&mut script.parse(
-                                            worker,
-                                            &mut ev,
-                                            b"wd:for",
-                                            include_adaptor,
-                                        )?);
-                                        let _ =
-                                            worker.execute_script("pop stack", "wd.stack.pop()");
-
-                                        break;
+                    if let Some(rs) = {
+                        v8::String::new(scope, &source)
+                            .and_then(|code| v8::Script::compile(scope, code, None))
+                            .and_then(|code| code.run(scope))
+                    } {
+                        if rs.is_array() {
+                            let rs = unsafe { v8::Local::<v8::Array>::cast(rs) };
+                            let length = rs.length();
+                            for i in 0..length {
+                                keys.push(i.to_string());
+                            }
+                        } else if rs.is_object() {
+                            is_array = false;
+                            let rs = unsafe { v8::Local::<v8::Object>::cast(rs) };
+                            if let Some(names) = rs.get_property_names(scope, Default::default()) {
+                                for i in 0..names.length() {
+                                    if let Some(name) = names.get_index(scope, i) {
+                                        keys.push(name.to_rust_string_lossy(scope));
                                     }
                                 }
-                                _ => {}
                             }
+                        }
+                    }
+                    (is_array, keys)
+                };
+                for i in keys {
+                    let mut ev = Reader::from_str(&xml_str);
+                    ev.check_end_names(false);
+                    loop {
+                        match ev.read_event() {
+                            Ok(Event::Start(e)) => {
+                                if e.name().as_ref() == b"wd:for" {
+                                    let key_str = if is_array {
+                                        i.to_owned()
+                                    } else {
+                                        "'".to_owned() + &i + "'"
+                                    };
+                                    let source = "wd.stack.push({".to_owned()
+                                        + &var
+                                        + ":"
+                                        + source
+                                        + "["
+                                        + &key_str
+                                        + "]"
+                                        + &(if let Ok(Some(index)) = e.try_get_attribute(b"index") {
+                                            std::str::from_utf8(&index.value)
+                                                .map_or("".to_string(), |v| {
+                                                    ",".to_owned() + v + ":" + &key_str
+                                                })
+                                        } else {
+                                            "".to_owned()
+                                        })
+                                        + "})";
+                                    {
+                                        let scope = &mut worker.js_runtime.handle_scope();
+                                        let context = scope.get_current_context();
+                                        let scope = &mut v8::ContextScope::new(scope, context);
+                                        v8::String::new(scope, &source)
+                                            .and_then(|code| v8::Script::compile(scope, code, None))
+                                            .and_then(|v| v.run(scope));
+                                    }
+                                    r.append(&mut script.parse(
+                                        worker,
+                                        &mut ev,
+                                        b"wd:for",
+                                        include_adaptor,
+                                    )?);
+                                    let _ = worker.execute_script("pop stack", "wd.stack.pop()");
+                                    break;
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }

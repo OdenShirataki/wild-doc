@@ -19,7 +19,11 @@ fn test1() {
     </wd:update></wd:session></wd>"#;
     wd.run(update_xml, "").unwrap();
 
-    let r=wd.run(r#"<wd><wd:session name="logintest">
+    let r=wd.run(r#"<wd><wd:script>
+        wd.general.test={a:1,b:2,c:3};
+        console.log(wd.general.test);
+    </wd:script><wd:for var="aa" index="i" wd:in="(()=>{return {a:1,b:2,c:3};})()"><wd:print wd:value="wd.v('i')" /> : <wd:print wd:value="wd.v('aa')" />
+    </wd:for><wd:session name="logintest">
         <wd:update commit="0">
             <collection name="login">
                 <field name="test">hoge</field>
@@ -29,7 +33,7 @@ fn test1() {
         <wd:search name="login" collection="login">
         </wd:search><wd:result var="login" search="login"><wd:for var="r" index="i" wd:in="wd.v('login')">
             <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('test')" /><wd:script>
-                console.log(wd.v('r').depends('account'));
+                console.log("cl",wd.v('r').depends('account'));
             </wd:script>
             <wd:for var="dep" index="i" wd:in="wd.v('r').depends('account')">
                 dep:<wd:print wd:value="wd.v('dep').row" />@<wd:print wd:value="wd.v('dep').collection" />
