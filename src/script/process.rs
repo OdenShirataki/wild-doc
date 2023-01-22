@@ -1,9 +1,11 @@
-use deno_runtime::{deno_core::v8, worker::MainWorker};
+use deno_runtime::{
+    deno_core::{error::AnyError, v8},
+    worker::MainWorker,
+};
 use quick_xml::{
     events::{BytesStart, Event},
     Reader,
 };
-use std::io;
 
 use crate::{
     xml_util::{self, XmlAttr},
@@ -17,7 +19,7 @@ pub fn get_include_content<T: IncludeAdaptor>(
     worker: &mut MainWorker,
     include_adaptor: &mut T,
     attr: &XmlAttr,
-) -> std::io::Result<Vec<u8>> {
+) -> Result<Vec<u8>, AnyError> {
     let xml = if let Some(xml) =
         include_adaptor.include(&crate::attr_parse_or_static_string(worker, attr, "src"))
     {
@@ -33,12 +35,26 @@ pub fn get_include_content<T: IncludeAdaptor>(
     if let Some(xml) = xml {
         if xml.len() > 0 {
             if let Ok(xml) = std::str::from_utf8(xml) {
-                return run_xml(
+                let mut r = vec![];
+
+                let var = crate::attr_parse_or_static_string(worker, attr, "var");
+                let stack_push = if var.len() > 0 {
+                    let code = "wd.stack.push({".to_owned() + &var + "});";
+                    worker.execute_script("stack.push", &code)?;
+                    true
+                } else {
+                    false
+                };
+                r.append(&mut run_xml(
                     script,
                     "<r>".to_owned() + xml + "</r>",
                     worker,
                     include_adaptor,
-                );
+                )?);
+                if stack_push {
+                    worker.execute_script("stack.pop", "wd.stack.pop();")?;
+                }
+                return Ok(r);
             }
         }
     }
@@ -51,7 +67,7 @@ pub(super) fn run<T: IncludeAdaptor>(
     e: &BytesStart,
     worker: &mut MainWorker,
     include_adaptor: &mut T,
-) -> io::Result<Vec<u8>> {
+) -> Result<Vec<u8>, AnyError> {
     let xml = crate::attr_parse_or_static_string(worker, &xml_util::attr2hash_map(e), "code");
     if xml.len() > 0 {
         run_xml(
@@ -70,7 +86,7 @@ fn run_xml<T: IncludeAdaptor>(
     xml: String,
     worker: &mut MainWorker,
     include_adaptor: &mut T,
-) -> io::Result<Vec<u8>> {
+) -> Result<Vec<u8>, AnyError> {
     let mut event_reader_inner = quick_xml::Reader::from_str(&xml);
     event_reader_inner.check_end_names(false);
 
@@ -91,7 +107,7 @@ pub(super) fn case<T: IncludeAdaptor>(
     xml_str: &str,
     worker: &mut MainWorker,
     include_adaptor: &mut T,
-) -> io::Result<Vec<u8>> {
+) -> Result<Vec<u8>, AnyError> {
     let mut r = Vec::new();
     let attr = xml_util::attr2hash_map(&e);
     let cmp_value = crate::attr_parse_or_static(worker, &attr, "value");
@@ -189,7 +205,7 @@ pub(super) fn r#for<T: IncludeAdaptor>(
     xml_str: &str,
     worker: &mut MainWorker,
     include_adaptor: &mut T,
-) -> io::Result<Vec<u8>> {
+) -> Result<Vec<u8>, AnyError> {
     let mut r = Vec::new();
     let attr = xml_util::attr2hash_map(&e);
     let var = crate::attr_parse_or_static_string(worker, &attr, "var");
@@ -269,7 +285,7 @@ pub(super) fn r#for<T: IncludeAdaptor>(
                                         b"wd:for",
                                         include_adaptor,
                                     )?);
-                                    let _ = worker.execute_script("pop stack", "wd.stack.pop()");
+                                    worker.execute_script("pop stack", "wd.stack.pop()")?;
                                     break;
                                 }
                             }

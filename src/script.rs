@@ -247,7 +247,7 @@ wd.v=key=>{
         reader: &mut Reader<&[u8]>,
         break_tag: &[u8],
         include_adaptor: &mut T,
-    ) -> io::Result<Vec<u8>> {
+    ) -> Result<Vec<u8>, AnyError> {
         let mut search_map = HashMap::new();
         let mut r = Vec::new();
         loop {

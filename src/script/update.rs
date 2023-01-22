@@ -1,5 +1,5 @@
 use chrono::TimeZone;
-use deno_runtime::worker::MainWorker;
+use deno_runtime::{deno_core::error::AnyError, worker::MainWorker};
 use quick_xml::{
     events::{BytesStart, Event},
     Reader,
@@ -17,7 +17,7 @@ pub fn update<T: crate::IncludeAdaptor>(
     reader: &mut Reader<&[u8]>,
     e: &BytesStart,
     include_adaptor: &mut T,
-) -> std::io::Result<()> {
+) -> Result<(), AnyError> {
     let with_commit =
         crate::attr_parse_or_static(worker, &xml_util::attr2hash_map(&e), "commit") == b"1";
     let inner_xml = script.parse(worker, reader, b"wd:update", include_adaptor)?;
