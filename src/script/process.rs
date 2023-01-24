@@ -129,12 +129,12 @@ pub(super) fn case<T: IncludeAdaptor>(
                                                 let wv = crate::attr_parse_or_static(
                                                     worker, &attr, "value",
                                                 );
+                                                let xml_str = xml_util::outer(
+                                                    &next,
+                                                    name,
+                                                    &mut event_reader,
+                                                );
                                                 if wv == cmp_value {
-                                                    let xml_str = xml_util::outer(
-                                                        &next,
-                                                        name,
-                                                        &mut event_reader,
-                                                    );
                                                     let mut event_reader_inner =
                                                         Reader::from_str(&xml_str.trim());
                                                     event_reader_inner.check_end_names(false);
@@ -179,7 +179,9 @@ pub(super) fn case<T: IncludeAdaptor>(
                                                     }
                                                 }
                                             }
-                                            _ => {}
+                                            _ => {
+                                                break;
+                                            }
                                         }
                                     }
                                     Event::Eof => {
