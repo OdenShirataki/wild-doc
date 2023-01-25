@@ -2,6 +2,8 @@ use deno_runtime::{
     deno_broadcast_channel::InMemoryBroadcastChannel,
     deno_core::{self, error::AnyError, serde_v8, v8, v8::READ_ONLY, ModuleSpecifier},
     deno_web::BlobStore,
+    fmt_errors::format_js_error,
+    js::deno_isolate_init,
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
     BootstrapOptions,
@@ -45,7 +47,7 @@ impl Script {
         Self {
             database,
             sessions: vec![],
-            main_module: deno_core::resolve_path("mainworker").unwrap(),
+            main_module: deno_core::resolve_path("main").unwrap(),
             module_loader: WdModuleLoader::new(module_cache_dir),
             bootstrap: Default::default(),
             permissions: PermissionsContainer::allow_all(),
@@ -61,7 +63,7 @@ impl Script {
             bootstrap: self.bootstrap.clone(),
             extensions: vec![],
             extensions_with_js: vec![],
-            startup_snapshot: None,
+            startup_snapshot: Some(deno_isolate_init()),
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
             seed: None,
@@ -74,18 +76,18 @@ impl Script {
             web_worker_pre_execute_module_cb: Arc::new(|_| {
                 unimplemented!("web workers are not supported")
             }),
-            format_js_error_fn: None,
+            format_js_error_fn: Some(Arc::new(format_js_error)),
             source_map_getter: None,
             maybe_inspector_server: None,
             should_break_on_first_statement: false,
-            should_wait_for_inspector_session: false,
+            should_wait_for_inspector_session: Default::default(),
             get_error_class_fn: Default::default(),
             cache_storage_dir: None,
             origin_storage_dir: None,
             blob_store: BlobStore::default(),
             broadcast_channel: InMemoryBroadcastChannel::default(),
-            shared_array_buffer_store: None,
-            compiled_wasm_module_store: None,
+            shared_array_buffer_store: Default::default(),
+            compiled_wasm_module_store: Default::default(),
             stdio: Default::default(),
         };
 
@@ -205,17 +207,19 @@ wd.v=key=>{
             options_json: result_options,
         })
     }
-    fn run_script(worker: &mut MainWorker, src: Cow<str>) {
+    fn run_script(worker: &mut MainWorker, src: Cow<str>) -> Result<(), AnyError> {
         let src = src.to_string();
-        let _r = tokio::runtime::Builder::new_current_thread()
+        tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap()
             .block_on(async {
-                let n = ModuleSpecifier::parse("wd://script")?;
-                let mod_id = worker.js_runtime.load_side_module(&n, Some(src)).await?;
+                let mod_id = worker
+                    .js_runtime
+                    .load_side_module(&ModuleSpecifier::parse("wd://script")?, Some(src))
+                    .await?;
                 worker.evaluate_module(mod_id).await
-            });
+            })
     }
 
     pub fn parse<T: IncludeAdaptor>(
@@ -288,7 +292,13 @@ wd.v=key=>{
                             }
                             b"wd:script" => {
                                 if let Ok(src) = reader.read_text(name) {
-                                    Self::run_script(worker, src);
+                                    match Self::run_script(worker, src) {
+                                        Err(e) => {
+                                            r.append(&mut e.to_string().as_bytes().to_vec());
+                                            return Ok(r)
+                                        }
+                                        _ => {}
+                                    }
                                 }
                             }
                             b"wd:case" => {
