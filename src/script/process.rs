@@ -20,16 +20,17 @@ pub fn get_include_content<T: IncludeAdaptor>(
     include_adaptor: &mut T,
     attr: &XmlAttr,
 ) -> Result<Vec<u8>, AnyError> {
-    let xml = if let Some(xml) =
-        include_adaptor.include(&crate::attr_parse_or_static_string(worker, attr, "src"))
+    let src=crate::attr_parse_or_static_string(worker, attr, "src");
+    let (xml,filename) = if let Some(xml) =
+        include_adaptor.include(&src)
     {
-        Some(xml)
+        (Some(xml),src)
     } else {
         let substitute = crate::attr_parse_or_static_string(worker, attr, "substitute");
         if let Some(xml) = include_adaptor.include(&substitute) {
-            Some(xml)
+            (Some(xml),substitute)
         } else {
-            None
+            (None,"".to_owned())
         }
     };
     if let Some(xml) = xml {
@@ -45,12 +46,14 @@ pub fn get_include_content<T: IncludeAdaptor>(
                 } else {
                     false
                 };
+                script.include_stack.push(filename);
                 r.append(&mut run_xml(
                     script,
                     "<r>".to_owned() + xml + "</r>",
                     worker,
                     include_adaptor,
                 )?);
+                script.include_stack.pop();
                 if stack_push {
                     worker.execute_script("stack.pop", "wd.stack.pop();")?;
                 }

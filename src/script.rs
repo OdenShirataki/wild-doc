@@ -41,6 +41,7 @@ pub struct Script {
     module_loader: Rc<WdModuleLoader>,
     bootstrap: BootstrapOptions,
     permissions: PermissionsContainer,
+    include_stack: Vec<String>,
 }
 impl Script {
     pub fn new(database: Arc<RwLock<Database>>, module_cache_dir: PathBuf) -> Self {
@@ -51,6 +52,7 @@ impl Script {
             module_loader: WdModuleLoader::new(module_cache_dir),
             bootstrap: Default::default(),
             permissions: PermissionsContainer::allow_all(),
+            include_stack: vec![],
         }
     }
     pub fn parse_xml<T: IncludeAdaptor>(
@@ -207,7 +209,7 @@ wd.v=key=>{
             options_json: result_options,
         })
     }
-    fn run_script(worker: &mut MainWorker, src: Cow<str>) -> Result<(), AnyError> {
+    fn run_script(worker: &mut MainWorker, file_name: &str, src: Cow<str>) -> Result<(), AnyError> {
         let src = src.to_string();
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -216,7 +218,10 @@ wd.v=key=>{
             .block_on(async {
                 let mod_id = worker
                     .js_runtime
-                    .load_side_module(&ModuleSpecifier::parse("wd://script")?, Some(src))
+                    .load_side_module(
+                        &ModuleSpecifier::parse(&("wd://script".to_owned() + file_name))?,
+                        Some(src),
+                    )
                     .await?;
                 worker.evaluate_module(mod_id).await
             })
@@ -292,10 +297,18 @@ wd.v=key=>{
                             }
                             b"wd:script" => {
                                 if let Ok(src) = reader.read_text(name) {
-                                    match Self::run_script(worker, src) {
+                                    match Self::run_script(
+                                        worker,
+                                        if let Some(last) = self.include_stack.last() {
+                                            last
+                                        } else {
+                                            ""
+                                        },
+                                        src,
+                                    ) {
                                         Err(e) => {
                                             r.append(&mut e.to_string().as_bytes().to_vec());
-                                            return Ok(r)
+                                            return Ok(r);
                                         }
                                         _ => {}
                                     }
