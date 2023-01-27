@@ -33,6 +33,9 @@ pub fn outer(elem: &Event, name: QName, xml_reader: &mut Reader<&[u8]>) -> Strin
                         deps -= 1;
                     }
                 }
+                Event::Eof => {
+                    break;
+                }
                 _ => {}
             }
             let _ = writer.write_event(e);
