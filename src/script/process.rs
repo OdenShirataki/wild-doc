@@ -20,17 +20,15 @@ pub fn get_include_content<T: IncludeAdaptor>(
     include_adaptor: &mut T,
     attr: &XmlAttr,
 ) -> Result<Vec<u8>, AnyError> {
-    let src=crate::attr_parse_or_static_string(worker, attr, "src");
-    let (xml,filename) = if let Some(xml) =
-        include_adaptor.include(&src)
-    {
-        (Some(xml),src)
+    let src = crate::attr_parse_or_static_string(worker, attr, "src");
+    let (xml, filename) = if let Some(xml) = include_adaptor.include(&src) {
+        (Some(xml), src)
     } else {
         let substitute = crate::attr_parse_or_static_string(worker, attr, "substitute");
         if let Some(xml) = include_adaptor.include(&substitute) {
-            (Some(xml),substitute)
+            (Some(xml), substitute)
         } else {
-            (None,"".to_owned())
+            (None, "".to_owned())
         }
     };
     if let Some(xml) = xml {
@@ -132,11 +130,8 @@ pub(super) fn case<T: IncludeAdaptor>(
                                                 let wv = crate::attr_parse_or_static(
                                                     worker, &attr, "value",
                                                 );
-                                                let xml_str = xml_util::outer(
-                                                    &next,
-                                                    name,
-                                                    &mut event_reader,
-                                                );
+                                                let xml_str =
+                                                    xml_util::outer(&next, name, &mut event_reader);
                                                 if wv == cmp_value {
                                                     let mut event_reader_inner =
                                                         Reader::from_str(&xml_str.trim());
@@ -262,9 +257,9 @@ pub(super) fn r#for<T: IncludeAdaptor>(
                                     };
                                     let source = "wd.stack.push({".to_owned()
                                         + &var
-                                        + ":"
+                                        + ":("
                                         + source
-                                        + "["
+                                        + ")["
                                         + &key_str
                                         + "]"
                                         + &(if let Ok(Some(index)) = e.try_get_attribute(b"index") {
