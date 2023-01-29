@@ -1,5 +1,5 @@
 use deno_runtime::{deno_core::v8, worker::MainWorker};
-use quick_xml::{events::Event, Reader};
+use quick_xml::{escape::unescape, events::Event, Reader};
 use semilattice_database::Database;
 use std::{
     io,
@@ -155,11 +155,18 @@ fn attr_parse_or_static_string(worker: &mut MainWorker, attr: &XmlAttr, key: &st
     let wdkey = "wd:".to_owned() + key;
     if let Some(value) = attr.get(&wdkey) {
         if let Ok(value) = std::str::from_utf8(value) {
-            return crate::eval_result_string(&mut worker.js_runtime.handle_scope(), value);
+            if let Ok(value) = unescape(value) {
+                return crate::eval_result_string(
+                    &mut worker.js_runtime.handle_scope(),
+                    value.as_ref(),
+                );
+            }
         }
     } else if let Some(value) = attr.get(key) {
-        if let Ok(str) = std::string::String::from_utf8(value.to_vec()) {
-            return str;
+        if let Ok(value) = std::str::from_utf8(value) {
+            if let Ok(value) = unescape(value) {
+                return value.into_owned();
+            }
         }
     }
     "".to_owned()
