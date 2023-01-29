@@ -256,6 +256,9 @@ wd.v=key=>{
                             b"wd:session_gc" => {
                                 self.session_gc(worker, e)?;
                             }
+                            b"wd:delete_collection" => {
+                                self.delete_collection(worker, e)?;
+                            }
                             b"wd:run" => {
                                 r.append(&mut process::run(self, e, worker, include_adaptor)?);
                             }
@@ -355,6 +358,9 @@ wd.v=key=>{
                             }
                             b"wd:session_gc" => {
                                 self.session_gc(worker, e)?;
+                            }
+                            b"wd:delete_collection" => {
+                                self.delete_collection(worker, e)?;
                             }
                             b"wd:run" => {
                                 r.append(&mut process::run(self, e, worker, include_adaptor)?);
@@ -508,7 +514,19 @@ wd.v=key=>{
         }
         self.database.clone().write().unwrap().session_gc(expire)
     }
-
+    fn delete_collection(
+        &mut self,
+        worker: &mut MainWorker,
+        e: &BytesStart,
+    ) -> std::io::Result<()> {
+        let str_collection =
+            crate::attr_parse_or_static_string(worker, &xml_util::attr2hash_map(e), "collection");
+        self.database
+            .clone()
+            .write()
+            .unwrap()
+            .delete_collection(&str_collection)
+    }
     fn html_attr(e: &BytesStart, worker: &mut MainWorker) -> String {
         let scope = &mut worker.js_runtime.handle_scope();
         let context = scope.get_current_context();
