@@ -365,65 +365,126 @@ pub(super) fn result(
                         v8::String::new(scope, "session"),
                         session.temporary_collection(collection_id),
                     ) {
-                        let rowset = script
-                            .database
-                            .clone()
-                            .read()
-                            .unwrap()
-                            .result_session(session.search(collection_id, conditions))
-                            .unwrap();
-                        //TODO:セッションデータのソート
                         let mut i = 0;
-                        for r in rowset {
-                            let (activity, term_begin, term_end) =
-                                if let Some(tr) = temporary_collection.get(&r) {
-                                    (tr.activity() as i32, tr.term_begin(), tr.term_end())
-                                } else if r > 0 {
-                                    let row = r as u32;
-                                    (
-                                        collection.activity(row) as i32,
-                                        collection.term_begin(row),
-                                        collection.term_begin(row),
-                                    )
-                                } else {
-                                    unreachable!()
-                                };
-                            let obj = set_values(
-                                scope,
-                                collection_id as i32,
-                                r,
-                                activity,
-                                term_begin,
-                                term_end,
-                            );
+                        let search = session.search(collection_id, conditions);
+                        if orders.len() > 0 {
+                            for r in script
+                                .database
+                                .clone()
+                                .read()
+                                .unwrap()
+                                .result_session_with_order(search, orders)
+                                .unwrap()
+                            {
+                                let (activity, term_begin, term_end) =
+                                    if let Some(tr) = temporary_collection.get(&r) {
+                                        (tr.activity() as i32, tr.term_begin(), tr.term_end())
+                                    } else if r > 0 {
+                                        let row = r as u32;
+                                        (
+                                            collection.activity(row) as i32,
+                                            collection.term_begin(row),
+                                            collection.term_begin(row),
+                                        )
+                                    } else {
+                                        unreachable!()
+                                    };
 
-                            obj.define_own_property(
-                                scope,
-                                v8str_session.into(),
-                                v8ext_session.into(),
-                                READ_ONLY,
-                            );
+                                let obj = set_values(
+                                    scope,
+                                    collection.id(),
+                                    r,
+                                    activity,
+                                    term_begin,
+                                    term_end,
+                                );
 
-                            obj.define_own_property(
-                                scope,
-                                v8str_field.into(),
-                                v8func_field.into(),
-                                READ_ONLY,
-                            );
-                            obj.define_own_property(
-                                scope,
-                                v8str_depends.into(),
-                                v8func_depends.into(),
-                                READ_ONLY,
-                            );
+                                obj.define_own_property(
+                                    scope,
+                                    v8str_session.into(),
+                                    v8ext_session.into(),
+                                    READ_ONLY,
+                                );
 
-                            if r > 0 {
-                                set_last_update(scope, obj, collection.last_updated(r as u32));
-                                set_uuid(scope, obj, &collection.uuid_str(r as u32));
+                                obj.define_own_property(
+                                    scope,
+                                    v8str_field.into(),
+                                    v8func_field.into(),
+                                    READ_ONLY,
+                                );
+                                obj.define_own_property(
+                                    scope,
+                                    v8str_depends.into(),
+                                    v8func_depends.into(),
+                                    READ_ONLY,
+                                );
+
+                                if r > 0 {
+                                    set_last_update(scope, obj, collection.last_updated(r as u32));
+                                    set_uuid(scope, obj, &collection.uuid_str(r as u32));
+                                }
+                                return_obj.set_index(scope, i, obj.into());
+                                i += 1;
                             }
+                        } else {
+                            for r in script
+                                .database
+                                .clone()
+                                .read()
+                                .unwrap()
+                                .result_session(search)
+                                .unwrap()
+                            {
+                                let (activity, term_begin, term_end) =
+                                    if let Some(tr) = temporary_collection.get(&r) {
+                                        (tr.activity() as i32, tr.term_begin(), tr.term_end())
+                                    } else if r > 0 {
+                                        let row = r as u32;
+                                        (
+                                            collection.activity(row) as i32,
+                                            collection.term_begin(row),
+                                            collection.term_begin(row),
+                                        )
+                                    } else {
+                                        unreachable!()
+                                    };
 
-                            return_obj.set_index(scope, i, obj.into());
-                            i += 1;
+                                let obj = set_values(
+                                    scope,
+                                    collection.id(),
+                                    r,
+                                    activity,
+                                    term_begin,
+                                    term_end,
+                                );
+
+                                obj.define_own_property(
+                                    scope,
+                                    v8str_session.into(),
+                                    v8ext_session.into(),
+                                    READ_ONLY,
+                                );
+
+                                obj.define_own_property(
+                                    scope,
+                                    v8str_field.into(),
+                                    v8func_field.into(),
+                                    READ_ONLY,
+                                );
+                                obj.define_own_property(
+                                    scope,
+                                    v8str_depends.into(),
+                                    v8func_depends.into(),
+                                    READ_ONLY,
+                                );
+
+                                if r > 0 {
+                                    set_last_update(scope, obj, collection.last_updated(r as u32));
+                                    set_uuid(scope, obj, &collection.uuid_str(r as u32));
+                                }
+                                return_obj.set_index(scope, i, obj.into());
+                                i += 1;
+                            }
                         }
                     }
                 } else {
