@@ -436,18 +436,13 @@ pub(super) fn result(
                             search = search.search(c.clone());
                         }
 
-                        let rowset = script
+                        let rows = script
                             .database
                             .clone()
                             .read()
                             .unwrap()
-                            .result(search)
+                            .result(search, &orders)
                             .unwrap();
-                        let rows = if orders.len() > 0 {
-                            collection.sort(rowset, orders)
-                        } else {
-                            rowset.into_iter().collect()
-                        };
                         let mut i = 0;
                         for r in rows {
                             let obj = set_values(
