@@ -34,8 +34,10 @@ pub fn search(
         {
             let condition = make_conditions(script, &attr, reader, worker);
             search_map.insert(name.to_owned(), (collection_id, condition));
+            return;
         }
     }
+    let _ = reader.read_to_end(quick_xml::name::QName(b"wd:search"));
 }
 
 fn make_conditions(
