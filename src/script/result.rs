@@ -60,7 +60,11 @@ fn depends(
         get_row(scope, this),
     ) {
         if let Ok(db) = db.clone().read() {
-            let key = args.get(0).to_string(scope);
+            let key = if args.length() > 0 {
+                args.get(0).to_string(scope)
+            } else {
+                None
+            };
             let array = depends_array(scope, &db, key, collection_id, row, None);
             rv.set(array.into());
         }
@@ -80,7 +84,11 @@ fn session_depends(
         get_session(scope, this),
     ) {
         if let Ok(db) = db.clone().read() {
-            let key = args.get(0).to_string(scope);
+            let key = if args.length() > 0 {
+                args.get(0).to_string(scope)
+            } else {
+                None
+            };
             let array = depends_array(scope, &db, key, collection_id, row, Some(&session));
             rv.set(array.into());
         }
