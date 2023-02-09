@@ -537,8 +537,11 @@ wd.v=key=>{
                 if let Ok(attr_key) = std::str::from_utf8(attr.key.as_ref()) {
                     if attr_key == "wd-attr:replace" {
                         if let Ok(value) = std::str::from_utf8(&attr.value) {
-                            html_attr.push(' ');
-                            html_attr.push_str(&crate::eval_result_string(scope, value));
+                            let attr = crate::eval_result_string(scope, value);
+                            if attr.len() > 0 {
+                                html_attr.push(' ');
+                                html_attr.push_str(&attr);
+                            }
                         }
                     } else {
                         let is_wd = attr_key.starts_with("wd:");
