@@ -170,10 +170,10 @@ fn make_update_struct(
                                     {
                                         Term::Overwrite(t as u64)
                                     } else {
-                                        Term::Defalut
+                                        Term::Default
                                     }
                                 } else {
-                                    Term::Defalut
+                                    Term::Default
                                 };
                                 let term_end =
                                     crate::attr_parse_or_static_string(worker, &attr, "term_end");
@@ -184,10 +184,10 @@ fn make_update_struct(
                                     {
                                         Term::Overwrite(t as u64)
                                     } else {
-                                        Term::Defalut
+                                        Term::Default
                                     }
                                 } else {
-                                    Term::Defalut
+                                    Term::Default
                                 };
 
                                 let mut f = Vec::new();
