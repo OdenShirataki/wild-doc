@@ -1,5 +1,8 @@
 use chrono::TimeZone;
-use deno_runtime::{deno_core::error::AnyError, worker::MainWorker};
+use deno_runtime::{
+    deno_core::{error::AnyError, serde_json},
+    worker::MainWorker,
+};
 use quick_xml::{
     events::{BytesStart, Event},
     Reader,
@@ -32,7 +35,18 @@ pub fn update<T: crate::IncludeAdaptor>(
             .unwrap()
             .update(session, updates)?;
         if with_commit {
-            script.database.clone().write().unwrap().commit(session)?;
+            let commit_rows = script.database.clone().write().unwrap().commit(session)?;
+            let src = crate::attr_parse_or_static_string(
+                worker,
+                &xml_util::attr2hash_map(&e),
+                "result_callback",
+            );
+            if src.len() > 0 {
+                if let Ok(json) = serde_json::to_string(&commit_rows) {
+                    let code = "{const commit={rows:".to_owned() + &json + "};" + &src + "}";
+                    let _ = worker.execute_script("commit", &code);
+                }
+            }
         }
     }
     Ok(())
