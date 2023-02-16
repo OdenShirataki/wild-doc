@@ -106,15 +106,16 @@ fn make_update_struct(
                                         let name = e.name();
                                         let name_ref = name.as_ref();
                                         if name_ref == b"field" {
-                                            if let (Ok(Some(field_name)), Ok(cont)) = (
-                                                e.try_get_attribute("name"),
+                                            let field_name = crate::attr_parse_or_static(
+                                                worker,
+                                                &xml_util::attr2hash_map(&e),
+                                                "name",
+                                            );
+                                            if let (Ok(field_name), Ok(cont)) = (
+                                                String::from_utf8(field_name),
                                                 reader.read_text(name),
                                             ) {
-                                                if let Ok(field_name) =
-                                                    std::str::from_utf8(&field_name.value)
-                                                {
-                                                    fields.insert(field_name.to_owned(), cont);
-                                                }
+                                                fields.insert(field_name, cont);
                                             }
                                         } else if name_ref == b"pends" {
                                             if let Ok(inner_xml) = reader.read_text(name) {
