@@ -21,8 +21,6 @@ pub fn update<T: crate::IncludeAdaptor>(
     e: &BytesStart,
     include_adaptor: &mut T,
 ) -> Result<(), AnyError> {
-    let with_commit =
-        crate::attr_parse_or_static(worker, &xml_util::attr2hash_map(&e), "commit") == b"1";
     let inner_xml = script.parse(worker, reader, b"wd:update", include_adaptor)?;
     let mut inner_reader = Reader::from_str(std::str::from_utf8(&inner_xml).unwrap());
     inner_reader.check_end_names(false);
@@ -34,7 +32,7 @@ pub fn update<T: crate::IncludeAdaptor>(
             .read()
             .unwrap()
             .update(session, updates)?;
-        if with_commit {
+        if crate::attr_parse_or_static(worker, &xml_util::attr2hash_map(&e), "commit") == b"1" {
             let commit_rows = script.database.clone().write().unwrap().commit(session)?;
             let src = crate::attr_parse_or_static_string(
                 worker,
