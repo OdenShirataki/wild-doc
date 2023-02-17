@@ -326,6 +326,15 @@ wd.v=key=>{
                                     include_adaptor,
                                 )?);
                             }
+                            b"wd:if" => {
+                                r.append(&mut process::r#if(
+                                    self,
+                                    &e,
+                                    &xml_util::outer(&next, name, reader),
+                                    worker,
+                                    include_adaptor,
+                                )?);
+                            }
                             b"wd:for" => {
                                 r.append(&mut process::r#for(
                                     self,

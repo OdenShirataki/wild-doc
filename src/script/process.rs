@@ -199,6 +199,31 @@ pub(super) fn case<T: IncludeAdaptor>(
     Ok(r)
 }
 
+pub(super) fn r#if<T: IncludeAdaptor>(
+    script: &mut Script,
+    e: &BytesStart,
+    xml_str: &str,
+    worker: &mut MainWorker,
+    include_adaptor: &mut T,
+) -> Result<Vec<u8>, AnyError> {
+    let mut r = Vec::new();
+    let attr = xml_util::attr2hash_map(&e);
+
+    if crate::attr_parse_or_static(worker, &attr, "value") == b"true" {
+        let mut event_reader = Reader::from_str(&xml_str.trim());
+        event_reader.check_end_names(false);
+        match event_reader.read_event() {
+            Ok(Event::Start(e)) => {
+                if e.name().as_ref() == b"wd:if" {
+                    r.append(&mut script.parse(worker, &mut event_reader, b"", include_adaptor)?);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(r)
+}
 pub(super) fn r#for<T: IncludeAdaptor>(
     script: &mut Script,
     e: &BytesStart,
