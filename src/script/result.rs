@@ -282,9 +282,9 @@ fn set_values<'s>(
 }
 
 fn set_serial<'s>(scope: &mut HandleScope<'s>, object: v8::Local<'s, v8::Object>, serial: u32) {
-    if let Some(v8str_last_update) = v8::String::new(scope, "serial") {
+    if let Some(v8str_serial) = v8::String::new(scope, "serial") {
         let serial = v8::Integer::new_from_unsigned(scope, serial);
-        object.define_own_property(scope, v8str_last_update.into(), serial.into(), READ_ONLY);
+        object.define_own_property(scope, v8str_serial.into(), serial.into(), READ_ONLY);
     }
 }
 fn set_last_update<'s>(
@@ -404,6 +404,16 @@ pub(super) fn result(
                                 activity,
                                 term_begin,
                                 term_end,
+                            );
+
+                            set_serial(
+                                scope,
+                                obj,
+                                if r > 0 {
+                                    collection.serial(r as u32)
+                                } else {
+                                    0
+                                },
                             );
 
                             obj.define_own_property(
