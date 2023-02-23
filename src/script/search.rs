@@ -48,53 +48,79 @@ fn make_conditions(
 ) -> Vec<Condition> {
     let mut conditions = condition_loop(script, reader, worker);
 
-    if let Some(activity) = attr.get("activity") {
-        if let Ok(activity) = std::str::from_utf8(activity) {
-            if activity == "inactive" {
-                conditions.push(Condition::Activity(Activity::Inactive));
-            } else if activity == "active" {
-                conditions.push(Condition::Activity(Activity::Active));
+    let activity = attr.get("activity").map_or(Some(Activity::Active), |v| {
+        std::str::from_utf8(v).map_or(Some(Activity::Active), |v| {
+            if v == "all" {
+                None
+            } else if v == "inactive" {
+                Some(Activity::Inactive)
+            } else {
+                Some(Activity::Active)
             }
-        }
+        })
+    });
+    if let Some(activity) = activity {
+        conditions.push(Condition::Activity(activity));
     }
-    if let Some(term) = attr.get("term") {
-        if let Ok(term) = std::str::from_utf8(term) {
-            if term != "all" {
-                let term: Vec<&str> = term.split("@").collect();
-                if term.len() == 2 {
-                    conditions.push(Condition::Term(
-                        chrono::Local
-                            .datetime_from_str(term[1], "%Y-%m-%d %H:%M:%S")
-                            .map_or(
-                                search::Term::In(
-                                    SystemTime::now()
-                                        .duration_since(UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_secs(),
-                                ),
-                                |t| match term[0] {
-                                    "in" => search::Term::In(t.timestamp() as u64),
-                                    "future" => search::Term::Future(t.timestamp() as u64),
-                                    "past" => search::Term::Past(t.timestamp() as u64),
-                                    _ => search::Term::In(
+    let term = attr.get("term").map_or(
+        Some(search::Term::In(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        )),
+        |v| {
+            std::str::from_utf8(v).map_or(
+                Some(search::Term::In(
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                )),
+                |v| {
+                    if v == "all" {
+                        None
+                    } else {
+                        let v: Vec<&str> = v.split("@").collect();
+                        if v.len() == 2 {
+                            chrono::Local
+                                .datetime_from_str(v[1], "%Y-%m-%d %H:%M:%S")
+                                .map_or(
+                                    Some(search::Term::In(
                                         SystemTime::now()
                                             .duration_since(UNIX_EPOCH)
                                             .unwrap()
                                             .as_secs(),
-                                    ),
-                                },
-                            ),
-                    ));
-                } else {
-                    conditions.push(Condition::Term(search::Term::In(
-                        SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs(),
-                    )));
-                }
-            }
-        }
+                                    )),
+                                    |t| match v[0] {
+                                        "in" => Some(search::Term::In(t.timestamp() as u64)),
+                                        "future" => {
+                                            Some(search::Term::Future(t.timestamp() as u64))
+                                        }
+                                        "past" => Some(search::Term::Past(t.timestamp() as u64)),
+                                        _ => Some(search::Term::In(
+                                            SystemTime::now()
+                                                .duration_since(UNIX_EPOCH)
+                                                .unwrap()
+                                                .as_secs(),
+                                        )),
+                                    },
+                                )
+                        } else {
+                            Some(search::Term::In(
+                                SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_secs(),
+                            ))
+                        }
+                    }
+                },
+            )
+        },
+    );
+    if let Some(term) = term {
+        conditions.push(Condition::Term(term));
     }
     conditions
 }
