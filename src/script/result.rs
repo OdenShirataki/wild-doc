@@ -369,7 +369,7 @@ pub(super) fn result(
                         ) {
                             let mut i = 0;
                             let search = session.search(collection_id, conditions);
-                            for r in script
+                            for row in script
                                 .database
                                 .clone()
                                 .read()
@@ -378,10 +378,10 @@ pub(super) fn result(
                                 .unwrap()
                             {
                                 let (activity, term_begin, term_end) =
-                                    if let Some(tr) = temporary_collection.get(&r) {
+                                    if let Some(tr) = temporary_collection.get(&row) {
                                         (tr.activity() as i32, tr.term_begin(), tr.term_end())
-                                    } else if r > 0 {
-                                        let row = r as u32;
+                                    } else if row > 0 {
+                                        let row = row as u32;
                                         (
                                             collection.activity(row) as i32,
                                             collection.term_begin(row),
@@ -394,7 +394,7 @@ pub(super) fn result(
                                 let obj = set_values(
                                     scope,
                                     collection.id(),
-                                    r,
+                                    row,
                                     activity,
                                     term_begin,
                                     term_end,
@@ -403,8 +403,8 @@ pub(super) fn result(
                                 set_serial(
                                     scope,
                                     obj,
-                                    if r > 0 {
-                                        collection.serial(r as u32)
+                                    if row > 0 {
+                                        collection.serial(row as u32)
                                     } else {
                                         0
                                     },
@@ -430,9 +430,17 @@ pub(super) fn result(
                                     READ_ONLY,
                                 );
 
-                                if r > 0 {
-                                    set_last_update(scope, obj, collection.last_updated(r as u32));
-                                    set_uuid(scope, obj, &collection.uuid_str(r as u32));
+                                if row > 0 {
+                                    set_last_update(
+                                        scope,
+                                        obj,
+                                        collection.last_updated(row as u32),
+                                    );
+                                    set_uuid(scope, obj, &collection.uuid_string(row as u32));
+                                } else {
+                                    if let Some(tr) = temporary_collection.get(&row) {
+                                        set_uuid(scope, obj, &tr.uuid_string());
+                                    }
                                 }
                                 return_obj.set_index(scope, i, obj.into());
                                 i += 1;
@@ -457,20 +465,20 @@ pub(super) fn result(
                                 .result(search, &orders)
                                 .unwrap();
                             let mut i = 0;
-                            for r in rows {
+                            for row in rows {
                                 let obj = set_values(
                                     scope,
                                     collection_id as i32,
-                                    r as i64,
-                                    collection.activity(r) as i32,
-                                    collection.term_begin(r),
-                                    collection.term_end(r),
+                                    row as i64,
+                                    collection.activity(row) as i32,
+                                    collection.term_begin(row),
+                                    collection.term_end(row),
                                 );
 
-                                set_serial(scope, obj, collection.serial(r));
+                                set_serial(scope, obj, collection.serial(row));
 
-                                set_last_update(scope, obj, collection.last_updated(r));
-                                set_uuid(scope, obj, &collection.uuid_str(r));
+                                set_last_update(scope, obj, collection.last_updated(row));
+                                set_uuid(scope, obj, &collection.uuid_string(row));
 
                                 obj.define_own_property(
                                     scope,
