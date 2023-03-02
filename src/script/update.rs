@@ -26,24 +26,40 @@ pub fn update<T: crate::IncludeAdaptor>(
     inner_reader.check_end_names(false);
     let updates = make_update_struct(script, &mut inner_reader, worker);
     if let Some((ref mut session, _)) = script.sessions.last_mut() {
-        script
+        let session_rows = script
             .database
             .clone()
             .read()
             .unwrap()
             .update(session, updates)?;
-        if crate::attr_parse_or_static(worker, &xml_util::attr2hash_map(&e), "commit") == b"1" {
-            let commit_rows = script.database.clone().write().unwrap().commit(session)?;
-            let src = crate::attr_parse_or_static_string(
-                worker,
-                &xml_util::attr2hash_map(&e),
-                "result_callback",
-            );
-            if src.len() > 0 {
-                if let Ok(json) = serde_json::to_string(&commit_rows) {
-                    let code = "{const commit={rows:".to_owned() + &json + "};" + &src + "}";
-                    let _ = worker.execute_script("commit", &code);
-                }
+        let commit_rows = if crate::attr_parse_or_static(
+            worker,
+            &xml_util::attr2hash_map(&e),
+            "commit",
+        ) == b"1"
+        {
+            script.database.clone().write().unwrap().commit(session)?
+        } else {
+            vec![]
+        };
+        let src = crate::attr_parse_or_static_string(
+            worker,
+            &xml_util::attr2hash_map(&e),
+            "result_callback",
+        );
+        if src.len() > 0 {
+            if let (Ok(json_commit_rows), Ok(json_session_rows)) = (
+                serde_json::to_string(&commit_rows),
+                serde_json::to_string(&session_rows),
+            ) {
+                let code = "{const update_result={commit_rows:".to_owned()
+                    + &json_commit_rows
+                    + ",session_rows:"
+                    + &json_session_rows
+                    + "};"
+                    + &src
+                    + "}";
+                let _ = worker.execute_script("commit", &code);
             }
         }
     }
