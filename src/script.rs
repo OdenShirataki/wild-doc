@@ -234,6 +234,7 @@ wd.v=key=>{
         break_tag: &[u8],
         include_adaptor: &mut T,
     ) -> Result<Vec<u8>, AnyError> {
+        let mut custom_stack = vec![];
         let mut search_map = HashMap::new();
         let mut r = Vec::new();
         loop {
@@ -344,11 +345,19 @@ wd.v=key=>{
                                     include_adaptor,
                                 )?);
                             }
+                            b"wd:custom" => {
+                                let (name, attr) = Self::custom_tag(e, worker);
+                                custom_stack.push(name.clone());
+                                r.push(b'<');
+                                r.append(&mut name.into_bytes());
+                                r.append(&mut attr.into_bytes());
+                                r.push(b'>');
+                            }
                             _ => {
                                 if !name_ref.starts_with(b"wd:") {
                                     r.push(b'<');
                                     r.append(&mut name_ref.to_vec());
-                                    r.append(&mut Self::html_attr(e, worker).as_bytes().to_vec());
+                                    r.append(&mut Self::html_attr(e, worker).into_bytes());
                                     r.push(b'>');
                                 }
                             }
@@ -382,11 +391,18 @@ wd.v=key=>{
                                     &xml_util::attr2hash_map(e),
                                 )?);
                             }
+                            b"wd:custom" => {
+                                let (name, attr) = Self::custom_tag(e, worker);
+                                r.push(b'<');
+                                r.append(&mut name.into_bytes());
+                                r.append(&mut attr.into_bytes());
+                                r.append(&mut b" />".to_vec());
+                            }
                             _ => {
                                 if !name.starts_with(b"wd:") {
                                     r.push(b'<');
                                     r.append(&mut name.to_vec());
-                                    r.append(&mut Self::html_attr(e, worker).as_bytes().to_vec());
+                                    r.append(&mut Self::html_attr(e, worker).into_bytes());
                                     r.append(&mut b" />".to_vec());
                                 }
                             }
@@ -417,6 +433,13 @@ wd.v=key=>{
                                                     .unwrap()
                                                     .session_clear(session);
                                             }
+                                        }
+                                    }
+                                    b"wd:custom" => {
+                                        if let Some(name) = custom_stack.pop() {
+                                            r.append(&mut b"</".to_vec());
+                                            r.append(&mut name.into_bytes());
+                                            r.push(b'>');
                                         }
                                     }
                                     _ => {}
@@ -581,6 +604,59 @@ wd.v=key=>{
             }
         }
         html_attr
+    }
+    fn custom_tag(e: &BytesStart, worker: &mut MainWorker) -> (String, String) {
+        let scope = &mut worker.js_runtime.handle_scope();
+        let context = scope.get_current_context();
+        let scope = &mut v8::ContextScope::new(scope, context);
+        let mut html_attr = "".to_string();
+        let mut name = "".to_string();
+        for attr in e.attributes() {
+            if let Ok(attr) = attr {
+                if let Ok(attr_key) = std::str::from_utf8(attr.key.as_ref()) {
+                    if attr_key == "wd-custom:name" {
+                        if let Ok(value) = std::str::from_utf8(&attr.value) {
+                            name = crate::eval_result_string(scope, value);
+                        }
+                    } else {
+                        if attr_key == "wd-attr:replace" {
+                            if let Ok(value) = std::str::from_utf8(&attr.value) {
+                                let attr = crate::eval_result_string(scope, value);
+                                if attr.len() > 0 {
+                                    html_attr.push(' ');
+                                    html_attr.push_str(&attr);
+                                }
+                            }
+                        } else {
+                            let is_wd = attr_key.starts_with("wd:");
+                            let attr_key = if is_wd {
+                                attr_key.split_at(3).1
+                            } else {
+                                attr_key
+                            };
+                            html_attr.push(' ');
+                            html_attr.push_str(attr_key);
+
+                            if let Ok(value) = std::str::from_utf8(&attr.value) {
+                                html_attr.push_str("=\"");
+                                if is_wd {
+                                    html_attr.push_str(&crate::eval_result_string(scope, value));
+                                } else {
+                                    html_attr.push_str(
+                                        &value
+                                            .replace("&", "&amp;")
+                                            .replace("<", "&lt;")
+                                            .replace(">", "&gt;"),
+                                    );
+                                }
+                                html_attr.push('"');
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        (name, html_attr)
     }
 }
 
