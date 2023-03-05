@@ -131,7 +131,14 @@ fn make_update_struct(
                                                 String::from_utf8(field_name),
                                                 reader.read_text(name),
                                             ) {
-                                                fields.insert(field_name, cont);
+                                                fields.insert(
+                                                    field_name,
+                                                    cont.replace("&gt;", ">")
+                                                        .replace("&lt;", "<")
+                                                        .replace("&#039;", "'")
+                                                        .replace("&quot;", "\"")
+                                                        .replace("&amp;", "&"),
+                                                );
                                             }
                                         } else if name_ref == b"pends" {
                                             if let Ok(inner_xml) = reader.read_text(name) {
