@@ -234,7 +234,7 @@ wd.v=key=>{
         break_tag: &[u8],
         include_adaptor: &mut T,
     ) -> Result<Vec<u8>, AnyError> {
-        let mut custom_stack = vec![];
+        let mut tag_stack = vec![];
         let mut search_map = HashMap::new();
         let mut r = Vec::new();
         loop {
@@ -345,9 +345,9 @@ wd.v=key=>{
                                     include_adaptor,
                                 )?);
                             }
-                            b"wd:custom" => {
+                            b"wd:tag" => {
                                 let (name, attr) = Self::custom_tag(e, worker);
-                                custom_stack.push(name.clone());
+                                tag_stack.push(name.clone());
                                 r.push(b'<');
                                 r.append(&mut name.into_bytes());
                                 r.append(&mut attr.into_bytes());
@@ -391,7 +391,7 @@ wd.v=key=>{
                                     &xml_util::attr2hash_map(e),
                                 )?);
                             }
-                            b"wd:custom" => {
+                            b"wd:tag" => {
                                 let (name, attr) = Self::custom_tag(e, worker);
                                 r.push(b'<');
                                 r.append(&mut name.into_bytes());
@@ -435,8 +435,8 @@ wd.v=key=>{
                                             }
                                         }
                                     }
-                                    b"wd:custom" => {
-                                        if let Some(name) = custom_stack.pop() {
+                                    b"wd:tag" => {
+                                        if let Some(name) = tag_stack.pop() {
                                             r.append(&mut b"</".to_vec());
                                             r.append(&mut name.into_bytes());
                                             r.push(b'>');
@@ -614,7 +614,7 @@ wd.v=key=>{
         for attr in e.attributes() {
             if let Ok(attr) = attr {
                 if let Ok(attr_key) = std::str::from_utf8(attr.key.as_ref()) {
-                    if attr_key == "wd-custom:name" {
+                    if attr_key == "wd-tag:name" {
                         if let Ok(value) = std::str::from_utf8(&attr.value) {
                             name = crate::eval_result_string(scope, value);
                         }
