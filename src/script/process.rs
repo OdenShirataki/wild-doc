@@ -111,8 +111,17 @@ pub(super) fn case<T: IncludeAdaptor>(
 ) -> Result<Vec<u8>, AnyError> {
     let mut r = Vec::new();
     let attr = xml_util::attr2hash_map(&e);
-    let cmp_value = crate::attr_parse_or_static(worker, &attr, "value");
-    if cmp_value != b"" {
+
+    if let Ok(cmp_src) = String::from_utf8(if let Some(value) = attr.get("wd:value") {
+        value.to_vec()
+    } else if let Some(value) = attr.get("value") {
+        let mut r = b"'".to_vec();
+        r.append(&mut value.to_vec());
+        r.append(&mut b"'".to_vec());
+        r
+    } else {
+        b"''".to_vec()
+    }) {
         let mut event_reader = Reader::from_str(&xml_str.trim());
         event_reader.check_end_names(false);
         loop {
@@ -126,30 +135,47 @@ pub(super) fn case<T: IncludeAdaptor>(
                                         let name = e.name();
                                         match name.as_ref() {
                                             b"wd:when" => {
-                                                let attr = xml_util::attr2hash_map(&e);
-                                                let wv = crate::attr_parse_or_static(
-                                                    worker, &attr, "value",
-                                                );
                                                 let xml_str =
                                                     xml_util::outer(&next, name, &mut event_reader);
-                                                if wv == cmp_value {
-                                                    let mut event_reader_inner =
-                                                        Reader::from_str(&xml_str.trim());
-                                                    event_reader_inner.check_end_names(false);
-                                                    loop {
-                                                        match event_reader_inner.read_event() {
-                                                            Ok(Event::Start(e)) => {
-                                                                if e.name().as_ref() == b"wd:when" {
-                                                                    r.append(&mut script.parse(
-                                                                        worker,
-                                                                        &mut event_reader_inner,
-                                                                        b"",
-                                                                        include_adaptor,
-                                                                    )?);
-                                                                    break 'case;
+
+                                                let attr = xml_util::attr2hash_map(&e);
+                                                if let Ok(src) = String::from_utf8(
+                                                    if let Some(value) = attr.get("wd:value") {
+                                                        value.to_vec()
+                                                    } else if let Some(value) = attr.get("value") {
+                                                        let mut r = b"'".to_vec();
+                                                        r.append(&mut value.to_vec());
+                                                        r.append(&mut b"'".to_vec());
+                                                        r
+                                                    } else {
+                                                        b"''".to_vec()
+                                                    },
+                                                ) {
+                                                    if crate::eval_result(
+                                                        &mut worker.js_runtime.handle_scope(),
+                                                        &(cmp_src.to_owned() + "==" + &src),
+                                                    ) == b"true"
+                                                    {
+                                                        let mut event_reader_inner =
+                                                            Reader::from_str(&xml_str.trim());
+                                                        event_reader_inner.check_end_names(false);
+                                                        loop {
+                                                            match event_reader_inner.read_event() {
+                                                                Ok(Event::Start(e)) => {
+                                                                    if e.name().as_ref()
+                                                                        == b"wd:when"
+                                                                    {
+                                                                        r.append(&mut script.parse(
+                                                                            worker,
+                                                                            &mut event_reader_inner,
+                                                                            b"",
+                                                                            include_adaptor,
+                                                                        )?);
+                                                                        break 'case;
+                                                                    }
                                                                 }
+                                                                _ => {}
                                                             }
-                                                            _ => {}
                                                         }
                                                     }
                                                 }
@@ -196,6 +222,7 @@ pub(super) fn case<T: IncludeAdaptor>(
             }
         }
     }
+
     Ok(r)
 }
 
