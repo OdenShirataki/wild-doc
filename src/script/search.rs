@@ -4,7 +4,7 @@ use quick_xml::{
     events::{BytesStart, Event},
     Reader,
 };
-use semilattice_database::{search, Activity, CollectionRow, Condition, Depend};
+use semilattice_database::{search, Activity, Condition, SessionCollectionRow, SessionDepend};
 use std::{
     collections::HashMap,
     time::{SystemTime, UNIX_EPOCH},
@@ -110,7 +110,7 @@ fn condition_depend(
 
     if row != "" && collection_name != "" {
         if let (Ok(row), Some(collection_id)) = (
-            row.parse::<u32>(),
+            row.parse::<i64>(),
             script
                 .database
                 .clone()
@@ -119,9 +119,9 @@ fn condition_depend(
                 .collection_id(&collection_name),
         ) {
             let key = crate::attr_parse_or_static_string(worker, &attr, "key");
-            return Some(Condition::Depend(Depend::new(
-                key,
-                CollectionRow::new(collection_id, row),
+            return Some(Condition::Depend(SessionDepend::new(
+                &key,
+                SessionCollectionRow::new(collection_id, row),
             )));
         }
     }
