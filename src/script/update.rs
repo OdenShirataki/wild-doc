@@ -8,7 +8,7 @@ use quick_xml::{
     Reader,
 };
 use semilattice_database::{Activity, Depends, KeyValue, Pend, Record, SessionCollectionRow, Term};
-use std::collections::HashMap;
+use std::{collections::HashMap, error, fmt};
 
 use crate::xml_util;
 
@@ -24,7 +24,7 @@ pub fn update<T: crate::IncludeAdaptor>(
     let inner_xml = script.parse(worker, reader, b"wd:update", include_adaptor)?;
     let mut inner_reader = Reader::from_str(std::str::from_utf8(&inner_xml).unwrap());
     inner_reader.check_end_names(false);
-    let updates = make_update_struct(script, &mut inner_reader, worker);
+    let updates = make_update_struct(script, &mut inner_reader, worker)?;
     if let Some((ref mut session, _)) = script.sessions.last_mut() {
         let session_rows = script
             .database
@@ -66,12 +66,24 @@ pub fn update<T: crate::IncludeAdaptor>(
     Ok(())
 }
 
+#[derive(Debug, Clone)]
+struct DependError;
+impl fmt::Display for DependError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "invalid row to depend")
+    }
+}
+impl error::Error for DependError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        None
+    }
+}
 fn depend(
     script: &mut Script,
     e: &BytesStart,
     depends: &mut Vec<(String, SessionCollectionRow)>,
     worker: &mut MainWorker,
-) {
+) -> Result<(), DependError> {
     let attr = xml_util::attr2hash_map(&e);
 
     let key = crate::attr_parse_or_static_string(worker, &attr, "key");
@@ -87,17 +99,40 @@ fn depend(
             .unwrap()
             .collection_id(&collection),
     ) {
-        depends.push((
-            key.to_owned(),
-            SessionCollectionRow::new(collection_id, row),
-        ));
+        if row == 0 {
+            return Err(DependError);
+        } else {
+            if row < 0 {
+                let mut valid = false;
+                if let Some(session) = script.sessions.pop() {
+                    if let Some(temporary_collection) =
+                        session.0.temporary_collection(collection_id)
+                    {
+                        if let Some(_) = temporary_collection.get(&row) {
+                            valid = true;
+                        }
+                    }
+                    script.sessions.push(session);
+                }
+                if !valid {
+                    return Err(DependError);
+                }
+            }
+            depends.push((
+                key.to_owned(),
+                SessionCollectionRow::new(collection_id, row),
+            ));
+        }
+        Ok(())
+    } else {
+        Err(DependError)
     }
 }
 fn make_update_struct(
     script: &mut Script,
     reader: &mut Reader<&[u8]>,
     worker: &mut MainWorker,
-) -> Vec<Record> {
+) -> Result<Vec<Record>, AnyError> {
     let mut updates = Vec::new();
     loop {
         match reader.read_event() {
@@ -148,7 +183,7 @@ fn make_update_struct(
                                                     script,
                                                     &mut reader_inner,
                                                     worker,
-                                                );
+                                                )?;
                                                 if let Ok(Some(key)) = e.try_get_attribute("key") {
                                                     if let Ok(key) = std::str::from_utf8(&key.value)
                                                     {
@@ -157,12 +192,12 @@ fn make_update_struct(
                                                 }
                                             }
                                         } else if name_ref == b"depend" {
-                                            depend(script, e, &mut depends, worker);
+                                            depend(script, e, &mut depends, worker)?;
                                         }
                                     }
                                     Ok(Event::Empty(ref e)) => {
                                         if e.name().as_ref() == b"depend" {
-                                            depend(script, e, &mut depends, worker);
+                                            depend(script, e, &mut depends, worker)?;
                                         }
                                     }
                                     Ok(Event::End(ref e)) => {
@@ -268,5 +303,5 @@ fn make_update_struct(
             _ => {}
         }
     }
-    updates
+    Ok(updates)
 }
