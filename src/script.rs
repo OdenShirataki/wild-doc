@@ -64,7 +64,6 @@ impl Script {
         let options = WorkerOptions {
             bootstrap: self.bootstrap.clone(),
             extensions: vec![],
-            extensions_with_js: vec![],
             startup_snapshot: Some(deno_isolate_init()),
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
@@ -91,6 +90,7 @@ impl Script {
             shared_array_buffer_store: Default::default(),
             compiled_wasm_module_store: Default::default(),
             stdio: Default::default(),
+            leak_isolate: Default::default(),
         };
 
         let mut worker = MainWorker::bootstrap_from_options(
