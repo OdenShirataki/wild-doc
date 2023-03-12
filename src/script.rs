@@ -455,7 +455,7 @@ wd.v=key=>{
                         r.append(&mut c.into_inner().to_vec());
                     }
                     Event::Text(c) => {
-                        r.append(&mut c.unescape().expect("Error!").as_bytes().to_vec());
+                        r.append(&mut c.into_inner().to_vec());
                     }
                     Event::Eof => {
                         break;
