@@ -1,5 +1,5 @@
 use deno_runtime::{deno_core::v8, worker::MainWorker};
-use quick_xml::{escape::unescape, events::Event, Reader};
+use quick_xml::{events::Event, Reader};
 use semilattice_database::Database;
 use std::{
     io,
@@ -139,14 +139,22 @@ fn eval_result_string(scope: &mut v8::HandleScope, value: &str) -> String {
     }
 }
 
+fn quot_unescape(str: &str) -> String {
+    str.replace("&#039;", "'").replace("&quot;", "\"")
+}
 fn attr_parse_or_static(worker: &mut MainWorker, attr: &XmlAttr, key: &str) -> Vec<u8> {
     let wdkey = "wd:".to_owned() + key;
     if let Some(value) = attr.get(&wdkey) {
         if let Ok(value) = std::str::from_utf8(value) {
-            return crate::eval_result(&mut worker.js_runtime.handle_scope(), value);
+            return crate::eval_result(
+                &mut worker.js_runtime.handle_scope(),
+                quot_unescape(value).as_ref(),
+            );
         }
     } else if let Some(value) = attr.get(key) {
-        return value.to_vec();
+        if let Ok(value) = std::str::from_utf8(value) {
+            return quot_unescape(value).as_bytes().to_vec();
+        }
     }
     vec![]
 }
@@ -155,18 +163,14 @@ fn attr_parse_or_static_string(worker: &mut MainWorker, attr: &XmlAttr, key: &st
     let wdkey = "wd:".to_owned() + key;
     if let Some(value) = attr.get(&wdkey) {
         if let Ok(value) = std::str::from_utf8(value) {
-            if let Ok(value) = unescape(value) {
-                return crate::eval_result_string(
-                    &mut worker.js_runtime.handle_scope(),
-                    value.as_ref(),
-                );
-            }
+            return crate::eval_result_string(
+                &mut worker.js_runtime.handle_scope(),
+                quot_unescape(value).as_ref(),
+            );
         }
     } else if let Some(value) = attr.get(key) {
         if let Ok(value) = std::str::from_utf8(value) {
-            if let Ok(value) = unescape(value) {
-                return value.into_owned();
-            }
+            return quot_unescape(value);
         }
     }
     "".to_owned()
