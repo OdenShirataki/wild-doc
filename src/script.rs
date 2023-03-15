@@ -294,7 +294,9 @@ wd.v=key=>{
                             b"wd:stack" => {
                                 if let Ok(Some(var)) = e.try_get_attribute(b"var") {
                                     if let Ok(var) = std::str::from_utf8(&var.value) {
-                                        let code = "wd.stack.push({".to_owned() + var + "});";
+                                        let code = "wd.stack.push({".to_owned()
+                                            + &crate::quot_unescape(var)
+                                            + "});";
                                         let _ = worker.execute_script("stack.push", &code);
                                     }
                                 }
