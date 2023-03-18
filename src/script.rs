@@ -18,7 +18,7 @@ use std::{
     collections::HashMap,
     ffi::c_void,
     io,
-    path::{Path, PathBuf},
+    path::PathBuf,
     rc::Rc,
     sync::{Arc, RwLock},
 };
@@ -256,6 +256,9 @@ wd.v=key=>{
                             b"wd:session_gc" => {
                                 self.session_gc(worker, e)?;
                             }
+                            b"wd:session_sequence_cursor" => {
+                                self.session_sequence_cursor(worker, e)?;
+                            }
                             b"wd:delete_collection" => {
                                 self.delete_collection(worker, e)?;
                             }
@@ -417,8 +420,11 @@ wd.v=key=>{
                         } else {
                             if name.starts_with(b"wd:") {
                                 match name {
-                                    b"wd:stack" | b"wd:result" | b"wd:collections"
-                                    | b"wd:sessions" => {
+                                    b"wd:stack"
+                                    | b"wd:result"
+                                    | b"wd:collections"
+                                    | b"wd:sessions"
+                                    | b"wd:session_sequence_cursor" => {
                                         let _ =
                                             worker.execute_script("stack.pop", "wd.stack.pop();");
                                     }
@@ -505,6 +511,12 @@ wd.v=key=>{
                 &session_name,
                 expire,
             ) {
+                let cursor = crate::attr_parse_or_static_string(worker, &attr, "cursor");
+                if cursor != "" {
+                    if let Ok(cursor) = cursor.parse::<usize>() {
+                        session.set_sequence_cursor(cursor)
+                    }
+                }
                 if crate::attr_parse_or_static(worker, &attr, "initialize") == b"true" {
                     self.database
                         .clone()
@@ -537,6 +549,55 @@ wd.v=key=>{
             }
         }
         stack::push(context, scope, obj);
+    }
+    fn session_sequence_cursor(
+        &mut self,
+        worker: &mut MainWorker,
+        e: &BytesStart,
+    ) -> io::Result<()> {
+        let attr = xml_util::attr2hash_map(e);
+        let str_max = {
+            let s = crate::attr_parse_or_static_string(worker, &attr, "max");
+            if s == "" {
+                "wd:session_sequence_max".to_owned()
+            } else {
+                s
+            }
+        };
+        let str_current = {
+            let s = crate::attr_parse_or_static_string(worker, &attr, "current");
+            if s == "" {
+                "wd:session_sequence_current".to_owned()
+            } else {
+                s
+            }
+        };
+
+        let scope = &mut worker.js_runtime.handle_scope();
+        let context = scope.get_current_context();
+        let scope = &mut v8::ContextScope::new(scope, context);
+
+        let obj = v8::Object::new(scope);
+        if let Some((session, _)) = self.sessions.last() {
+            if let Some(cursor) = session.sequence_cursor() {
+                if let (Some(v8str_max), Some(v8str_current)) = (
+                    v8::String::new(scope, &str_max),
+                    v8::String::new(scope, &str_current),
+                ) {
+                    let max = v8::Integer::new(scope, cursor.max as i32);
+                    let current = v8::Integer::new(scope, cursor.current as i32);
+                    obj.define_own_property(scope, v8str_max.into(), max.into(), v8::READ_ONLY);
+                    obj.define_own_property(
+                        scope,
+                        v8str_current.into(),
+                        current.into(),
+                        v8::READ_ONLY,
+                    );
+                }
+            }
+        }
+        stack::push(context, scope, obj);
+        Ok(())
     }
     fn session_gc(&mut self, worker: &mut MainWorker, e: &BytesStart) -> io::Result<()> {
         let str_expire =
