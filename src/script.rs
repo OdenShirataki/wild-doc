@@ -626,7 +626,7 @@ wd.v=key=>{
         let context = scope.get_current_context();
         let scope = &mut v8::ContextScope::new(scope, context);
         let mut html_attr = "".to_string();
-        for attr in e.attributes() {
+        for attr in e.html_attributes() {
             if let Ok(attr) = attr {
                 if let Ok(attr_key) = std::str::from_utf8(attr.key.as_ref()) {
                     if attr_key == "wd-attr:replace" {
@@ -648,18 +648,20 @@ wd.v=key=>{
                         html_attr.push_str(attr_key);
 
                         if let Ok(value) = std::str::from_utf8(&attr.value) {
-                            html_attr.push_str("=\"");
-                            if is_wd {
-                                html_attr.push_str(&crate::eval_result_string(scope, value));
-                            } else {
-                                html_attr.push_str(
-                                    &value
-                                        .replace("&", "&amp;")
-                                        .replace("<", "&lt;")
-                                        .replace(">", "&gt;"),
-                                );
+                            if value != "" {
+                                html_attr.push_str("=\"");
+                                if is_wd {
+                                    html_attr.push_str(&crate::eval_result_string(scope, value));
+                                } else {
+                                    html_attr.push_str(
+                                        &value
+                                            .replace("&", "&amp;")
+                                            .replace("<", "&lt;")
+                                            .replace(">", "&gt;"),
+                                    );
+                                }
+                                html_attr.push('"');
                             }
-                            html_attr.push('"');
                         }
                     }
                 }
