@@ -18,7 +18,7 @@ use std::{
     collections::HashMap,
     ffi::c_void,
     io,
-    path::PathBuf,
+    path::{Path, PathBuf},
     rc::Rc,
     sync::{Arc, RwLock},
 };
@@ -48,7 +48,7 @@ impl Script {
         Self {
             database,
             sessions: vec![],
-            main_module: deno_core::resolve_path("main").unwrap(),
+            main_module: deno_core::resolve_url("wd://main").unwrap(),
             module_loader: WdModuleLoader::new(module_cache_dir),
             bootstrap: Default::default(),
             permissions: PermissionsContainer::allow_all(),
@@ -90,7 +90,6 @@ impl Script {
             shared_array_buffer_store: Default::default(),
             compiled_wasm_module_store: Default::default(),
             stdio: Default::default(),
-            leak_isolate: Default::default(),
         };
 
         let mut worker = MainWorker::bootstrap_from_options(
