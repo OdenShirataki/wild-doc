@@ -631,7 +631,8 @@ wd.v=key=>{
                 if let Ok(attr_key) = std::str::from_utf8(attr.key.as_ref()) {
                     if attr_key == "wd-attr:replace" {
                         if let Ok(value) = std::str::from_utf8(&attr.value) {
-                            let attr = crate::eval_result_string(scope, value);
+                            let attr =
+                                crate::eval_result_string(scope, &crate::quot_unescape(value));
                             if attr.len() > 0 {
                                 html_attr.push(' ');
                                 html_attr.push_str(&attr);
@@ -685,7 +686,8 @@ wd.v=key=>{
                     } else {
                         if attr_key == "wd-attr:replace" {
                             if let Ok(value) = std::str::from_utf8(&attr.value) {
-                                let attr = crate::eval_result_string(scope, value);
+                                let attr =
+                                    crate::eval_result_string(scope, &crate::quot_unescape(value));
                                 if attr.len() > 0 {
                                     html_attr.push(' ');
                                     html_attr.push_str(&attr);
