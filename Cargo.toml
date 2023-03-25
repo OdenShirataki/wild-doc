@@ -24,4 +24,4 @@ tokio = { version = "1.24.2", features = ["full"] }
 deno_runtime = "0.101.0"
 deno_ast = { version = "0.24.0", features = ["transpiling"] }
 
-semilattice-database = { version = "0.54", path = "../semilattice-database" }
+semilattice-database = { version = "0.55", path = "../semilattice-database" }
