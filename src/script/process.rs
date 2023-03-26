@@ -63,25 +63,6 @@ pub fn get_include_content<T: IncludeAdaptor>(
     Ok(b"".to_vec())
 }
 
-pub(super) fn run<T: IncludeAdaptor>(
-    script: &mut Script,
-    e: &BytesStart,
-    worker: &mut MainWorker,
-    include_adaptor: &mut T,
-) -> Result<Vec<u8>, AnyError> {
-    let xml = crate::attr_parse_or_static_string(worker, &xml_util::attr2hash_map(e), "code");
-    if xml.len() > 0 {
-        run_xml(
-            script,
-            "<r>".to_owned() + &xml + "</r>",
-            worker,
-            include_adaptor,
-        )
-    } else {
-        Ok(b"".to_vec())
-    }
-}
-
 fn run_xml<T: IncludeAdaptor>(
     script: &mut Script,
     xml: String,
@@ -221,6 +202,37 @@ pub(super) fn case<T: IncludeAdaptor>(
                 _ => {}
             }
         }
+    }
+
+    Ok(r)
+}
+
+pub(super) fn re<T: IncludeAdaptor>(
+    script: &mut Script,
+    xml_str: &str,
+    worker: &mut MainWorker,
+    include_adaptor: &mut T,
+) -> Result<Vec<u8>, AnyError> {
+    let mut r = Vec::new();
+
+    let mut event_reader = Reader::from_str(&xml_str.trim());
+    event_reader.check_end_names(false);
+    match event_reader.read_event() {
+        Ok(Event::Start(e)) => {
+            if e.name().as_ref() == b"wd:re" {
+                if let Ok(parsed) = script.parse(worker, &mut event_reader, b"", include_adaptor) {
+                    if let Ok(parsed) = std::str::from_utf8(&parsed) {
+                        r.append(&mut run_xml(
+                            script,
+                            "<r>".to_owned() + parsed + "</r>",
+                            worker,
+                            include_adaptor,
+                        )?);
+                    }
+                }
+            }
+        }
+        _ => {}
     }
 
     Ok(r)

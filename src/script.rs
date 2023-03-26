@@ -262,15 +262,20 @@ wd.v=key=>{
                             b"wd:delete_collection" => {
                                 self.delete_collection(worker, e)?;
                             }
-                            b"wd:run" => {
-                                r.append(&mut process::run(self, e, worker, include_adaptor)?);
-                            }
                             b"wd:include" => {
                                 r.append(&mut process::get_include_content(
                                     self,
                                     worker,
                                     include_adaptor,
                                     &xml_util::attr2hash_map(e),
+                                )?);
+                            }
+                            b"wd:re" => {
+                                r.append(&mut process::re(
+                                    self,
+                                    &xml_util::outer(&next, name, reader),
+                                    worker,
+                                    include_adaptor,
                                 )?);
                             }
                             b"wd:letitgo" => {
@@ -383,9 +388,6 @@ wd.v=key=>{
                             }
                             b"wd:delete_collection" => {
                                 self.delete_collection(worker, e)?;
-                            }
-                            b"wd:run" => {
-                                r.append(&mut process::run(self, e, worker, include_adaptor)?);
                             }
                             b"wd:include" => {
                                 r.append(&mut process::get_include_content(

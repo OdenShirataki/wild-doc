@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.57.2"
+version = "0.58.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
