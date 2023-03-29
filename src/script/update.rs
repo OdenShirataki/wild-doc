@@ -1,6 +1,6 @@
 use chrono::TimeZone;
 use deno_runtime::{
-    deno_core::{error::AnyError, serde_json},
+    deno_core::{anyhow::anyhow, error::AnyError, serde_json},
     worker::MainWorker,
 };
 use quick_xml::{
@@ -151,9 +151,11 @@ fn make_update_struct(
                             let mut pends = Vec::new();
                             let mut depends = Vec::new();
                             let mut fields = HashMap::new();
+                            let mut deps = 1;
                             loop {
                                 match reader.read_event() {
                                     Ok(Event::Start(ref e)) => {
+                                        deps += 1;
                                         let name = e.name();
                                         let name_ref = name.as_ref();
                                         if name_ref == b"field" {
@@ -201,9 +203,16 @@ fn make_update_struct(
                                         }
                                     }
                                     Ok(Event::End(ref e)) => {
+                                        deps -= 1;
+                                        if deps < 0 {
+                                            return Err(anyhow!("invalid XML"));
+                                        }
                                         if e.name().as_ref() == b"collection" {
                                             break;
                                         }
+                                    }
+                                    Ok(Event::Eof) => {
+                                        return Err(anyhow!("invalid XML"));
                                     }
                                     _ => {}
                                 }

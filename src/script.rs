@@ -210,20 +210,16 @@ wd.v=key=>{
     }
     fn run_script(worker: &mut MainWorker, file_name: &str, src: Cow<str>) -> Result<(), AnyError> {
         let src = src.to_string();
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(async {
-                let mod_id = worker
-                    .js_runtime
-                    .load_side_module(
-                        &ModuleSpecifier::parse(&("wd://script".to_owned() + file_name))?,
-                        Some(src),
-                    )
-                    .await?;
-                worker.evaluate_module(mod_id).await
-            })
+        deno_runtime::tokio_util::create_basic_runtime().block_on(async {
+            let mod_id = worker
+                .js_runtime
+                .load_side_module(
+                    &ModuleSpecifier::parse(&("wd://script".to_owned() + file_name))?,
+                    Some(src),
+                )
+                .await?;
+            worker.evaluate_module(mod_id).await
+        })
     }
 
     pub fn parse<T: IncludeAdaptor>(
