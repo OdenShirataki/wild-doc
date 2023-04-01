@@ -99,7 +99,7 @@ impl Script {
         );
         worker.execute_script(
             "init",
-            &(r#"wd={
+            r#"wd={
     general:{}
     ,stack:[]
     ,result_options:{}
@@ -118,7 +118,7 @@ wd.v=key=>{
             return wd.stack[i][key];
         }
     }
-};"#),
+};"#,
         )?;
         {
             let scope = &mut worker.js_runtime.handle_scope();
@@ -215,7 +215,7 @@ wd.v=key=>{
                 .js_runtime
                 .load_side_module(
                     &ModuleSpecifier::parse(&("wd://script".to_owned() + file_name))?,
-                    Some(src),
+                    Some(src.into()),
                 )
                 .await?;
             worker.evaluate_module(mod_id).await
@@ -298,9 +298,9 @@ wd.v=key=>{
                                 if let Ok(Some(var)) = e.try_get_attribute(b"var") {
                                     if let Ok(var) = std::str::from_utf8(&var.value) {
                                         let code = "wd.stack.push({".to_owned()
-                                            + &crate::quot_unescape(var)
+                                            + crate::quot_unescape(var).as_str()
                                             + "});";
-                                        let _ = worker.execute_script("stack.push", &code);
+                                        let _ = worker.execute_script("stack.push", code);
                                     }
                                 }
                             }

@@ -135,7 +135,7 @@ impl ModuleLoader for WdModuleLoader {
                 code
             };
             let module = ModuleSource {
-                code: code.into_boxed_slice(),
+                code: code.into(),
                 module_type,
                 module_url_specified: module_specifier.to_string(),
                 module_url_found: module_specifier.to_string(),
@@ -144,15 +144,6 @@ impl ModuleLoader for WdModuleLoader {
         }
         .boxed_local()
     }
-    /* fn prepare_load(
-        &self,
-        _op_state: Rc<RefCell<OpState>>,
-        module_specifier: &ModuleSpecifier,
-        _maybe_referrer: Option<String>,
-        _is_dyn_import: bool,
-    ) -> Pin<Box<dyn Future<Output = Result<(), Error>>>> {
-        async { Ok(()) }.boxed_local()
-    } */
 }
 
 fn resolve_url_from_location(base_url: &Url, location: &str) -> Url {

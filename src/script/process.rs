@@ -38,8 +38,8 @@ pub fn get_include_content<T: IncludeAdaptor>(
 
                 let var = crate::attr_parse_or_static_string(worker, attr, "var");
                 let stack_push = if var.len() > 0 {
-                    let code = "wd.stack.push({".to_owned() + &var + "});";
-                    worker.execute_script("stack.push", &code)?;
+                    let code = "wd.stack.push({".to_owned() + (&var).as_str() + "});";
+                    worker.execute_script("stack.push", code)?;
                     true
                 } else {
                     false
@@ -134,7 +134,7 @@ pub(super) fn case<T: IncludeAdaptor>(
                                                 ) {
                                                     if crate::eval_result(
                                                         &mut worker.js_runtime.handle_scope(),
-                                                        &(cmp_src.to_owned() + "==" + &src),
+                                                        &(cmp_src.to_owned() + "==" + src.as_str()),
                                                     ) == b"true"
                                                     {
                                                         let mut event_reader_inner =
@@ -317,23 +317,24 @@ pub(super) fn r#for<T: IncludeAdaptor>(
                                     let key_str = if is_array {
                                         i.to_owned()
                                     } else {
-                                        "'".to_owned() + &i + "'"
+                                        "'".to_owned() + i.as_str() + "'"
                                     };
                                     let source = "wd.stack.push({".to_owned()
-                                        + &var
+                                        + var.as_str()
                                         + ":("
                                         + source
                                         + ")["
-                                        + &key_str
+                                        + key_str.as_str()
                                         + "]"
-                                        + &(if let Ok(Some(index)) = e.try_get_attribute(b"index") {
+                                        + (if let Ok(Some(index)) = e.try_get_attribute(b"index") {
                                             std::str::from_utf8(&index.value)
                                                 .map_or("".to_string(), |v| {
-                                                    ",".to_owned() + v + ":" + &key_str
+                                                    ",".to_owned() + v + ":" + key_str.as_str()
                                                 })
                                         } else {
                                             "".to_owned()
                                         })
+                                        .as_str()
                                         + "})";
                                     {
                                         let scope = &mut worker.js_runtime.handle_scope();

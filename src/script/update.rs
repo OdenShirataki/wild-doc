@@ -53,13 +53,13 @@ pub fn update<T: crate::IncludeAdaptor>(
                 serde_json::to_string(&session_rows),
             ) {
                 let code = "{const update_result={commit_rows:".to_owned()
-                    + &json_commit_rows
+                    + json_commit_rows.as_str()
                     + ",session_rows:"
-                    + &json_session_rows
+                    + json_session_rows.as_str()
                     + "};"
-                    + &src
+                    + src.as_str()
                     + "}";
-                let _ = worker.execute_script("commit", &code);
+                let _ = worker.execute_script("commit", code);
             }
         }
     }
