@@ -94,7 +94,10 @@ pub(super) fn case<T: IncludeAdaptor>(
     let attr = xml_util::attr2hash_map(&e);
 
     if let Ok(cmp_src) = String::from_utf8(if let Some(value) = attr.get("wd:value") {
-        value.to_vec()
+        let mut r = b"(".to_vec();
+        r.append(&mut value.to_vec());
+        r.append(&mut b")".to_vec());
+        r
     } else if let Some(value) = attr.get("value") {
         let mut r = b"'".to_vec();
         r.append(&mut value.to_vec());
