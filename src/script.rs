@@ -210,7 +210,7 @@ wd.v=key=>{
     }
     fn run_script(worker: &mut MainWorker, file_name: &str, src: Cow<str>) -> Result<(), AnyError> {
         let src = src.to_string();
-        deno_runtime::tokio_util::create_basic_runtime().block_on(async {
+        deno_runtime::tokio_util::run_local(async {
             let mod_id = worker
                 .js_runtime
                 .load_side_module(
