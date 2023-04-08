@@ -292,7 +292,17 @@ fn make_update_struct(
                                         term_begin,
                                         term_end,
                                         fields: f,
-                                        depends: Depends::Overwrite(depends),
+                                        depends: if crate::attr_parse_or_static_string(
+                                            worker,
+                                            &attr,
+                                            "inherit_depend_if_empty",
+                                        ) == "true"
+                                            && depends.len() == 0
+                                        {
+                                            Depends::Default
+                                        } else {
+                                            Depends::Overwrite(depends)
+                                        },
                                         pends,
                                     });
                                 }
