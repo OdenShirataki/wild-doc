@@ -235,6 +235,11 @@ wd.v=key=>{
         loop {
             match reader.read_event() {
                 Ok(next) => match next {
+                    Event::DocType(text) => {
+                        r.append(&mut b"<!DOCTYPE ".to_vec());
+                        r.append(&mut text.into_inner().to_vec());
+                        r.push(b'>');
+                    }
                     Event::Start(ref e) => {
                         let name = e.name();
                         let name_ref = name.as_ref();
