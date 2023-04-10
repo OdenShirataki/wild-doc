@@ -21,6 +21,8 @@ pub fn update<T: crate::IncludeAdaptor>(
     e: &BytesStart,
     include_adaptor: &mut T,
 ) -> Result<(), AnyError> {
+    //TODO: Will the session data be corrupted if there is an update that makes depend empty from the state where depend exists?
+    //TODO: break relations after commit?
     let inner_xml = script.parse(worker, reader, b"wd:update", include_adaptor)?;
     let mut inner_reader = Reader::from_str(std::str::from_utf8(&inner_xml).unwrap());
     inner_reader.check_end_names(false);
