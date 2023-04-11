@@ -240,6 +240,11 @@ wd.v=key=>{
                         r.append(&mut text.into_inner().to_vec());
                         r.push(b'>');
                     }
+                    Event::Decl(decl) => {
+                        r.append(&mut b"<?".to_vec());
+                        r.append(&mut decl.to_vec());
+                        r.append(&mut b"?>".to_vec());
+                    }
                     Event::Start(ref e) => {
                         let name = e.name();
                         let name_ref = name.as_ref();
@@ -467,10 +472,11 @@ wd.v=key=>{
                     Event::Text(c) => {
                         r.append(&mut c.into_inner().to_vec());
                     }
+                    Event::PI(_) => {}
+                    Event::Comment(_) => {}
                     Event::Eof => {
                         break;
                     }
-                    _ => {}
                 },
                 Err(e) => {
                     println!("{:?}", e);
