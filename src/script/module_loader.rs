@@ -53,13 +53,13 @@ impl ModuleLoader for WdModuleLoader {
     fn load(
         &self,
         module_specifier: &ModuleSpecifier,
-        _maybe_referrer: Option<ModuleSpecifier>,
+        _maybe_referrer: Option<&ModuleSpecifier>,
         _is_dynamic: bool,
     ) -> Pin<Box<deno_core::ModuleSourceFuture>> {
         let module_specifier = module_specifier.clone();
         let mut module_cache_path = self.module_cache_dir.clone();
         async move {
-            let code = if module_specifier.scheme().starts_with("http") {
+            let code = String::from_utf8(if module_specifier.scheme().starts_with("http") {
                 if let Some(cache_filename) = url_to_filename(&module_specifier) {
                     module_cache_path.push(cache_filename);
                     if module_cache_path.exists() {
@@ -109,38 +109,32 @@ impl ModuleLoader for WdModuleLoader {
                     ))
                 })?;
                 std::fs::read(path)?
-            };
+            })?;
 
             let string_specifier = module_specifier.to_string();
-            let module_type = if string_specifier.ends_with(".json") {
-                ModuleType::Json
-            } else {
-                ModuleType::JavaScript
-            };
-            let code = if string_specifier.ends_with(".ts") {
-                let parse_soure = deno_ast::parse_module(deno_ast::ParseParams {
-                    specifier: string_specifier,
-                    text_info: deno_ast::SourceTextInfo::new(
-                        std::str::from_utf8(&code).unwrap().into(),
-                    ),
-                    media_type: deno_ast::MediaType::TypeScript,
-                    capture_tokens: true,
-                    scope_analysis: true,
-                    maybe_syntax: None,
-                })
-                .unwrap();
-                let transpiled_source = parse_soure.transpile(&Default::default()).unwrap();
-                transpiled_source.text.as_bytes().to_vec()
-            } else {
-                code
-            };
-            let module = ModuleSource {
-                code: code.into(),
-                module_type,
-                module_url_specified: module_specifier.to_string(),
-                module_url_found: module_specifier.to_string(),
-            };
-            Ok(module)
+            Ok(ModuleSource::new(
+                if string_specifier.ends_with(".json") {
+                    ModuleType::Json
+                } else {
+                    ModuleType::JavaScript
+                },
+                if string_specifier.ends_with(".ts") {
+                    deno_ast::parse_module(deno_ast::ParseParams {
+                        specifier: string_specifier,
+                        text_info: deno_ast::SourceTextInfo::new(code.into()),
+                        media_type: deno_ast::MediaType::TypeScript,
+                        capture_tokens: true,
+                        scope_analysis: true,
+                        maybe_syntax: None,
+                    })?
+                    .transpile(&Default::default())?
+                    .text
+                } else {
+                    code
+                }
+                .into(),
+                &module_specifier,
+            ))
         }
         .boxed_local()
     }

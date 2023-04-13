@@ -38,8 +38,10 @@ pub fn get_include_content<T: IncludeAdaptor>(
 
                 let var = crate::attr_parse_or_static_string(worker, attr, "var");
                 let stack_push = if var.len() > 0 {
-                    let code = "wd.stack.push({".to_owned() + (&var).as_str() + "});";
-                    worker.execute_script("stack.push", code)?;
+                    worker.execute_script(
+                        "stack.push",
+                        ("wd.stack.push({".to_owned() + (&var).as_str() + "});").into(),
+                    )?;
                     true
                 } else {
                     false
@@ -53,7 +55,7 @@ pub fn get_include_content<T: IncludeAdaptor>(
                 )?);
                 script.include_stack.pop();
                 if stack_push {
-                    worker.execute_script("stack.pop", "wd.stack.pop();")?;
+                    worker.execute_script("stack.pop", "wd.stack.pop();".to_owned().into())?;
                 }
                 return Ok(r);
             }
@@ -353,7 +355,10 @@ pub(super) fn r#for<T: IncludeAdaptor>(
                                         b"wd:for",
                                         include_adaptor,
                                     )?);
-                                    worker.execute_script("pop stack", "wd.stack.pop()")?;
+                                    worker.execute_script(
+                                        "pop stack",
+                                        "wd.stack.pop()".to_owned().into(),
+                                    )?;
                                     break;
                                 }
                             }

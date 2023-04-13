@@ -99,7 +99,7 @@ impl Script {
         );
         worker.execute_script(
             "init",
-            r#"wd={
+            (r#"wd={
     general:{}
     ,stack:[]
     ,result_options:{}
@@ -118,7 +118,8 @@ wd.v=key=>{
             return wd.stack[i][key];
         }
     }
-};"#,
+};"#)
+                .into(),
         )?;
         {
             let scope = &mut worker.js_runtime.handle_scope();
@@ -307,10 +308,13 @@ wd.v=key=>{
                             b"wd:stack" => {
                                 if let Ok(Some(var)) = e.try_get_attribute(b"var") {
                                     if let Ok(var) = std::str::from_utf8(&var.value) {
-                                        let code = "wd.stack.push({".to_owned()
-                                            + crate::quot_unescape(var).as_str()
-                                            + "});";
-                                        let _ = worker.execute_script("stack.push", code);
+                                        let _ = worker.execute_script(
+                                            "stack.push",
+                                            ("wd.stack.push({".to_owned()
+                                                + crate::quot_unescape(var).as_str()
+                                                + "});")
+                                                .into(),
+                                        );
                                     }
                                 }
                             }
@@ -433,8 +437,10 @@ wd.v=key=>{
                                     | b"wd:collections"
                                     | b"wd:sessions"
                                     | b"wd:session_sequence_cursor" => {
-                                        let _ =
-                                            worker.execute_script("stack.pop", "wd.stack.pop();");
+                                        let _ = worker.execute_script(
+                                            "stack.pop",
+                                            "wd.stack.pop();".to_owned().into(),
+                                        );
                                     }
                                     b"wd:session" => {
                                         if let Some((ref mut session, clear_on_close)) =
