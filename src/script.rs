@@ -34,6 +34,16 @@ mod update;
 mod module_loader;
 use module_loader::WdModuleLoader;
 
+fn get_error_class_name(e: &AnyError) -> &'static str {
+    deno_runtime::errors::get_error_class_name(e).unwrap_or_else(|| {
+        panic!(
+            "Error '{}' contains boxed error of unsupported type:{}",
+            e,
+            e.chain().map(|e| format!("\n  {e:?}")).collect::<String>()
+        );
+    })
+}
+
 pub struct Script {
     database: Arc<RwLock<Database>>,
     sessions: Vec<(Session, bool)>,
@@ -82,13 +92,13 @@ impl Script {
             maybe_inspector_server: None,
             should_break_on_first_statement: false,
             should_wait_for_inspector_session: Default::default(),
-            get_error_class_fn: Default::default(),
+            get_error_class_fn: Some(&get_error_class_name),
             cache_storage_dir: None,
             origin_storage_dir: None,
             blob_store: BlobStore::default(),
             broadcast_channel: InMemoryBroadcastChannel::default(),
-            shared_array_buffer_store: Default::default(),
-            compiled_wasm_module_store: Default::default(),
+            shared_array_buffer_store: None,
+            compiled_wasm_module_store: None,
             stdio: Default::default(),
         };
 
@@ -212,14 +222,13 @@ wd.v=key=>{
     fn run_script(worker: &mut MainWorker, file_name: &str, src: Cow<str>) -> Result<(), AnyError> {
         let src = src.to_string();
         deno_runtime::tokio_util::run_local(async {
+            let script_name = "wd://script".to_owned() + file_name;
             let mod_id = worker
                 .js_runtime
-                .load_side_module(
-                    &ModuleSpecifier::parse(&("wd://script".to_owned() + file_name))?,
-                    Some(src.into()),
-                )
+                .load_side_module(&ModuleSpecifier::parse(&script_name)?, Some(src.into()))
                 .await?;
-            worker.evaluate_module(mod_id).await
+            worker.evaluate_module(mod_id).await?;
+            worker.run_event_loop(false).await
         })
     }
 
@@ -286,9 +295,9 @@ wd.v=key=>{
                                 )?);
                             }
                             b"wd:letitgo" => {
-                                if let Ok(cont) = reader.read_text(e.name().to_owned()) {
-                                    r.append(&mut cont.as_bytes().to_vec());
-                                }
+                                r.append(
+                                    &mut reader.read_text(e.name().to_owned())?.as_bytes().to_vec(),
+                                );
                             }
                             b"wd:update" => {
                                 update::update(self, worker, reader, e, include_adaptor)?;
@@ -306,35 +315,30 @@ wd.v=key=>{
                                 self.sessions(worker, e);
                             }
                             b"wd:stack" => {
-                                if let Ok(Some(var)) = e.try_get_attribute(b"var") {
-                                    if let Ok(var) = std::str::from_utf8(&var.value) {
-                                        let _ = worker.execute_script(
-                                            "stack.push",
-                                            ("wd.stack.push({".to_owned()
-                                                + crate::quot_unescape(var).as_str()
-                                                + "});")
-                                                .into(),
-                                        );
-                                    }
+                                if let Some(var) = e.try_get_attribute(b"var")? {
+                                    worker.execute_script(
+                                        "stack.push",
+                                        ("wd.stack.push({".to_owned()
+                                            + crate::quot_unescape(std::str::from_utf8(
+                                                &var.value,
+                                            )?)
+                                            .as_str()
+                                            + "});")
+                                            .into(),
+                                    )?;
                                 }
                             }
                             b"wd:script" => {
-                                if let Ok(src) = reader.read_text(name) {
-                                    match Self::run_script(
-                                        worker,
-                                        if let Some(last) = self.include_stack.last() {
-                                            last
-                                        } else {
-                                            ""
-                                        },
-                                        src,
-                                    ) {
-                                        Err(e) => {
-                                            r.append(&mut e.to_string().as_bytes().to_vec());
-                                            return Ok(r);
-                                        }
-                                        _ => {}
-                                    }
+                                if let Err(e) = Self::run_script(
+                                    worker,
+                                    if let Some(last) = self.include_stack.last() {
+                                        last
+                                    } else {
+                                        ""
+                                    },
+                                    reader.read_text(name)?,
+                                ) {
+                                    return Err(e);
                                 }
                             }
                             b"wd:case" => {
@@ -485,7 +489,7 @@ wd.v=key=>{
                     }
                 },
                 Err(e) => {
-                    println!("{:?}", e);
+                    eprintln!("{:?}", e);
                 }
             }
         }
