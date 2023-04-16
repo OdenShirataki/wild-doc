@@ -645,7 +645,7 @@ wd.v=key=>{
         let context = scope.get_current_context();
         let scope = &mut v8::ContextScope::new(scope, context);
         let mut html_attr = "".to_string();
-        for attr in e.html_attributes() {
+        for attr in e.html_attributes().with_checks(false) {
             if let Ok(attr) = attr {
                 if let Ok(attr_key) = std::str::from_utf8(attr.key.as_ref()) {
                     if attr_key == "wd-attr:replace" {
@@ -695,7 +695,7 @@ wd.v=key=>{
         let scope = &mut v8::ContextScope::new(scope, context);
         let mut html_attr = "".to_string();
         let mut name = "".to_string();
-        for attr in e.attributes() {
+        for attr in e.html_attributes().with_checks(false) {
             if let Ok(attr) = attr {
                 if let Ok(attr_key) = std::str::from_utf8(attr.key.as_ref()) {
                     if attr_key == "wd-tag:name" {
