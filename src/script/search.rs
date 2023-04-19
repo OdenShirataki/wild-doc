@@ -7,6 +7,7 @@ use quick_xml::{
 use semilattice_database::{search, Activity, Condition, SessionCollectionRow, SessionDepend};
 use std::{
     collections::HashMap,
+    str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -147,6 +148,11 @@ fn condition_loop(
                             conditions.push(c);
                         }
                     }
+                    b"uuid" => {
+                        if let Some(c) = condition_uuid(xml_util::attr2hash_map(&e), worker) {
+                            conditions.push(c);
+                        }
+                    }
                     b"narrow" => {
                         conditions.push(Condition::Narrow(condition_loop(script, reader, worker)));
                     }
@@ -168,6 +174,11 @@ fn condition_loop(
                     }
                     b"row" => {
                         if let Some(c) = condition_row(xml_util::attr2hash_map(e), worker) {
+                            conditions.push(c);
+                        }
+                    }
+                    b"uuid" => {
+                        if let Some(c) = condition_uuid(xml_util::attr2hash_map(e), worker) {
                             conditions.push(c);
                         }
                     }
@@ -228,6 +239,21 @@ fn condition_row<'a>(attr: XmlAttr, worker: &mut MainWorker) -> Option<Condition
                 }
             }
             _ => {}
+        }
+    }
+    None
+}
+fn condition_uuid<'a>(attr: XmlAttr, worker: &mut MainWorker) -> Option<Condition> {
+    let value = crate::attr_parse_or_static_string(worker, &attr, "value");
+    if value != "" {
+        let mut v = Vec::<u128>::new();
+        for s in value.split(',') {
+            if let Ok(uuid) = semilattice_database::Uuid::from_str(&s) {
+                v.push(uuid.as_u128());
+            }
+        }
+        if v.len() > 0 {
+            return Some(Condition::Uuid(v));
         }
     }
     None
