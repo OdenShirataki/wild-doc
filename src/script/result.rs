@@ -234,6 +234,7 @@ fn make_order(sort: &str) -> Vec<Order> {
 fn set_values<'s>(
     scope: &mut HandleScope<'s>,
     collection_id: i32,
+    collection_name: &str,
     row: i64,
     activity: i32,
     term_begin: u64,
@@ -241,40 +242,36 @@ fn set_values<'s>(
 ) -> v8::Local<'s, v8::Object> {
     let obj = v8::Object::new(scope);
 
-    if let (
-        Some(v8str_collection_id),
-        Some(v8str_row),
-        Some(v8str_activity),
-        Some(v8str_term_begin),
-        Some(v8str_term_end),
-    ) = (
-        v8::String::new(scope, "collection_id"),
-        v8::String::new(scope, "row"),
-        v8::String::new(scope, "activity"),
-        v8::String::new(scope, "term_begin"),
-        v8::String::new(scope, "term_end"),
-    ) {
+    if let Some(key) = v8::String::new(scope, "row") {
         let row = v8::BigInt::new_from_i64(scope, row);
-        obj.define_own_property(scope, v8str_row.into(), row.into(), READ_ONLY);
-
+        obj.define_own_property(scope, key.into(), row.into(), READ_ONLY);
+    }
+    if let (Some(collection_name), Some(key)) = (
+        v8::String::new(scope, collection_name),
+        v8::String::new(scope, "collection"),
+    ) {
+        obj.define_own_property(scope, key.into(), collection_name.into(), READ_ONLY);
+    }
+    if let Some(key) = v8::String::new(scope, "collection_id") {
         let collection_id = v8::Integer::new(scope, collection_id as i32);
-        obj.define_own_property(
-            scope,
-            v8str_collection_id.into(),
-            collection_id.into(),
-            READ_ONLY,
-        );
-
+        obj.define_own_property(scope, key.into(), collection_id.into(), READ_ONLY);
+    }
+    if let Some(key) = v8::String::new(scope, "activity") {
         let activity = v8::Integer::new(scope, activity);
-        obj.define_own_property(scope, v8str_activity.into(), activity.into(), READ_ONLY);
-
-        if let Some(term_begin) = v8::Date::new(scope, (term_begin as f64) * 1000.0) {
-            obj.define_own_property(scope, v8str_term_begin.into(), term_begin.into(), READ_ONLY);
-        }
-        if term_end > 0 {
-            if let Some(term_end) = v8::Date::new(scope, (term_end as f64) * 1000.0) {
-                obj.define_own_property(scope, v8str_term_end.into(), term_end.into(), READ_ONLY);
-            }
+        obj.define_own_property(scope, key.into(), activity.into(), READ_ONLY);
+    }
+    if let (Some(term_begin), Some(key)) = (
+        v8::Date::new(scope, (term_begin as f64) * 1000.0),
+        v8::String::new(scope, "term_begin"),
+    ) {
+        obj.define_own_property(scope, key.into(), term_begin.into(), READ_ONLY);
+    }
+    if term_end > 0 {
+        if let (Some(term_end), Some(key)) = (
+            v8::Date::new(scope, (term_end as f64) * 1000.0),
+            v8::String::new(scope, "term_end"),
+        ) {
+            obj.define_own_property(scope, key.into(), term_end.into(), READ_ONLY);
         }
     }
 
@@ -393,7 +390,8 @@ pub(super) fn result(
 
                                 let obj = set_values(
                                     scope,
-                                    collection.id(),
+                                    collection_id,
+                                    collection.name(),
                                     row,
                                     activity,
                                     term_begin,
@@ -469,6 +467,7 @@ pub(super) fn result(
                                 let obj = set_values(
                                     scope,
                                     collection_id as i32,
+                                    collection.name(),
                                     row as i64,
                                     collection.activity(row) as i32,
                                     collection.term_begin(row),
