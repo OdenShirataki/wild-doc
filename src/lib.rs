@@ -7,7 +7,9 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-pub use deno_runtime::deno_core::error::AnyError;
+pub use semilattice_database::anyhow;
+
+use anyhow::Result;
 
 mod script;
 use script::Script;
@@ -56,7 +58,7 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         input_json: &str,
         include_adaptor: &mut impl IncludeAdaptor,
         module_cache_dir: &PathBuf,
-    ) -> Result<WildDocResult, AnyError> {
+    ) -> Result<WildDocResult> {
         let mut reader = Reader::from_str(xml);
         reader.check_end_names(false);
         loop {
@@ -76,7 +78,7 @@ impl<T: IncludeAdaptor> WildDoc<T> {
             }
         }
     }
-    pub fn run(&mut self, xml: &str, input_json: &str) -> Result<WildDocResult, AnyError> {
+    pub fn run(&mut self, xml: &str, input_json: &str) -> Result<WildDocResult> {
         Self::run_inner(
             self.database.clone(),
             xml,
@@ -90,7 +92,7 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         xml: &str,
         input_json: &str,
         include_adaptor: &mut impl IncludeAdaptor,
-    ) -> Result<WildDocResult, AnyError> {
+    ) -> Result<WildDocResult> {
         Self::run_inner(
             self.database.clone(),
             xml,

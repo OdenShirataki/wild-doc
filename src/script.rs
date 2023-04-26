@@ -1,6 +1,6 @@
 use deno_runtime::{
     deno_broadcast_channel::InMemoryBroadcastChannel,
-    deno_core::{self, error::AnyError, serde_v8, v8, v8::READ_ONLY, ModuleSpecifier},
+    deno_core::{self, serde_v8, v8, v8::READ_ONLY, ModuleSpecifier},
     deno_web::BlobStore,
     fmt_errors::format_js_error,
     js::deno_isolate_init,
@@ -25,7 +25,10 @@ use std::{
 
 mod process;
 
-use crate::{xml_util, IncludeAdaptor};
+use crate::{
+    anyhow::{self, Result},
+    xml_util, IncludeAdaptor,
+};
 mod result;
 mod search;
 mod stack;
@@ -34,7 +37,7 @@ mod update;
 mod module_loader;
 use module_loader::WdModuleLoader;
 
-fn get_error_class_name(e: &AnyError) -> &'static str {
+fn get_error_class_name(e: &anyhow::Error) -> &'static str {
     deno_runtime::errors::get_error_class_name(e).unwrap_or_else(|| {
         panic!(
             "Error '{}' contains boxed error of unsupported type:{}",
@@ -70,7 +73,7 @@ impl Script {
         input_json: &str,
         reader: &mut Reader<&[u8]>,
         include_adaptor: &mut T,
-    ) -> Result<super::WildDocResult, AnyError> {
+    ) -> Result<super::WildDocResult> {
         let options = WorkerOptions {
             bootstrap: self.bootstrap.clone(),
             extensions: vec![],
@@ -219,7 +222,7 @@ wd.v=key=>{
             options_json: result_options,
         })
     }
-    fn run_script(worker: &mut MainWorker, file_name: &str, src: Cow<str>) -> Result<(), AnyError> {
+    fn run_script(worker: &mut MainWorker, file_name: &str, src: Cow<str>) -> Result<()> {
         let src = src.to_string();
         deno_runtime::tokio_util::run_local(async {
             let script_name = "wd://script".to_owned() + file_name;
@@ -238,7 +241,7 @@ wd.v=key=>{
         reader: &mut Reader<&[u8]>,
         break_tag: &[u8],
         include_adaptor: &mut T,
-    ) -> Result<Vec<u8>, AnyError> {
+    ) -> Result<Vec<u8>> {
         let mut tag_stack = vec![];
         let mut search_map = HashMap::new();
         let mut r = Vec::new();
@@ -627,11 +630,7 @@ wd.v=key=>{
         }
         self.database.clone().write().unwrap().session_gc(expire)
     }
-    fn delete_collection(
-        &mut self,
-        worker: &mut MainWorker,
-        e: &BytesStart,
-    ) -> std::io::Result<()> {
+    fn delete_collection(&mut self, worker: &mut MainWorker, e: &BytesStart) -> Result<()> {
         let str_collection =
             crate::attr_parse_or_static_string(worker, &xml_util::attr2hash_map(e), "collection");
         self.database

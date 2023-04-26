@@ -1,8 +1,5 @@
 use chrono::TimeZone;
-use deno_runtime::{
-    deno_core::{anyhow::anyhow, error::AnyError, serde_json},
-    worker::MainWorker,
-};
+use deno_runtime::{deno_core::serde_json, worker::MainWorker};
 use quick_xml::{
     events::{BytesStart, Event},
     Reader,
@@ -10,7 +7,10 @@ use quick_xml::{
 use semilattice_database::{Activity, Depends, KeyValue, Pend, Record, SessionCollectionRow, Term};
 use std::{collections::HashMap, error, fmt};
 
-use crate::xml_util;
+use crate::{
+    anyhow::{anyhow, Result},
+    xml_util,
+};
 
 use super::Script;
 
@@ -20,7 +20,7 @@ pub fn update<T: crate::IncludeAdaptor>(
     reader: &mut Reader<&[u8]>,
     e: &BytesStart,
     include_adaptor: &mut T,
-) -> Result<(), AnyError> {
+) -> Result<()> {
     //TODO: Will the session data be corrupted if there is an update that makes depend empty from the state where depend exists?
     //TODO: break relations after commit?
     let inner_xml = script.parse(worker, reader, b"wd:update", include_adaptor)?;
@@ -137,7 +137,7 @@ fn make_update_struct(
     script: &mut Script,
     reader: &mut Reader<&[u8]>,
     worker: &mut MainWorker,
-) -> Result<Vec<Record>, AnyError> {
+) -> Result<Vec<Record>> {
     let mut updates = Vec::new();
     loop {
         match reader.read_event() {

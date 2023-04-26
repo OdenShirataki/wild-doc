@@ -1,13 +1,11 @@
-use deno_runtime::{
-    deno_core::{error::AnyError, v8},
-    worker::MainWorker,
-};
+use deno_runtime::{deno_core::v8, worker::MainWorker};
 use quick_xml::{
     events::{BytesStart, Event},
     Reader,
 };
 
 use crate::{
+    anyhow::Result,
     xml_util::{self, XmlAttr},
     IncludeAdaptor,
 };
@@ -19,7 +17,7 @@ pub fn get_include_content<T: IncludeAdaptor>(
     worker: &mut MainWorker,
     include_adaptor: &mut T,
     attr: &XmlAttr,
-) -> Result<Vec<u8>, AnyError> {
+) -> Result<Vec<u8>> {
     let src = crate::attr_parse_or_static_string(worker, attr, "src");
     let (xml, filename) = if let Some(xml) = include_adaptor.include(&src) {
         (Some(xml), src)
@@ -66,7 +64,7 @@ fn run_xml<T: IncludeAdaptor>(
     xml: String,
     worker: &mut MainWorker,
     include_adaptor: &mut T,
-) -> Result<Vec<u8>, AnyError> {
+) -> Result<Vec<u8>> {
     let mut event_reader_inner = Reader::from_str(&xml);
     event_reader_inner.check_end_names(false);
     if let Event::Start(e) = event_reader_inner.read_event()? {
@@ -87,7 +85,7 @@ pub(super) fn case<T: IncludeAdaptor>(
     xml_str: &str,
     worker: &mut MainWorker,
     include_adaptor: &mut T,
-) -> Result<Vec<u8>, AnyError> {
+) -> Result<Vec<u8>> {
     let mut r = Vec::new();
     let attr = xml_util::attr2hash_map(&e);
 
@@ -208,7 +206,7 @@ pub(super) fn re<T: IncludeAdaptor>(
     xml_str: &str,
     worker: &mut MainWorker,
     include_adaptor: &mut T,
-) -> Result<Vec<u8>, AnyError> {
+) -> Result<Vec<u8>> {
     let mut event_reader = Reader::from_str(&xml_str);
     event_reader.check_end_names(false);
     match event_reader.read_event()? {
@@ -234,7 +232,7 @@ pub(super) fn r#if<T: IncludeAdaptor>(
     xml_str: &str,
     worker: &mut MainWorker,
     include_adaptor: &mut T,
-) -> Result<Vec<u8>, AnyError> {
+) -> Result<Vec<u8>> {
     if crate::attr_parse_or_static(worker, &xml_util::attr2hash_map(&e), "value") == b"true" {
         let mut event_reader = Reader::from_str(&xml_str);
         event_reader.check_end_names(false);
@@ -252,7 +250,7 @@ pub(super) fn r#for<T: IncludeAdaptor>(
     xml_str: &str,
     worker: &mut MainWorker,
     include_adaptor: &mut T,
-) -> Result<Vec<u8>, AnyError> {
+) -> Result<Vec<u8>> {
     let mut r = Vec::new();
     let attr = xml_util::attr2hash_map(&e);
     let var = crate::attr_parse_or_static_string(worker, &attr, "var");
