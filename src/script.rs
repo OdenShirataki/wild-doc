@@ -79,9 +79,10 @@ impl Script {
             extensions: vec![],
             startup_snapshot: Some(deno_isolate_init()),
             unsafely_ignore_certificate_errors: None,
-            root_cert_store: None,
+            root_cert_store_provider: None,
             seed: None,
             module_loader: self.module_loader.clone(),
+            node_fs: None,
             npm_resolver: None,
             create_web_worker_cb: Arc::new(|_| unimplemented!("web workers are not supported")),
             web_worker_preload_module_cb: Arc::new(|_| {
