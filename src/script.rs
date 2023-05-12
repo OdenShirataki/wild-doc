@@ -1,12 +1,7 @@
 use deno_runtime::{
-    deno_broadcast_channel::InMemoryBroadcastChannel,
     deno_core::{self, serde_v8, v8, v8::READ_ONLY, ModuleSpecifier},
-    deno_web::BlobStore,
-    fmt_errors::format_js_error,
-    js::deno_isolate_init,
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
-    BootstrapOptions,
 };
 use quick_xml::{
     events::{BytesStart, Event},
@@ -25,10 +20,7 @@ use std::{
 
 mod process;
 
-use crate::{
-    anyhow::{self, Result},
-    xml_util, IncludeAdaptor,
-};
+use crate::{anyhow::Result, xml_util, IncludeAdaptor};
 mod result;
 mod search;
 mod stack;
@@ -37,22 +29,11 @@ mod update;
 mod module_loader;
 use module_loader::WdModuleLoader;
 
-fn get_error_class_name(e: &anyhow::Error) -> &'static str {
-    deno_runtime::errors::get_error_class_name(e).unwrap_or_else(|| {
-        panic!(
-            "Error '{}' contains boxed error of unsupported type:{}",
-            e,
-            e.chain().map(|e| format!("\n  {e:?}")).collect::<String>()
-        );
-    })
-}
-
 pub struct Script {
     database: Arc<RwLock<Database>>,
     sessions: Vec<(Session, bool)>,
     main_module: ModuleSpecifier,
     module_loader: Rc<WdModuleLoader>,
-    bootstrap: BootstrapOptions,
     permissions: PermissionsContainer,
     include_stack: Vec<String>,
 }
@@ -63,7 +44,6 @@ impl Script {
             sessions: vec![],
             main_module: deno_core::resolve_url("wd://main").unwrap(),
             module_loader: WdModuleLoader::new(module_cache_dir),
-            bootstrap: Default::default(),
             permissions: PermissionsContainer::allow_all(),
             include_stack: vec![],
         }
@@ -74,42 +54,13 @@ impl Script {
         reader: &mut Reader<&[u8]>,
         include_adaptor: &mut T,
     ) -> Result<super::WildDocResult> {
-        let options = WorkerOptions {
-            bootstrap: self.bootstrap.clone(),
-            extensions: vec![],
-            startup_snapshot: Some(deno_isolate_init()),
-            unsafely_ignore_certificate_errors: None,
-            root_cert_store_provider: None,
-            seed: None,
-            module_loader: self.module_loader.clone(),
-            node_fs: None,
-            npm_resolver: None,
-            create_web_worker_cb: Arc::new(|_| unimplemented!("web workers are not supported")),
-            web_worker_preload_module_cb: Arc::new(|_| {
-                unimplemented!("web workers are not supported")
-            }),
-            web_worker_pre_execute_module_cb: Arc::new(|_| {
-                unimplemented!("web workers are not supported")
-            }),
-            format_js_error_fn: Some(Arc::new(format_js_error)),
-            source_map_getter: None,
-            maybe_inspector_server: None,
-            should_break_on_first_statement: false,
-            should_wait_for_inspector_session: Default::default(),
-            get_error_class_fn: Some(&get_error_class_name),
-            cache_storage_dir: None,
-            origin_storage_dir: None,
-            blob_store: BlobStore::default(),
-            broadcast_channel: InMemoryBroadcastChannel::default(),
-            shared_array_buffer_store: None,
-            compiled_wasm_module_store: None,
-            stdio: Default::default(),
-        };
-
         let mut worker = MainWorker::bootstrap_from_options(
             self.main_module.clone(),
             self.permissions.clone(),
-            options,
+            WorkerOptions {
+                module_loader: self.module_loader.clone(),
+                ..Default::default()
+            },
         );
         worker.execute_script(
             "init",
