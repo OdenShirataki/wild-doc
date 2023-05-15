@@ -4,7 +4,7 @@ use quick_xml::{
     events::{BytesStart, Event},
     Reader,
 };
-use semilattice_database::{search, Activity, Condition, SessionCollectionRow, SessionDepend};
+use semilattice_database::{search, Activity, CollectionRow, Condition, Depend};
 use std::{
     collections::HashMap,
     str::FromStr,
@@ -119,10 +119,16 @@ fn condition_depend(
                 .unwrap()
                 .collection_id(&collection_name),
         ) {
+            let in_session = row < 0;
+
             let key = crate::attr_parse_or_static_string(worker, &attr, "key");
-            return Some(Condition::Depend(SessionDepend::new(
+            return Some(Condition::Depend(Depend::new(
                 &key,
-                SessionCollectionRow::new(collection_id, row),
+                if in_session {
+                    CollectionRow::new(-collection_id, (-row) as u32)
+                } else {
+                    CollectionRow::new(collection_id, row as u32)
+                },
             )));
         }
     }

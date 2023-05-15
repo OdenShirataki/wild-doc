@@ -131,7 +131,7 @@ fn depends_array<'a>(
                         collection_name.into(),
                         READ_ONLY,
                     );
-                    let row = v8::BigInt::new_from_i64(scope, d.row());
+                    let row = v8::BigInt::new_from_i64(scope, d.row() as i64); //TODO u32 integer
                     depend.define_own_property(scope, v8str_row.into(), row.into(), READ_ONLY);
 
                     array.set_index(scope, index, depend.into());
@@ -377,15 +377,13 @@ pub(super) fn result(
                                 let (activity, term_begin, term_end) =
                                     if let Some(tr) = temporary_collection.get(&row) {
                                         (tr.activity() as i32, tr.term_begin(), tr.term_end())
-                                    } else if row > 0 {
+                                    } else {
                                         let row = row as u32;
                                         (
                                             collection.activity(row) as i32,
                                             collection.term_begin(row),
                                             collection.term_begin(row),
                                         )
-                                    } else {
-                                        unreachable!()
                                     };
 
                                 let obj = set_values(

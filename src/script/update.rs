@@ -4,7 +4,7 @@ use quick_xml::{
     events::{BytesStart, Event},
     Reader,
 };
-use semilattice_database::{Activity, Depends, KeyValue, Pend, Record, SessionCollectionRow, Term};
+use semilattice_database::{Activity, CollectionRow, Depends, KeyValue, Pend, Record, Term};
 use std::{collections::HashMap, error, fmt};
 
 use crate::{
@@ -86,7 +86,7 @@ impl error::Error for DependError {
 fn depend(
     script: &mut Script,
     e: &BytesStart,
-    depends: &mut Vec<(String, SessionCollectionRow)>,
+    depends: &mut Vec<(String, CollectionRow)>,
     worker: &mut MainWorker,
 ) -> Result<(), DependError> {
     let attr = xml_util::attr2hash_map(&e);
@@ -107,7 +107,8 @@ fn depend(
         if row == 0 {
             return Err(DependError);
         } else {
-            if row < 0 {
+            let in_session = row < 0;
+            if in_session {
                 let mut valid = false;
                 if let Some(session) = script.sessions.pop() {
                     if let Some(temporary_collection) =
@@ -125,7 +126,11 @@ fn depend(
             }
             depends.push((
                 key.to_owned(),
-                SessionCollectionRow::new(collection_id, row),
+                if in_session {
+                    CollectionRow::new(-collection_id, (-row) as u32)
+                } else {
+                    CollectionRow::new(collection_id, row as u32)
+                },
             ));
         }
         Ok(())
@@ -223,7 +228,7 @@ fn make_update_struct(
                                 }
                             }
                             let attr = xml_util::attr2hash_map(&e);
-                            let row = crate::attr_parse_or_static_string(worker, &attr, "row")
+                            let row: i64 = crate::attr_parse_or_static_string(worker, &attr, "row")
                                 .parse()
                                 .unwrap_or(0);
 
@@ -235,6 +240,11 @@ fn make_update_struct(
                                 }
                             } else {
                                 false
+                            };
+                            let (collection_id, row) = if row < 0 {
+                                (-collection_id, (-row) as u32)
+                            } else {
+                                (collection_id, row as u32)
                             };
                             if is_delete {
                                 updates.push(Record::Delete { collection_id, row });
