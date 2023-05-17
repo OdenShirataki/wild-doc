@@ -3,7 +3,7 @@ use deno_runtime::{
     worker::MainWorker,
 };
 use quick_xml::events::BytesStart;
-use semilattice_database::{Condition, Database, Order, OrderKey, Session};
+use semilattice_database_session::{Condition, Order, OrderKey, Session, SessionDatabase};
 use std::{collections::HashMap, ffi::c_void};
 
 use crate::xml_util;
@@ -97,17 +97,22 @@ fn session_depends(
 
 fn depends_array<'a>(
     scope: &mut v8::HandleScope<'a>,
-    db: &Database,
+    db: &SessionDatabase,
     key: Option<v8::Local<'a, v8::String>>,
-    collection_id: i32,
+    collection_id: i32, //u32?
     row: i64,
     session: Option<&Session>,
 ) -> v8::Local<'a, v8::Array> {
+    let (collection_id, row) = if row < 0 {
+        (-collection_id, -row)
+    } else {
+        (collection_id, row)
+    };
     let depends = if let Some(key_name) = key {
         let key_name = key_name.to_rust_string_lossy(scope);
-        db.depends(Some(&key_name), collection_id, row, session)
+        db.depends_with_session(Some(&key_name), collection_id, row as u32, session)
     } else {
-        db.depends(None, collection_id, row, session)
+        db.depends_with_session(None, collection_id, row as u32, session)
     };
 
     let array = v8::Array::new(scope, depends.len() as i32);

@@ -7,7 +7,7 @@ use quick_xml::{
     events::{BytesStart, Event},
     Reader,
 };
-use semilattice_database::{Database, Session};
+use semilattice_database_session::{Session, SessionDatabase};
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -30,7 +30,7 @@ mod module_loader;
 use module_loader::WdModuleLoader;
 
 pub struct Script {
-    database: Arc<RwLock<Database>>,
+    database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<(Session, bool)>,
     main_module: ModuleSpecifier,
     module_loader: Rc<WdModuleLoader>,
@@ -38,7 +38,7 @@ pub struct Script {
     include_stack: Vec<String>,
 }
 impl Script {
-    pub fn new(database: Arc<RwLock<Database>>, module_cache_dir: PathBuf) -> Self {
+    pub fn new(database: Arc<RwLock<SessionDatabase>>, module_cache_dir: PathBuf) -> Self {
         Self {
             database,
             sessions: vec![],
@@ -696,7 +696,7 @@ wd.v=key=>{
     }
 }
 
-fn get_wddb<'s>(scope: &mut v8::HandleScope<'s>) -> Option<&'s mut Arc<RwLock<Database>>> {
+fn get_wddb<'s>(scope: &mut v8::HandleScope<'s>) -> Option<&'s mut Arc<RwLock<SessionDatabase>>> {
     if let Some(script) = v8::String::new(scope, "wd.script")
         .and_then(|code| v8::Script::compile(scope, code, None))
         .and_then(|v| v.run(scope))

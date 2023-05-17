@@ -1,15 +1,16 @@
+use std::{
+    collections::HashMap,
+    str::FromStr,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
 use chrono::TimeZone;
 use deno_runtime::worker::MainWorker;
 use quick_xml::{
     events::{BytesStart, Event},
     Reader,
 };
-use semilattice_database::{search, Activity, CollectionRow, Condition, Depend};
-use std::{
-    collections::HashMap,
-    str::FromStr,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use semilattice_database_session::{search, Activity, CollectionRow, Condition, Depend, Uuid};
 
 use crate::xml_util::{self, XmlAttr};
 
@@ -254,7 +255,7 @@ fn condition_uuid<'a>(attr: XmlAttr, worker: &mut MainWorker) -> Option<Conditio
     if value != "" {
         let mut v = Vec::<u128>::new();
         for s in value.split(',') {
-            if let Ok(uuid) = semilattice_database::Uuid::from_str(&s) {
+            if let Ok(uuid) = Uuid::from_str(&s) {
                 v.push(uuid.as_u128());
             }
         }

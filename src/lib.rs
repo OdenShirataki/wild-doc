@@ -1,13 +1,13 @@
-use deno_runtime::{deno_core::v8, worker::MainWorker};
-use quick_xml::{events::Event, Reader};
-use semilattice_database::Database;
 use std::{
     io,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
 
-pub use semilattice_database::anyhow;
+use deno_runtime::{deno_core::v8, worker::MainWorker};
+use quick_xml::{events::Event, Reader};
+pub use semilattice_database_session::anyhow;
+use semilattice_database_session::SessionDatabase;
 
 use anyhow::Result;
 
@@ -33,7 +33,7 @@ impl WildDocResult {
     }
 }
 pub struct WildDoc<T: IncludeAdaptor> {
-    database: Arc<RwLock<Database>>,
+    database: Arc<RwLock<SessionDatabase>>,
     default_include_adaptor: T,
     module_cache_dir: PathBuf,
 }
@@ -46,14 +46,14 @@ impl<T: IncludeAdaptor> WildDoc<T> {
             std::fs::create_dir_all(&module_cache_dir)?;
         }
         Ok(Self {
-            database: Arc::new(RwLock::new(Database::new(dir)?)),
+            database: Arc::new(RwLock::new(SessionDatabase::new(dir)?)),
             default_include_adaptor,
             module_cache_dir,
         })
     }
 
     fn run_inner(
-        database: Arc<RwLock<Database>>,
+        database: Arc<RwLock<SessionDatabase>>,
         xml: &str,
         input_json: &str,
         include_adaptor: &mut impl IncludeAdaptor,
