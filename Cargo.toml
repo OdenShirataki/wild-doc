@@ -24,3 +24,5 @@ deno_runtime = "0.112.0"
 deno_ast = { version = "0.26.0", features = ["transpiling"] }
 
 semilattice-database-session = { version = "0.1", path = "../semilattice-database-session" }
+
+xmlparser = "0.13"

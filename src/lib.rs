@@ -1,15 +1,16 @@
 use std::{
+    collections::HashMap,
     io,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
 
+use anyhow::Result;
 use deno_runtime::{deno_core::v8, worker::MainWorker};
-use quick_xml::{events::Event, Reader};
 pub use semilattice_database_session::anyhow;
 use semilattice_database_session::SessionDatabase;
 
-use anyhow::Result;
+use xmlparser::Token;
 
 mod script;
 use script::Script;
@@ -52,34 +53,29 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         })
     }
 
-    fn run_inner(
+    fn run_inner_xml_parser(
         database: Arc<RwLock<SessionDatabase>>,
         xml: &str,
         input_json: &str,
         include_adaptor: &mut impl IncludeAdaptor,
         module_cache_dir: &PathBuf,
     ) -> Result<WildDocResult> {
-        let mut reader = Reader::from_str(xml);
-        reader.check_end_names(false);
-        loop {
-            match reader.read_event() {
-                Ok(Event::Start(e)) => {
-                    if e.name().as_ref() == b"wd" {
-                        let mut script = Script::new(database, module_cache_dir.clone());
-                        return script.parse_xml(input_json, &mut reader, include_adaptor);
-                    }
-                }
-                _ => {
-                    return Ok(WildDocResult {
-                        body: xml.into(),
-                        options_json: "".to_string(),
-                    });
+        let mut tokens = xmlparser::Tokenizer::from(xml);
+        if let Some(Ok(Token::ElementStart { prefix, local, .. })) = tokens.next() {
+            if prefix.as_str() == "" && local.as_str() == "wd" {
+                if let Some(Ok(Token::ElementEnd { .. })) = tokens.next() {
+                    let mut script = Script::new(database, module_cache_dir.clone());
+                    return script.parse_xml_xml_parser(input_json, &mut tokens, include_adaptor);
                 }
             }
         }
+        Ok(WildDocResult {
+            body: xml.into(),
+            options_json: "".to_string(),
+        })
     }
     pub fn run(&mut self, xml: &str, input_json: &str) -> Result<WildDocResult> {
-        Self::run_inner(
+        Self::run_inner_xml_parser(
             self.database.clone(),
             xml,
             input_json,
@@ -93,7 +89,7 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         input_json: &str,
         include_adaptor: &mut impl IncludeAdaptor,
     ) -> Result<WildDocResult> {
-        Self::run_inner(
+        Self::run_inner_xml_parser(
             self.database.clone(),
             xml,
             input_json,
@@ -174,6 +170,37 @@ fn attr_parse_or_static_string(worker: &mut MainWorker, attr: &XmlAttr, key: &st
         if let Ok(value) = std::str::from_utf8(value) {
             return quot_unescape(value);
         }
+    }
+    "".to_owned()
+}
+
+fn attr_parse_or_static_xml_parser(
+    worker: &mut MainWorker,
+    attributes: &HashMap<(String, String), String>,
+    key: &str,
+) -> Vec<u8> {
+    if let Some(value) = attributes.get(&("wd".to_string(), key.to_string())) {
+        return crate::eval_result(
+            &mut worker.js_runtime.handle_scope(),
+            quot_unescape(value).as_ref(),
+        );
+    } else if let Some(value) = attributes.get(&("".to_string(), key.to_string())) {
+        return quot_unescape(value).as_bytes().to_vec();
+    }
+    vec![]
+}
+fn attr_parse_or_static_string_xml_parser(
+    worker: &mut MainWorker,
+    attributes: &HashMap<(String, String), String>,
+    key: &str,
+) -> String {
+    if let Some(value) = attributes.get(&("wd".to_string(), key.to_string())) {
+        return crate::eval_result_string(
+            &mut worker.js_runtime.handle_scope(),
+            quot_unescape(value).as_ref(),
+        );
+    } else if let Some(value) = attributes.get(&("".to_string(), key.to_string())) {
+        return quot_unescape(value);
     }
     "".to_owned()
 }
