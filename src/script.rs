@@ -1,8 +1,7 @@
 use std::{
-    borrow::Cow,
     collections::HashMap,
     ffi::c_void,
-    io,
+    io::{self, BufReader},
     path::PathBuf,
     rc::Rc,
     sync::{Arc, RwLock},
@@ -13,13 +12,14 @@ use deno_runtime::{
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
 };
-use quick_xml::{
-    events::{BytesStart, Event},
-    Reader,
+use maybe_xml::{
+    eval::bufread::{self, BufReadEvaluator},
+    token::{
+        owned::Token,
+        prop::{Attributes, TagName},
+    },
 };
-use semilattice_database_session::{Session, SessionDatabase};
-
-use xmlparser::{ElementEnd, Token};
+use semilattice_database_session::{Condition, Session, SessionDatabase};
 
 mod process;
 
@@ -51,10 +51,11 @@ impl Script {
             include_stack: vec![],
         }
     }
-    pub fn parse_xml_xml_parser<T: IncludeAdaptor>(
+
+    pub fn parse_xml<T: IncludeAdaptor>(
         &mut self,
         input_json: &str,
-        token: &mut xmlparser::Tokenizer,
+        xml: &str,
         include_adaptor: &mut T,
     ) -> Result<super::WildDocResult> {
         let mut worker = MainWorker::bootstrap_from_options(
@@ -157,7 +158,8 @@ wd.v=key=>{
                 );
             }
         }
-        let result_body = self.parse_xml_parser(&mut worker, token, ("", "wd"), include_adaptor)?;
+
+        let result_body = self.parse(&mut worker, xml.as_bytes(), b"", include_adaptor)?;
         let result_options = {
             let mut result_options = String::new();
             let scope = &mut worker.js_runtime.handle_scope();
@@ -177,20 +179,7 @@ wd.v=key=>{
             options_json: result_options,
         })
     }
-
-    fn run_script(worker: &mut MainWorker, file_name: &str, src: Cow<str>) -> Result<()> {
-        let src = src.to_string();
-        deno_runtime::tokio_util::run_local(async {
-            let script_name = "wd://script".to_owned() + file_name;
-            let mod_id = worker
-                .js_runtime
-                .load_side_module(&ModuleSpecifier::parse(&script_name)?, Some(src.into()))
-                .await?;
-            worker.evaluate_module(mod_id).await?;
-            worker.run_event_loop(false).await
-        })
-    }
-    fn run_script_xml_parser(worker: &mut MainWorker, file_name: &str, src: &str) -> Result<()> {
+    fn run_script(worker: &mut MainWorker, file_name: &str, src: &str) -> Result<()> {
         deno_runtime::tokio_util::run_local(async {
             let script_name = "wd://script".to_owned() + file_name;
             let mod_id = worker
@@ -205,541 +194,373 @@ wd.v=key=>{
         })
     }
 
-    pub fn parse_xml_parser<T: IncludeAdaptor>(
+    fn parse_wd_start_tag<T: IncludeAdaptor>(
+        &mut self,
+        tokenizer: &mut bufread::IntoIter<BufReader<&[u8]>>,
+        worker: &mut MainWorker,
+        include_adaptor: &mut T,
+        tag_stack: &mut Vec<String>,
+        search_map: &mut HashMap<String, (i32, Vec<Condition>)>,
+        name: &TagName,
+        attributes: &Option<Attributes>,
+    ) -> Result<Vec<u8>> {
+        match name.local().as_bytes() {
+            b"session" => {
+                self.session(worker, &crate::attr2map(attributes))?;
+            }
+            b"session_sequence_cursor" => {
+                self.session_sequence(worker, &crate::attr2map(attributes))?;
+            }
+            b"sessions" => {
+                self.sessions(worker, &crate::attr2map(&attributes));
+            }
+            b"re" => {
+                let parsed = self.parse(
+                    worker,
+                    &xml_util::inner(&name, tokenizer),
+                    b"",
+                    include_adaptor,
+                )?;
+                return Ok(self.parse(worker, &parsed, b"", include_adaptor)?);
+            }
+            b"letitgo" => {
+                return Ok(xml_util::inner(&name, tokenizer));
+            }
+            b"update" => {
+                update::update(
+                    self,
+                    worker,
+                    &xml_util::inner(&name, tokenizer),
+                    &crate::attr2map(&attributes),
+                    include_adaptor,
+                )?;
+            }
+            b"search" => {
+                search::search(
+                    self,
+                    worker,
+                    tokenizer,
+                    &name,
+                    &crate::attr2map(&attributes),
+                    search_map,
+                );
+            }
+            b"result" => {
+                result::result(self, worker, &crate::attr2map(&attributes), search_map);
+            }
+            b"collections" => {
+                self.collections(worker, &crate::attr2map(&attributes));
+            }
+            b"stack" => {
+                let attributes = crate::attr2map(&attributes);
+                if let Some((None, Some(var))) = attributes.get(b"var".as_slice()) {
+                    worker.execute_script(
+                        "stack.push",
+                        ("wd.stack.push({".to_owned()
+                            + crate::quot_unescape(std::str::from_utf8(var)?).as_str()
+                            + "});")
+                            .into(),
+                    )?;
+                }
+            }
+            b"script" => {
+                if let Err(e) = Self::run_script(
+                    worker,
+                    if let Some(last) = self.include_stack.last() {
+                        last
+                    } else {
+                        ""
+                    },
+                    std::str::from_utf8(xml_util::inner(&name, tokenizer).as_slice())?,
+                ) {
+                    return Err(e);
+                }
+            }
+            b"case" => {
+                return Ok(process::case(
+                    self,
+                    &crate::attr2map(&attributes),
+                    &xml_util::inner(&name, tokenizer),
+                    worker,
+                    include_adaptor,
+                )?);
+            }
+            b"if" => {
+                return Ok(process::r#if(
+                    self,
+                    &crate::attr2map(&attributes),
+                    &xml_util::inner(&name, tokenizer),
+                    worker,
+                    include_adaptor,
+                )?);
+            }
+            b"for" => {
+                return Ok(process::r#for(
+                    self,
+                    &crate::attr2map(&attributes),
+                    &xml_util::inner(&name, tokenizer),
+                    worker,
+                    include_adaptor,
+                )?);
+            }
+            b"tag" => {
+                let mut r: Vec<u8> = Vec::new();
+                let (name, attr) = Self::custom_tag(&crate::attr2map(&attributes), worker);
+                tag_stack.push(name.clone());
+                r.push(b'<');
+                r.append(&mut name.into_bytes());
+                r.append(&mut attr.into_bytes());
+                r.push(b'>');
+                return Ok(r);
+            }
+            _ => {}
+        }
+        Ok(vec![])
+    }
+    fn parse_wd_start_or_empty_tag<T: IncludeAdaptor>(
         &mut self,
         worker: &mut MainWorker,
-        tokenizer: &mut xmlparser::Tokenizer,
-        break_tag: (&str, &str),
+        include_adaptor: &mut T,
+        name: &[u8],
+        attributes: &Option<Attributes>,
+    ) -> Result<Option<Vec<u8>>> {
+        match name {
+            b"print" => {
+                return Ok(Some(crate::attr_parse_or_static(
+                    worker,
+                    &crate::attr2map(attributes),
+                    b"value",
+                )));
+            }
+            b"include" => {
+                return Ok(Some(process::get_include_content(
+                    self,
+                    worker,
+                    include_adaptor,
+                    &crate::attr2map(&attributes),
+                )?));
+            }
+            b"delete_collection" => {
+                self.delete_collection(worker, &crate::attr2map(attributes))?;
+            }
+            b"session_gc" => {
+                self.session_gc(worker, &crate::attr2map(attributes))?;
+            }
+            _ => {}
+        }
+        Ok(None)
+    }
+    fn is_wd_tag(name: &TagName) -> bool {
+        if let Some(prefix) = name.namespace_prefix() {
+            prefix.as_bytes() == b"wd"
+        } else {
+            false
+        }
+    }
+    fn output_attrbutes(
+        &mut self,
+        worker: &mut MainWorker,
+        r: &mut Vec<u8>,
+        attributes: &Attributes,
+    ) {
+        for attribute in attributes.iter() {
+            r.push(b' ');
+            let name = attribute.name();
+            if let Some(prefix) = name.namespace_prefix() {
+                match prefix.as_bytes() {
+                    b"wd" => {
+                        r.append(&mut name.local().to_vec());
+                        if let Some(value) = attribute.value() {
+                            r.push(b'=');
+                            r.push(b'"');
+                            r.append(
+                                &mut crate::eval_result_string(
+                                    &mut worker.js_runtime.handle_scope(),
+                                    crate::quot_unescape(
+                                        std::str::from_utf8(value.as_bytes()).unwrap(),
+                                    )
+                                    .as_ref(),
+                                )
+                                .as_bytes()
+                                .to_vec(),
+                            );
+                            r.push(b'"');
+                        }
+                    }
+                    b"wd-attr" => {
+                        if name.local().as_bytes() == b"replace" {
+                            if let Some(value) = attribute.value() {
+                                r.append(
+                                    &mut crate::eval_result_string(
+                                        &mut worker.js_runtime.handle_scope(),
+                                        crate::quot_unescape(
+                                            std::str::from_utf8(value.as_bytes()).unwrap(),
+                                        )
+                                        .as_ref(),
+                                    )
+                                    .as_bytes()
+                                    .to_vec(),
+                                );
+                            }
+                        }
+                    }
+                    _ => {
+                        r.append(&mut attribute.to_vec());
+                    }
+                }
+            } else {
+                r.append(&mut attribute.to_vec());
+            }
+        }
+    }
+    pub fn parse<T: IncludeAdaptor>(
+        &mut self,
+        worker: &mut MainWorker,
+        xml: &[u8],
+        break_tag: &[u8],
         include_adaptor: &mut T,
     ) -> Result<Vec<u8>> {
         let mut tag_stack = vec![];
         let mut search_map = HashMap::new();
         let mut r: Vec<u8> = Vec::new();
 
-        while let Some(Ok(token)) = tokenizer.next() {
-            println!("{:?}", token);
+        let mut tokenizer = BufReadEvaluator::from_reader(BufReader::new(xml)).into_iter();
+        while let Some(token) = tokenizer.next() {
             match token {
-                Token::EmptyDtd { span, .. }
-                | Token::Declaration { span, .. }
-                | Token::DtdStart { span, .. }
-                | Token::DtdEnd { span, .. } => {
-                    r.append(&mut span.as_bytes().to_vec());
+                Token::StartTag(tag) => {
+                    let attributes = tag.attributes();
+                    let name = tag.name();
+                    if Self::is_wd_tag(&name) {
+                        if let Some(mut parsed) = self.parse_wd_start_or_empty_tag(
+                            worker,
+                            include_adaptor,
+                            name.local().as_bytes(),
+                            &tag.attributes(),
+                        )? {
+                            r.append(&mut parsed);
+                        } else {
+                            r.append(&mut self.parse_wd_start_tag(
+                                &mut tokenizer,
+                                worker,
+                                include_adaptor,
+                                &mut tag_stack,
+                                &mut search_map,
+                                &name,
+                                &attributes,
+                            )?);
+                        }
+                    } else {
+                        r.push(b'<');
+                        r.append(&mut name.to_vec());
+                        if let Some(ref attributes) = attributes {
+                            self.output_attrbutes(worker, &mut r, attributes)
+                        }
+                        r.push(b'>');
+                    }
                 }
-                Token::ElementStart {
-                    prefix,
-                    local,
-                    span,
-                } => {
-                    let prefix = prefix.as_str();
-                    if prefix == "wd" {
-                        let (attribytes_str, attributes) = xml_util::attributes(tokenizer);
-                        let local = local.as_str();
-                        println!("{}:{}", prefix, local);
-                        match local {
-                            "session" => {
-                                self.session_xml_parser(worker, &attributes)?;
+                Token::EmptyElementTag(tag) => {
+                    let attributes = tag.attributes();
+                    let name = tag.name();
+                    if name.as_bytes() == b"wd:tag" {
+                        let (name, attr) = Self::custom_tag(&crate::attr2map(&attributes), worker);
+                        r.push(b'<');
+                        r.append(&mut name.into_bytes());
+                        r.append(&mut attr.into_bytes());
+                        r.push(b'>');
+                    } else {
+                        if Self::is_wd_tag(&name) {
+                            if let Some(mut parsed) = self.parse_wd_start_or_empty_tag(
+                                worker,
+                                include_adaptor,
+                                name.local().as_bytes(),
+                                &attributes,
+                            )? {
+                                r.append(&mut parsed);
                             }
-                            "print" => {
-                                r.append(&mut crate::attr_parse_or_static_xml_parser(
-                                    worker,
-                                    &attributes,
-                                    "value",
-                                ));
+                        } else {
+                            r.push(b'<');
+                            r.append(&mut name.to_vec());
+                            if let Some(ref attributes) = attributes {
+                                self.output_attrbutes(worker, &mut r, attributes)
                             }
-                            "session_gc" => {
-                                self.session_gc_xml_parser(worker, &attributes)?;
-                            }
-                            "session_sequence_cursor" => {
-                                self.session_sequence_cursor_xml_parser(worker, &attributes)?;
-                            }
-                            "delete_collection" => {
-                                self.delete_collection_xml_parser(worker, &attributes)?;
-                            }
-                            "include" => {
-                                r.append(&mut process::get_include_content_xml_parser(
-                                    self,
-                                    worker,
-                                    include_adaptor,
-                                    &attributes,
-                                )?);
-                            }
-                            "re" => {
-                                r.append(&mut process::re(
-                                    self,
-                                    &xml_util::outer_xml_parser(
-                                        span.as_str(),
-                                        &attribytes_str,
-                                        prefix,
-                                        local,
-                                        tokenizer,
-                                    ),
-                                    worker,
-                                    include_adaptor,
-                                )?);
-                            }
-                            "letitgo" => {
-                                r.append(
-                                    &mut xml_util::inner_xml_parser(prefix, local, tokenizer)
-                                        .into_bytes(),
+                            r.push(b'/');
+                            r.push(b'>');
+                        }
+                    }
+                }
+                Token::EndTag(tag) => {
+                    let name = tag.name();
+                    if name.as_bytes() == break_tag {
+                        break;
+                    }
+                    if if let Some(prefix) = name.namespace_prefix() {
+                        prefix.as_bytes() == b"wd"
+                    } else {
+                        false
+                    } {
+                        match name.local().as_bytes() {
+                            b"stack"
+                            | b"result"
+                            | b"collections"
+                            | b"sessions"
+                            | b"session_sequence_cursor" => {
+                                let _ = worker.execute_script(
+                                    "stack.pop",
+                                    "wd.stack.pop();".to_owned().into(),
                                 );
                             }
-                            "update" => {
-                                update::update_xml_parser(
-                                    self,
-                                    worker,
-                                    tokenizer,
-                                    &attributes,
-                                    include_adaptor,
-                                )?;
-                            }
-                            "search" => {
-                                search::search_xml_parser(
-                                    self,
-                                    worker,
-                                    tokenizer,
-                                    &attributes,
-                                    &mut search_map,
-                                );
-                            }
-                            "result" => {
-                                result::result_xml_parser(self, worker, &attributes, &search_map);
-                            }
-                            "collections" => {
-                                self.collections_xml_parser(worker, &attributes);
-                            }
-                            "sessions" => {
-                                self.sessions_xml_parser(worker, &attributes);
-                            }
-                            "stack" => {
-                                if let Some(var) =
-                                    attributes.get(&("".to_string(), "var".to_string()))
+                            b"session" => {
+                                if let Some((ref mut session, clear_on_close)) = self.sessions.pop()
                                 {
-                                    worker.execute_script(
-                                        "stack.push",
-                                        ("wd.stack.push({".to_owned()
-                                            + crate::quot_unescape(&var).as_str()
-                                            + "});")
-                                            .into(),
-                                    )?;
+                                    if clear_on_close {
+                                        let _ = self
+                                            .database
+                                            .clone()
+                                            .write()
+                                            .unwrap()
+                                            .session_clear(session);
+                                    }
                                 }
                             }
-                            "script" => {
-                                if let Err(e) = Self::run_script_xml_parser(
-                                    worker,
-                                    if let Some(last) = self.include_stack.last() {
-                                        last
-                                    } else {
-                                        ""
-                                    },
-                                    xml_util::inner_xml_parser(prefix, local, tokenizer).as_str(),
-                                ) {
-                                    return Err(e);
+                            b"tag" => {
+                                if let Some(name) = tag_stack.pop() {
+                                    r.append(&mut b"</".to_vec());
+                                    r.append(&mut name.into_bytes());
+                                    r.push(b'>');
                                 }
-                            }
-                            "case" => {
-                                r.append(&mut process::case_xml_parser(
-                                    self,
-                                    &attributes,
-                                    &xml_util::outer_xml_parser(
-                                        span.as_str(),
-                                        &attribytes_str,
-                                        prefix,
-                                        local,
-                                        tokenizer,
-                                    ),
-                                    worker,
-                                    include_adaptor,
-                                )?);
-                            }
-                            "if" => {
-                                r.append(&mut process::r#if_xml_parser(
-                                    self,
-                                    &attributes,
-                                    &xml_util::outer_xml_parser(
-                                        span.as_str(),
-                                        &attribytes_str,
-                                        prefix,
-                                        local,
-                                        tokenizer,
-                                    ),
-                                    worker,
-                                    include_adaptor,
-                                )?);
-                            }
-                            "for" => {
-                                r.append(&mut process::r#for_xml_parser(
-                                    self,
-                                    &attributes,
-                                    &xml_util::outer_xml_parser(
-                                        span.as_str(),
-                                        &attribytes_str,
-                                        prefix,
-                                        local,
-                                        tokenizer,
-                                    ),
-                                    worker,
-                                    include_adaptor,
-                                )?);
-                            }
-                            "tag" => {
-                                let (name, attr) = Self::custom_tag_xml_parser(&attributes, worker);
-                                tag_stack.push(name.clone());
-                                r.push(b'<');
-                                r.append(&mut name.into_bytes());
-                                r.append(&mut attr.into_bytes());
-                                r.push(b'>');
                             }
                             _ => {}
                         }
                     } else {
-                        r.append(&mut span.as_bytes().to_vec());
+                        r.append(&mut tag.as_bytes().to_vec());
                     }
                 }
-                Token::Text { text } | Token::Cdata { text, .. } => {
-                    r.append(&mut text.as_bytes().to_vec());
+                maybe_xml::token::owned::Token::Declaration(token) => {
+                    r.append(&mut token.as_bytes().to_vec());
                 }
-                Token::ElementEnd { end, span } => {
-                    if let ElementEnd::Close(prefix, local) = end {
-                        let prefix = prefix.as_str();
-                        let local = local.as_str();
-                        if prefix == "" && local == "wd" || (prefix, local) == break_tag {
-                            break;
-                        }
-                        if prefix == "wd" {
-                            match local {
-                                "stack"
-                                | "result"
-                                | "collections"
-                                | "sessions"
-                                | "session_sequence_cursor" => {
-                                    let _ = worker.execute_script(
-                                        "stack.pop",
-                                        "wd.stack.pop();".to_owned().into(),
-                                    );
-                                }
-                                "session" => {
-                                    if let Some((ref mut session, clear_on_close)) =
-                                        self.sessions.pop()
-                                    {
-                                        if clear_on_close {
-                                            let _ = self
-                                                .database
-                                                .clone()
-                                                .write()
-                                                .unwrap()
-                                                .session_clear(session);
-                                        }
-                                    }
-                                }
-                                "tag" => {
-                                    if let Some(name) = tag_stack.pop() {
-                                        r.append(&mut b"</".to_vec());
-                                        r.append(&mut name.into_bytes());
-                                        r.push(b'>');
-                                    }
-                                }
-                                _ => {}
-                            }
-                        } else {
-                            r.append(&mut span.to_string().into_bytes());
-                        }
-                    } else {
-                        r.append(&mut span.to_string().into_bytes());
-                    }
+                maybe_xml::token::owned::Token::Characters(token) => {
+                    r.append(&mut token.as_bytes().to_vec());
+                }
+                maybe_xml::token::owned::Token::Cdata(token) => {
+                    r.append(&mut token.as_bytes().to_vec());
+                }
+                maybe_xml::token::owned::Token::Comment(token) => {
+                    r.append(&mut token.as_bytes().to_vec());
+                }
+                maybe_xml::token::owned::Token::EofWithBytesNotEvaluated(token) => {
+                    r.append(&mut token.as_bytes().to_vec());
                 }
                 _ => {}
             }
         }
         Ok(r)
     }
-    pub fn parse<T: IncludeAdaptor>(
-        &mut self,
-        worker: &mut MainWorker,
-        reader: &mut Reader<&[u8]>,
-        break_tag: &[u8],
-        include_adaptor: &mut T,
-    ) -> Result<Vec<u8>> {
-        let mut tag_stack = vec![];
-        let mut search_map = HashMap::new();
-        let mut r = Vec::new();
-        loop {
-            match reader.read_event() {
-                Ok(next) => match next {
-                    Event::DocType(text) => {
-                        r.append(&mut b"<!DOCTYPE ".to_vec());
-                        r.append(&mut text.into_inner().to_vec());
-                        r.push(b'>');
-                    }
-                    Event::Decl(decl) => {
-                        r.append(&mut b"<?".to_vec());
-                        r.append(&mut decl.to_vec());
-                        r.append(&mut b"?>".to_vec());
-                    }
-                    Event::Start(ref e) => {
-                        let name = e.name();
-                        let name_ref = name.as_ref();
-                        match name_ref {
-                            b"wd:session" => {
-                                self.session(worker, e)?;
-                            }
-                            b"wd:print" => {
-                                r.append(&mut crate::attr_parse_or_static(
-                                    worker,
-                                    &xml_util::attr2hash_map(e),
-                                    "value",
-                                ));
-                            }
-                            b"wd:session_gc" => {
-                                self.session_gc(worker, e)?;
-                            }
-                            b"wd:session_sequence_cursor" => {
-                                self.session_sequence_cursor(worker, e)?;
-                            }
-                            b"wd:delete_collection" => {
-                                self.delete_collection(worker, e)?;
-                            }
-                            b"wd:include" => {
-                                r.append(&mut process::get_include_content(
-                                    self,
-                                    worker,
-                                    include_adaptor,
-                                    &xml_util::attr2hash_map(e),
-                                )?);
-                            }
-                            b"wd:re" => {
-                                r.append(&mut process::re(
-                                    self,
-                                    &xml_util::outer(&next, name, reader),
-                                    worker,
-                                    include_adaptor,
-                                )?);
-                            }
-                            b"wd:letitgo" => {
-                                r.append(
-                                    &mut reader.read_text(e.name().to_owned())?.as_bytes().to_vec(),
-                                );
-                            }
-                            b"wd:update" => {
-                                update::update(self, worker, reader, e, include_adaptor)?;
-                            }
-                            b"wd:search" => {
-                                search::search(self, worker, reader, e, &mut search_map);
-                            }
-                            b"wd:result" => {
-                                result::result(self, worker, e, &search_map);
-                            }
-                            b"wd:collections" => {
-                                self.collections(worker, e);
-                            }
-                            b"wd:sessions" => {
-                                self.sessions(worker, e);
-                            }
-                            b"wd:stack" => {
-                                if let Some(var) = e.try_get_attribute(b"var")? {
-                                    worker.execute_script(
-                                        "stack.push",
-                                        ("wd.stack.push({".to_owned()
-                                            + crate::quot_unescape(std::str::from_utf8(
-                                                &var.value,
-                                            )?)
-                                            .as_str()
-                                            + "});")
-                                            .into(),
-                                    )?;
-                                }
-                            }
-                            b"wd:script" => {
-                                if let Err(e) = Self::run_script(
-                                    worker,
-                                    if let Some(last) = self.include_stack.last() {
-                                        last
-                                    } else {
-                                        ""
-                                    },
-                                    reader.read_text(name)?,
-                                ) {
-                                    return Err(e);
-                                }
-                            }
-                            b"wd:case" => {
-                                r.append(&mut process::case(
-                                    self,
-                                    &e,
-                                    &xml_util::outer(&next, name, reader),
-                                    worker,
-                                    include_adaptor,
-                                )?);
-                            }
-                            b"wd:if" => {
-                                r.append(&mut process::r#if(
-                                    self,
-                                    &e,
-                                    &xml_util::outer(&next, name, reader),
-                                    worker,
-                                    include_adaptor,
-                                )?);
-                            }
-                            b"wd:for" => {
-                                r.append(&mut process::r#for(
-                                    self,
-                                    &e,
-                                    &xml_util::outer(&next, name, reader),
-                                    worker,
-                                    include_adaptor,
-                                )?);
-                            }
-                            b"wd:tag" => {
-                                let (name, attr) = Self::custom_tag(e, worker);
-                                tag_stack.push(name.clone());
-                                r.push(b'<');
-                                r.append(&mut name.into_bytes());
-                                r.append(&mut attr.into_bytes());
-                                r.push(b'>');
-                            }
-                            _ => {
-                                if !name_ref.starts_with(b"wd:") {
-                                    r.push(b'<');
-                                    r.append(&mut name_ref.to_vec());
-                                    r.append(&mut Self::html_attr(e, worker).into_bytes());
-                                    r.push(b'>');
-                                }
-                            }
-                        }
-                    }
-                    Event::Empty(ref e) => {
-                        let name = e.name();
-                        let name = name.as_ref();
-                        match name {
-                            b"wd:print" => {
-                                r.append(&mut crate::attr_parse_or_static(
-                                    worker,
-                                    &xml_util::attr2hash_map(e),
-                                    "value",
-                                ));
-                            }
-                            b"wd:session_gc" => {
-                                self.session_gc(worker, e)?;
-                            }
-                            b"wd:delete_collection" => {
-                                self.delete_collection(worker, e)?;
-                            }
-                            b"wd:include" => {
-                                r.append(&mut process::get_include_content(
-                                    self,
-                                    worker,
-                                    include_adaptor,
-                                    &xml_util::attr2hash_map(e),
-                                )?);
-                            }
-                            b"wd:tag" => {
-                                let (name, attr) = Self::custom_tag(e, worker);
-                                r.push(b'<');
-                                r.append(&mut name.into_bytes());
-                                r.append(&mut attr.into_bytes());
-                                r.append(&mut b" />".to_vec());
-                            }
-                            _ => {
-                                if !name.starts_with(b"wd:") {
-                                    r.push(b'<');
-                                    r.append(&mut name.to_vec());
-                                    r.append(&mut Self::html_attr(e, worker).into_bytes());
-                                    r.append(&mut b" />".to_vec());
-                                }
-                            }
-                        }
-                    }
-                    Event::End(e) => {
-                        let name = e.name();
-                        let name = name.as_ref();
-                        if name == b"wd" || name == break_tag {
-                            break;
-                        } else {
-                            if name.starts_with(b"wd:") {
-                                match name {
-                                    b"wd:stack"
-                                    | b"wd:result"
-                                    | b"wd:collections"
-                                    | b"wd:sessions"
-                                    | b"wd:session_sequence_cursor" => {
-                                        let _ = worker.execute_script(
-                                            "stack.pop",
-                                            "wd.stack.pop();".to_owned().into(),
-                                        );
-                                    }
-                                    b"wd:session" => {
-                                        if let Some((ref mut session, clear_on_close)) =
-                                            self.sessions.pop()
-                                        {
-                                            if clear_on_close {
-                                                let _ = self
-                                                    .database
-                                                    .clone()
-                                                    .write()
-                                                    .unwrap()
-                                                    .session_clear(session);
-                                            }
-                                        }
-                                    }
-                                    b"wd:tag" => {
-                                        if let Some(name) = tag_stack.pop() {
-                                            r.append(&mut b"</".to_vec());
-                                            r.append(&mut name.into_bytes());
-                                            r.push(b'>');
-                                        }
-                                    }
-                                    _ => {}
-                                }
-                            } else {
-                                r.append(&mut b"</".to_vec());
-                                r.append(&mut name.to_vec());
-                                r.push(b'>');
-                            }
-                        }
-                    }
-                    Event::CData(c) => {
-                        r.append(&mut c.into_inner().to_vec());
-                    }
-                    Event::Text(c) => {
-                        r.append(&mut c.into_inner().to_vec());
-                    }
-                    Event::PI(_) => {}
-                    Event::Comment(_) => {}
-                    Event::Eof => {
-                        break;
-                    }
-                },
-                Err(e) => {
-                    eprintln!("{:?}", e);
-                }
-            }
-        }
-        Ok(r)
-    }
-    fn collections(&self, worker: &mut MainWorker, e: &BytesStart) {
-        let attr = xml_util::attr2hash_map(&e);
-        let var = crate::attr_parse_or_static_string(worker, &attr, "var");
-
-        let scope = &mut worker.js_runtime.handle_scope();
-        let context = scope.get_current_context();
-        let scope = &mut v8::ContextScope::new(scope, context);
-
-        let obj = v8::Object::new(scope);
-        if var != "" {
-            if let (Ok(array), Some(v8str_var)) = (
-                deno_core::serde_v8::to_v8(scope, self.database.read().unwrap().collections()),
-                v8::String::new(scope, &var),
-            ) {
-                obj.define_own_property(scope, v8str_var.into(), array.into(), v8::READ_ONLY);
-            }
-        }
-        stack::push(context, scope, obj);
-    }
-    fn collections_xml_parser(
+    fn collections(
         &self,
         worker: &mut MainWorker,
-        attributes: &HashMap<(String, String), String>,
+        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     ) {
-        let var = crate::attr_parse_or_static_string_xml_parser(worker, attributes, "var");
+        let var = crate::attr_parse_or_static_string(worker, attributes, b"var");
 
         let scope = &mut worker.js_runtime.handle_scope();
         let context = scope.get_current_context();
@@ -756,20 +577,18 @@ wd.v=key=>{
         }
         stack::push(context, scope, obj);
     }
-    fn session_xml_parser(
+    fn session(
         &mut self,
         worker: &mut MainWorker,
-        attributes: &HashMap<(String, String), String>,
+        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     ) -> io::Result<()> {
-        let session_name =
-            crate::attr_parse_or_static_string_xml_parser(worker, attributes, "name");
+        let session_name = crate::attr_parse_or_static_string(worker, &attributes, b"name");
 
         if session_name != "" {
             let clear_on_close =
-                crate::attr_parse_or_static_xml_parser(worker, attributes, "clear_on_close");
+                crate::attr_parse_or_static(worker, &attributes, b"clear_on_close");
 
-            let expire =
-                crate::attr_parse_or_static_string_xml_parser(worker, attributes, "expire");
+            let expire = crate::attr_parse_or_static_string(worker, &attributes, b"expire");
             let expire = if expire.len() > 0 {
                 expire.parse::<i64>().ok()
             } else {
@@ -780,16 +599,13 @@ wd.v=key=>{
                 &session_name,
                 expire,
             ) {
-                let cursor =
-                    crate::attr_parse_or_static_string_xml_parser(worker, attributes, "cursor");
+                let cursor = crate::attr_parse_or_static_string(worker, &attributes, b"cursor");
                 if cursor != "" {
                     if let Ok(cursor) = cursor.parse::<usize>() {
                         session.set_sequence_cursor(cursor)
                     }
                 }
-                if crate::attr_parse_or_static_xml_parser(worker, attributes, "initialize")
-                    == b"true"
-                {
+                if crate::attr_parse_or_static(worker, &attributes, b"initialize") == b"true" {
                     self.database
                         .clone()
                         .read()
@@ -801,67 +617,12 @@ wd.v=key=>{
         }
         Ok(())
     }
-    fn session(&mut self, worker: &mut MainWorker, e: &BytesStart) -> io::Result<()> {
-        let attr = xml_util::attr2hash_map(&e);
-        let session_name = crate::attr_parse_or_static_string(worker, &attr, "name");
-        if session_name != "" {
-            let clear_on_close = crate::attr_parse_or_static(worker, &attr, "clear_on_close");
-            let expire = crate::attr_parse_or_static_string(worker, &attr, "expire");
-            let expire = if expire.len() > 0 {
-                expire.parse::<i64>().ok()
-            } else {
-                None
-            };
-            if let Ok(mut session) = Session::new(
-                &self.database.clone().read().unwrap(),
-                &session_name,
-                expire,
-            ) {
-                let cursor = crate::attr_parse_or_static_string(worker, &attr, "cursor");
-                if cursor != "" {
-                    if let Ok(cursor) = cursor.parse::<usize>() {
-                        session.set_sequence_cursor(cursor)
-                    }
-                }
-                if crate::attr_parse_or_static(worker, &attr, "initialize") == b"true" {
-                    self.database
-                        .clone()
-                        .read()
-                        .unwrap()
-                        .session_restart(&mut session, expire)?;
-                }
-                self.sessions.push((session, clear_on_close == b"true"));
-            }
-        }
-        Ok(())
-    }
-    fn sessions(&self, worker: &mut MainWorker, e: &BytesStart) {
-        let attr = xml_util::attr2hash_map(&e);
-        let var = crate::attr_parse_or_static_string(worker, &attr, "var");
-
-        let scope = &mut worker.js_runtime.handle_scope();
-        let context = scope.get_current_context();
-        let scope = &mut v8::ContextScope::new(scope, context);
-
-        let obj = v8::Object::new(scope);
-        if var != "" {
-            if let (Ok(sessions), Some(v8str_var)) = (
-                self.database.read().unwrap().sessions(),
-                v8::String::new(scope, &var),
-            ) {
-                if let Ok(array) = deno_core::serde_v8::to_v8(scope, sessions) {
-                    obj.define_own_property(scope, v8str_var.into(), array.into(), v8::READ_ONLY);
-                }
-            }
-        }
-        stack::push(context, scope, obj);
-    }
-    fn sessions_xml_parser(
+    fn sessions(
         &self,
         worker: &mut MainWorker,
-        attributes: &HashMap<(String, String), String>,
+        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     ) {
-        let var = crate::attr_parse_or_static_string_xml_parser(worker, attributes, "var");
+        let var = crate::attr_parse_or_static_string(worker, attributes, b"var");
 
         let scope = &mut worker.js_runtime.handle_scope();
         let context = scope.get_current_context();
@@ -880,13 +641,13 @@ wd.v=key=>{
         }
         stack::push(context, scope, obj);
     }
-    fn session_sequence_cursor_xml_parser(
+    fn session_sequence(
         &mut self,
         worker: &mut MainWorker,
-        attributes: &HashMap<(String, String), String>,
+        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     ) -> io::Result<()> {
         let str_max = {
-            let s = crate::attr_parse_or_static_string_xml_parser(worker, attributes, "max");
+            let s = crate::attr_parse_or_static_string(worker, attributes, b"max");
             if s == "" {
                 "wd:session_sequence_max".to_owned()
             } else {
@@ -894,7 +655,7 @@ wd.v=key=>{
             }
         };
         let str_current = {
-            let s = crate::attr_parse_or_static_string_xml_parser(worker, attributes, "current");
+            let s = crate::attr_parse_or_static_string(worker, attributes, b"current");
             if s == "" {
                 "wd:session_sequence_current".to_owned()
             } else {
@@ -928,205 +689,33 @@ wd.v=key=>{
         stack::push(context, scope, obj);
         Ok(())
     }
-    fn session_sequence_cursor(
+    fn session_gc(
         &mut self,
         worker: &mut MainWorker,
-        e: &BytesStart,
+        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     ) -> io::Result<()> {
-        let attr = xml_util::attr2hash_map(e);
-        let str_max = {
-            let s = crate::attr_parse_or_static_string(worker, &attr, "max");
-            if s == "" {
-                "wd:session_sequence_max".to_owned()
-            } else {
-                s
-            }
-        };
-        let str_current = {
-            let s = crate::attr_parse_or_static_string(worker, &attr, "current");
-            if s == "" {
-                "wd:session_sequence_current".to_owned()
-            } else {
-                s
-            }
-        };
-
-        let scope = &mut worker.js_runtime.handle_scope();
-        let context = scope.get_current_context();
-        let scope = &mut v8::ContextScope::new(scope, context);
-
-        let obj = v8::Object::new(scope);
-        if let Some((session, _)) = self.sessions.last() {
-            if let Some(cursor) = session.sequence_cursor() {
-                if let (Some(v8str_max), Some(v8str_current)) = (
-                    v8::String::new(scope, &str_max),
-                    v8::String::new(scope, &str_current),
-                ) {
-                    let max = v8::Integer::new(scope, cursor.max as i32);
-                    let current = v8::Integer::new(scope, cursor.current as i32);
-                    obj.define_own_property(scope, v8str_max.into(), max.into(), v8::READ_ONLY);
-                    obj.define_own_property(
-                        scope,
-                        v8str_current.into(),
-                        current.into(),
-                        v8::READ_ONLY,
-                    );
-                }
-            }
-        }
-        stack::push(context, scope, obj);
-        Ok(())
-    }
-    fn session_gc(&mut self, worker: &mut MainWorker, e: &BytesStart) -> io::Result<()> {
-        let str_expire =
-            crate::attr_parse_or_static_string(worker, &xml_util::attr2hash_map(e), "expire");
+        let str_expire = crate::attr_parse_or_static_string(worker, attributes, b"expire");
         let mut expire = 60 * 60 * 24;
         if let Ok(parsed) = str_expire.parse::<i64>() {
             expire = parsed;
         }
         self.database.clone().write().unwrap().session_gc(expire)
     }
-    fn session_gc_xml_parser(
+    fn delete_collection(
         &mut self,
         worker: &mut MainWorker,
-        attributes: &HashMap<(String, String), String>,
-    ) -> io::Result<()> {
-        let str_expire =
-            crate::attr_parse_or_static_string_xml_parser(worker, attributes, "expire");
-        let mut expire = 60 * 60 * 24;
-        if let Ok(parsed) = str_expire.parse::<i64>() {
-            expire = parsed;
-        }
-        self.database.clone().write().unwrap().session_gc(expire)
-    }
-    fn delete_collection_xml_parser(
-        &mut self,
-        worker: &mut MainWorker,
-        attributes: &HashMap<(String, String), String>,
+        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     ) -> Result<()> {
-        let str_collection =
-            crate::attr_parse_or_static_string_xml_parser(worker, attributes, "collection");
+        let str_collection = crate::attr_parse_or_static_string(worker, attributes, b"collection");
         self.database
             .clone()
             .write()
             .unwrap()
             .delete_collection(&str_collection)
     }
-    fn delete_collection(&mut self, worker: &mut MainWorker, e: &BytesStart) -> Result<()> {
-        let str_collection =
-            crate::attr_parse_or_static_string(worker, &xml_util::attr2hash_map(e), "collection");
-        self.database
-            .clone()
-            .write()
-            .unwrap()
-            .delete_collection(&str_collection)
-    }
-    fn html_attr(e: &BytesStart, worker: &mut MainWorker) -> String {
-        let scope = &mut worker.js_runtime.handle_scope();
-        let context = scope.get_current_context();
-        let scope = &mut v8::ContextScope::new(scope, context);
-        let mut html_attr = "".to_string();
-        for attr in e.html_attributes().with_checks(false) {
-            if let Ok(attr) = attr {
-                if let Ok(attr_key) = std::str::from_utf8(attr.key.as_ref()) {
-                    if attr_key == "wd-attr:replace" {
-                        if let Ok(value) = std::str::from_utf8(&attr.value) {
-                            let attr =
-                                crate::eval_result_string(scope, &crate::quot_unescape(value));
-                            if attr.len() > 0 {
-                                html_attr.push(' ');
-                                html_attr.push_str(&attr);
-                            }
-                        }
-                    } else {
-                        let is_wd = attr_key.starts_with("wd:");
-                        let attr_key = if is_wd {
-                            attr_key.split_at(3).1
-                        } else {
-                            attr_key
-                        };
-                        html_attr.push(' ');
-                        html_attr.push_str(attr_key);
 
-                        if let Ok(value) = std::str::from_utf8(&attr.value) {
-                            if value != "" {
-                                html_attr.push_str("=\"");
-                                if is_wd {
-                                    html_attr.push_str(&crate::eval_result_string(scope, value));
-                                } else {
-                                    html_attr.push_str(
-                                        &value
-                                            .replace("&", "&amp;")
-                                            .replace("<", "&lt;")
-                                            .replace(">", "&gt;"),
-                                    );
-                                }
-                                html_attr.push('"');
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        html_attr
-    }
-    fn custom_tag(e: &BytesStart, worker: &mut MainWorker) -> (String, String) {
-        let scope = &mut worker.js_runtime.handle_scope();
-        let context = scope.get_current_context();
-        let scope = &mut v8::ContextScope::new(scope, context);
-        let mut html_attr = "".to_string();
-        let mut name = "".to_string();
-        for attr in e.html_attributes().with_checks(false) {
-            if let Ok(attr) = attr {
-                if let Ok(attr_key) = std::str::from_utf8(attr.key.as_ref()) {
-                    if attr_key == "wd-tag:name" {
-                        if let Ok(value) = std::str::from_utf8(&attr.value) {
-                            name = crate::eval_result_string(scope, value);
-                        }
-                    } else {
-                        if attr_key == "wd-attr:replace" {
-                            if let Ok(value) = std::str::from_utf8(&attr.value) {
-                                let attr =
-                                    crate::eval_result_string(scope, &crate::quot_unescape(value));
-                                if attr.len() > 0 {
-                                    html_attr.push(' ');
-                                    html_attr.push_str(&attr);
-                                }
-                            }
-                        } else {
-                            let is_wd = attr_key.starts_with("wd:");
-                            let attr_key = if is_wd {
-                                attr_key.split_at(3).1
-                            } else {
-                                attr_key
-                            };
-                            html_attr.push(' ');
-                            html_attr.push_str(attr_key);
-
-                            if let Ok(value) = std::str::from_utf8(&attr.value) {
-                                html_attr.push_str("=\"");
-                                if is_wd {
-                                    html_attr.push_str(&crate::eval_result_string(scope, value));
-                                } else {
-                                    html_attr.push_str(
-                                        &value
-                                            .replace("&", "&amp;")
-                                            .replace("<", "&lt;")
-                                            .replace(">", "&gt;"),
-                                    );
-                                }
-                                html_attr.push('"');
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        (name, html_attr)
-    }
-
-    fn custom_tag_xml_parser(
-        attributes: &HashMap<(String, String), String>,
+    fn custom_tag(
+        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
         worker: &mut MainWorker,
     ) -> (String, String) {
         let scope = &mut worker.js_runtime.handle_scope();
@@ -1134,38 +723,57 @@ wd.v=key=>{
         let scope = &mut v8::ContextScope::new(scope, context);
         let mut html_attr = "".to_string();
         let mut name = "".to_string();
-        for ((prefix, local), value) in attributes {
-            if prefix == "wd-tag" && local == "name" {
-                name = crate::eval_result_string(scope, value);
-            } else {
-                if prefix == "wd-attr" && local == "replace" {
-                    let attr = crate::eval_result_string(scope, &crate::quot_unescape(value));
-                    if attr.len() > 0 {
-                        html_attr.push(' ');
-                        html_attr.push_str(&attr);
-                    }
-                } else {
-                    let is_wd = prefix == "wd";
-                    let attr_key = if is_wd {
-                        local.to_owned()
+        for (local, (prefix, value)) in attributes {
+            if let Some(value) = value {
+                if let Ok(value) = std::str::from_utf8(value) {
+                    let prefix = if let Some(prefix) = prefix {
+                        prefix.to_vec()
                     } else {
-                        prefix.to_owned() + ":" + local.as_str()
+                        b"".to_vec()
                     };
-                    html_attr.push(' ');
-                    html_attr.push_str(&attr_key);
-
-                    html_attr.push_str("=\"");
-                    if is_wd {
-                        html_attr.push_str(&crate::eval_result_string(scope, value));
+                    if prefix == b"wd-tag" && local == b"name" {
+                        name = crate::eval_result_string(scope, value);
                     } else {
-                        html_attr.push_str(
-                            &value
-                                .replace("&", "&amp;")
-                                .replace("<", "&lt;")
-                                .replace(">", "&gt;"),
-                        );
+                        if prefix == b"wd-attr" && local == b"replace" {
+                            let attr =
+                                crate::eval_result_string(scope, &crate::quot_unescape(value));
+                            if attr.len() > 0 {
+                                html_attr.push(' ');
+                                html_attr.push_str(&attr);
+                            }
+                        } else {
+                            let is_wd = prefix == b"wd";
+                            let local = if let Ok(local) = std::str::from_utf8(local) {
+                                local
+                            } else {
+                                ""
+                            };
+                            let attr_key = if is_wd {
+                                local.to_owned()
+                            } else {
+                                (if let Ok(prefix) = std::str::from_utf8(&prefix) {
+                                    prefix.to_owned() + ":"
+                                } else {
+                                    "".to_owned()
+                                }) + local
+                            };
+                            html_attr.push(' ');
+                            html_attr.push_str(&attr_key);
+
+                            html_attr.push_str("=\"");
+                            if is_wd {
+                                html_attr.push_str(&crate::eval_result_string(scope, value));
+                            } else {
+                                html_attr.push_str(
+                                    &value
+                                        .replace("&", "&amp;")
+                                        .replace("<", "&lt;")
+                                        .replace(">", "&gt;"),
+                                );
+                            }
+                            html_attr.push('"');
+                        }
                     }
-                    html_attr.push('"');
                 }
             }
         }

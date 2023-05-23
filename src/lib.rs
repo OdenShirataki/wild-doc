@@ -10,13 +10,10 @@ use deno_runtime::{deno_core::v8, worker::MainWorker};
 pub use semilattice_database_session::anyhow;
 use semilattice_database_session::SessionDatabase;
 
-use xmlparser::Token;
-
 mod script;
 use script::Script;
 
 mod xml_util;
-use xml_util::XmlAttr;
 
 mod include;
 pub use include::{IncludeAdaptor, IncludeLocal};
@@ -53,29 +50,17 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         })
     }
 
-    fn run_inner_xml_parser(
+    fn run_inner(
         database: Arc<RwLock<SessionDatabase>>,
         xml: &str,
         input_json: &str,
         include_adaptor: &mut impl IncludeAdaptor,
         module_cache_dir: &PathBuf,
     ) -> Result<WildDocResult> {
-        let mut tokens = xmlparser::Tokenizer::from(xml);
-        if let Some(Ok(Token::ElementStart { prefix, local, .. })) = tokens.next() {
-            if prefix.as_str() == "" && local.as_str() == "wd" {
-                if let Some(Ok(Token::ElementEnd { .. })) = tokens.next() {
-                    let mut script = Script::new(database, module_cache_dir.clone());
-                    return script.parse_xml_xml_parser(input_json, &mut tokens, include_adaptor);
-                }
-            }
-        }
-        Ok(WildDocResult {
-            body: xml.into(),
-            options_json: "".to_string(),
-        })
+        Script::new(database, module_cache_dir.clone()).parse_xml(input_json, xml, include_adaptor)
     }
     pub fn run(&mut self, xml: &str, input_json: &str) -> Result<WildDocResult> {
-        Self::run_inner_xml_parser(
+        Self::run_inner(
             self.database.clone(),
             xml,
             input_json,
@@ -89,7 +74,7 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         input_json: &str,
         include_adaptor: &mut impl IncludeAdaptor,
     ) -> Result<WildDocResult> {
-        Self::run_inner_xml_parser(
+        Self::run_inner(
             self.database.clone(),
             xml,
             input_json,
@@ -137,70 +122,82 @@ fn eval_result_string(scope: &mut v8::HandleScope, value: &str) -> String {
     }
 }
 
-fn quot_unescape(str: &str) -> String {
+pub(crate) fn quot_unescape(str: &str) -> String {
     str.replace("&#039;", "'").replace("&quot;", "\"")
 }
-fn attr_parse_or_static(worker: &mut MainWorker, attr: &XmlAttr, key: &str) -> Vec<u8> {
-    let wdkey = "wd:".to_owned() + key;
-    if let Some(value) = attr.get(&wdkey) {
-        if let Ok(value) = std::str::from_utf8(value) {
-            return crate::eval_result(
-                &mut worker.js_runtime.handle_scope(),
-                quot_unescape(value).as_ref(),
+
+fn attr2map<'a>(
+    attributes: &'a Option<maybe_xml::token::prop::Attributes>,
+) -> HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)> {
+    let mut map = HashMap::new();
+    if let Some(attributes) = attributes {
+        for a in attributes.iter() {
+            let name = a.name();
+            map.insert(
+                name.local().as_bytes().to_vec(),
+                (
+                    if let Some(prefix) = name.namespace_prefix() {
+                        Some(prefix.to_vec())
+                    } else {
+                        None
+                    },
+                    if let Some(value) = a.value() {
+                        Some(value.to_vec())
+                    } else {
+                        None
+                    },
+                ),
             );
         }
-    } else if let Some(value) = attr.get(key) {
-        if let Ok(value) = std::str::from_utf8(value) {
-            return quot_unescape(value).as_bytes().to_vec();
-        }
     }
-    vec![]
+    map
 }
 
-fn attr_parse_or_static_string(worker: &mut MainWorker, attr: &XmlAttr, key: &str) -> String {
-    let wdkey = "wd:".to_owned() + key;
-    if let Some(value) = attr.get(&wdkey) {
-        if let Ok(value) = std::str::from_utf8(value) {
-            return crate::eval_result_string(
-                &mut worker.js_runtime.handle_scope(),
-                quot_unescape(value).as_ref(),
-            );
-        }
-    } else if let Some(value) = attr.get(key) {
-        if let Ok(value) = std::str::from_utf8(value) {
-            return quot_unescape(value);
-        }
-    }
-    "".to_owned()
-}
-
-fn attr_parse_or_static_xml_parser(
+fn attr_parse_or_static_string(
     worker: &mut MainWorker,
-    attributes: &HashMap<(String, String), String>,
-    key: &str,
-) -> Vec<u8> {
-    if let Some(value) = attributes.get(&("wd".to_string(), key.to_string())) {
-        return crate::eval_result(
-            &mut worker.js_runtime.handle_scope(),
-            quot_unescape(value).as_ref(),
-        );
-    } else if let Some(value) = attributes.get(&("".to_string(), key.to_string())) {
-        return quot_unescape(value).as_bytes().to_vec();
-    }
-    vec![]
-}
-fn attr_parse_or_static_string_xml_parser(
-    worker: &mut MainWorker,
-    attributes: &HashMap<(String, String), String>,
-    key: &str,
+    attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
+    key: &[u8],
 ) -> String {
-    if let Some(value) = attributes.get(&("wd".to_string(), key.to_string())) {
-        return crate::eval_result_string(
-            &mut worker.js_runtime.handle_scope(),
-            quot_unescape(value).as_ref(),
-        );
-    } else if let Some(value) = attributes.get(&("".to_string(), key.to_string())) {
-        return quot_unescape(value);
+    if let Some((prefix, Some(value))) = attributes.get(key) {
+        if let Ok(value) = std::str::from_utf8(value.as_slice()) {
+            let prefix = if let Some(prefix) = prefix {
+                prefix.as_slice()
+            } else {
+                b""
+            };
+            return if prefix == b"wd" {
+                crate::eval_result_string(
+                    &mut worker.js_runtime.handle_scope(),
+                    quot_unescape(value).as_ref(),
+                )
+            } else {
+                quot_unescape(value)
+            };
+        }
     }
     "".to_owned()
+}
+fn attr_parse_or_static(
+    worker: &mut MainWorker,
+    attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
+    key: &[u8],
+) -> Vec<u8> {
+    if let Some((prefix, Some(value))) = attributes.get(key) {
+        if let Ok(value) = std::str::from_utf8(value.as_slice()) {
+            let prefix = if let Some(prefix) = prefix {
+                prefix.as_slice()
+            } else {
+                b""
+            };
+            return if prefix == b"wd" {
+                crate::eval_result(
+                    &mut worker.js_runtime.handle_scope(),
+                    quot_unescape(value).as_ref(),
+                )
+            } else {
+                quot_unescape(value).as_bytes().to_vec()
+            };
+        }
+    }
+    vec![]
 }

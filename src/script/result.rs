@@ -2,11 +2,8 @@ use deno_runtime::{
     deno_napi::v8::{self, HandleScope, READ_ONLY},
     worker::MainWorker,
 };
-use quick_xml::events::BytesStart;
 use semilattice_database_session::{Condition, Order, OrderKey, Session, SessionDatabase};
 use std::{collections::HashMap, ffi::c_void};
-
-use crate::xml_util;
 
 use super::Script;
 use super::{get_wddb, stack};
@@ -315,210 +312,14 @@ fn set_uuid<'s>(scope: &mut HandleScope<'s>, object: v8::Local<'s, v8::Object>, 
 pub(super) fn result(
     script: &mut Script,
     worker: &mut MainWorker,
-    e: &BytesStart,
+    attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     search_map: &HashMap<String, (i32, Vec<Condition>)>,
 ) {
-    let attr = xml_util::attr2hash_map(&e);
-    let search = crate::attr_parse_or_static_string(worker, &attr, "search");
-    let var = crate::attr_parse_or_static_string(worker, &attr, "var");
+    let search = crate::attr_parse_or_static_string(worker, attributes, b"search");
+    let var = crate::attr_parse_or_static_string(worker, attributes, b"var");
 
-    let orders = make_order(&crate::attr_parse_or_static_string(worker, &attr, "sort"));
-
-    let scope = &mut worker.js_runtime.handle_scope();
-    let context = scope.get_current_context();
-    let scope = &mut v8::ContextScope::new(scope, context);
-
-    let obj = v8::Object::new(scope);
-
-    if search != "" && var != "" {
-        if let Some(v8str_var) = v8::String::new(scope, &var) {
-            let return_obj = v8::Array::new(scope, 0);
-            if let (Some(v8str_field), Some(v8str_depends), Some((collection_id, conditions))) = (
-                v8::String::new(scope, "field"),
-                v8::String::new(scope, "depends"),
-                search_map.get(&search),
-            ) {
-                let collection_id = *collection_id;
-                let mut session_maybe_has_collection = None;
-                for i in (0..script.sessions.len()).rev() {
-                    if let Some(_) = script.sessions[i].0.temporary_collection(collection_id) {
-                        session_maybe_has_collection = Some(i);
-                        break;
-                    }
-                }
-
-                if let Some(collection) = script
-                    .database
-                    .clone()
-                    .read()
-                    .unwrap()
-                    .collection(collection_id)
-                {
-                    if let Some(session_index) = session_maybe_has_collection {
-                        let session = &mut script.sessions[session_index].0;
-                        let addr = session as *mut Session as *mut c_void;
-                        let v8ext_session = v8::External::new(scope, addr);
-                        if let (
-                            Some(v8func_field),
-                            Some(v8func_depends),
-                            Some(v8str_session),
-                            Some(temporary_collection),
-                        ) = (
-                            v8::Function::new(scope, session_field),
-                            v8::Function::new(scope, session_depends),
-                            v8::String::new(scope, "session"),
-                            session.temporary_collection(collection_id),
-                        ) {
-                            let mut i = 0;
-                            let search = session.search(collection_id, conditions);
-                            for row in script
-                                .database
-                                .clone()
-                                .read()
-                                .unwrap()
-                                .result_session(search, orders)
-                                .unwrap()
-                            {
-                                let (activity, term_begin, term_end) =
-                                    if let Some(tr) = temporary_collection.get(&row) {
-                                        (tr.activity() as i32, tr.term_begin(), tr.term_end())
-                                    } else {
-                                        let row = row as u32;
-                                        (
-                                            collection.activity(row) as i32,
-                                            collection.term_begin(row),
-                                            collection.term_begin(row),
-                                        )
-                                    };
-
-                                let obj = set_values(
-                                    scope,
-                                    collection_id,
-                                    collection.name(),
-                                    row,
-                                    activity,
-                                    term_begin,
-                                    term_end,
-                                );
-
-                                set_serial(
-                                    scope,
-                                    obj,
-                                    if row > 0 {
-                                        collection.serial(row as u32)
-                                    } else {
-                                        0
-                                    },
-                                );
-
-                                obj.define_own_property(
-                                    scope,
-                                    v8str_session.into(),
-                                    v8ext_session.into(),
-                                    READ_ONLY,
-                                );
-
-                                obj.define_own_property(
-                                    scope,
-                                    v8str_field.into(),
-                                    v8func_field.into(),
-                                    READ_ONLY,
-                                );
-                                obj.define_own_property(
-                                    scope,
-                                    v8str_depends.into(),
-                                    v8func_depends.into(),
-                                    READ_ONLY,
-                                );
-
-                                if row > 0 {
-                                    set_last_update(
-                                        scope,
-                                        obj,
-                                        collection.last_updated(row as u32),
-                                    );
-                                    set_uuid(scope, obj, &collection.uuid_string(row as u32));
-                                } else {
-                                    if let Some(tr) = temporary_collection.get(&row) {
-                                        set_uuid(scope, obj, &tr.uuid_string());
-                                    }
-                                }
-                                return_obj.set_index(scope, i, obj.into());
-                                i += 1;
-                            }
-                        }
-                    } else {
-                        if let (Some(v8func_field), Some(v8func_depends)) = (
-                            v8::Function::new(scope, field),
-                            v8::Function::new(scope, depends),
-                        ) {
-                            let mut search =
-                                script.database.clone().read().unwrap().search(collection);
-                            for c in conditions {
-                                search = search.search(c.clone());
-                            }
-
-                            let rows = script
-                                .database
-                                .clone()
-                                .read()
-                                .unwrap()
-                                .result(search, &orders)
-                                .unwrap();
-                            let mut i = 0;
-                            for row in rows {
-                                let obj = set_values(
-                                    scope,
-                                    collection_id as i32,
-                                    collection.name(),
-                                    row as i64,
-                                    collection.activity(row) as i32,
-                                    collection.term_begin(row),
-                                    collection.term_end(row),
-                                );
-
-                                set_serial(scope, obj, collection.serial(row));
-
-                                set_last_update(scope, obj, collection.last_updated(row));
-                                set_uuid(scope, obj, &collection.uuid_string(row));
-
-                                obj.define_own_property(
-                                    scope,
-                                    v8str_field.into(),
-                                    v8func_field.into(),
-                                    READ_ONLY,
-                                );
-                                obj.define_own_property(
-                                    scope,
-                                    v8str_depends.into(),
-                                    v8func_depends.into(),
-                                    READ_ONLY,
-                                );
-
-                                return_obj.set_index(scope, i, obj.into());
-                                i += 1;
-                            }
-                        }
-                    }
-                }
-            }
-            obj.set(scope, v8str_var.into(), return_obj.into());
-        }
-    }
-    stack::push(context, scope, obj);
-}
-
-pub(super) fn result_xml_parser(
-    script: &mut Script,
-    worker: &mut MainWorker,
-    attributes: &HashMap<(String, String), String>,
-    search_map: &HashMap<String, (i32, Vec<Condition>)>,
-) {
-    let search = crate::attr_parse_or_static_string_xml_parser(worker, attributes, "search");
-    let var = crate::attr_parse_or_static_string_xml_parser(worker, attributes, "var");
-
-    let orders = make_order(&crate::attr_parse_or_static_string_xml_parser(
-        worker, attributes, "sort",
+    let orders = make_order(&crate::attr_parse_or_static_string(
+        worker, attributes, b"sort",
     ));
 
     let scope = &mut worker.js_runtime.handle_scope();
