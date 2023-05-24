@@ -180,7 +180,7 @@ wd.v=key=>{
         })
     }
     fn run_script(worker: &mut MainWorker, file_name: &str, src: &str) -> Result<()> {
-        deno_runtime::tokio_util::run_local(async {
+        deno_runtime::tokio_util::create_basic_runtime().block_on(async {
             let script_name = "wd://script".to_owned() + file_name;
             let mod_id = worker
                 .js_runtime
