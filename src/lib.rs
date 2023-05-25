@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::Result;
-use deno_runtime::{deno_core::v8, worker::MainWorker};
+use deno_runtime::{deno_core::v8, deno_napi::v8::NewStringType, worker::MainWorker};
 pub use semilattice_database_session::anyhow;
 use semilattice_database_session::SessionDatabase;
 
@@ -52,14 +52,14 @@ impl<T: IncludeAdaptor> WildDoc<T> {
 
     fn run_inner(
         database: Arc<RwLock<SessionDatabase>>,
-        xml: &str,
-        input_json: &str,
+        xml: &[u8],
+        input_json: &[u8],
         include_adaptor: &mut impl IncludeAdaptor,
         module_cache_dir: &PathBuf,
     ) -> Result<WildDocResult> {
         Script::new(database, module_cache_dir.clone()).parse_xml(input_json, xml, include_adaptor)
     }
-    pub fn run(&mut self, xml: &str, input_json: &str) -> Result<WildDocResult> {
+    pub fn run(&mut self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {
         Self::run_inner(
             self.database.clone(),
             xml,
@@ -70,8 +70,8 @@ impl<T: IncludeAdaptor> WildDoc<T> {
     }
     pub fn run_specify_include_adaptor(
         &mut self,
-        xml: &str,
-        input_json: &str,
+        xml: &[u8],
+        input_json: &[u8],
         include_adaptor: &mut impl IncludeAdaptor,
     ) -> Result<WildDocResult> {
         Self::run_inner(
@@ -110,8 +110,8 @@ fn eval_result(scope: &mut v8::HandleScope, var: &str) -> Vec<u8> {
     vec![]
 }
 
-fn eval_result_string(scope: &mut v8::HandleScope, value: &str) -> String {
-    if let Some(v8_value) = v8::String::new(scope, value)
+fn eval_result_string(scope: &mut v8::HandleScope, value: &[u8]) -> String {
+    if let Some(v8_value) = v8::String::new_from_one_byte(scope, value, NewStringType::Normal)
         .and_then(|code| v8::Script::compile(scope, code, None))
         .and_then(|v| v.run(scope))
         .and_then(|v| v.to_string(scope))
@@ -122,7 +122,8 @@ fn eval_result_string(scope: &mut v8::HandleScope, value: &str) -> String {
     }
 }
 
-pub(crate) fn quot_unescape(str: &str) -> String {
+pub(crate) fn quot_unescape(value: &[u8]) -> String {
+    let str = unsafe { std::str::from_utf8_unchecked(value) };
     str.replace("&#039;", "'").replace("&quot;", "\"")
 }
 
@@ -159,21 +160,19 @@ fn attr_parse_or_static_string(
     key: &[u8],
 ) -> String {
     if let Some((prefix, Some(value))) = attributes.get(key) {
-        if let Ok(value) = std::str::from_utf8(value.as_slice()) {
-            let prefix = if let Some(prefix) = prefix {
-                prefix.as_slice()
-            } else {
-                b""
-            };
-            return if prefix == b"wd" {
-                crate::eval_result_string(
-                    &mut worker.js_runtime.handle_scope(),
-                    quot_unescape(value).as_ref(),
-                )
-            } else {
-                quot_unescape(value)
-            };
-        }
+        let prefix = if let Some(prefix) = prefix {
+            prefix.as_slice()
+        } else {
+            b""
+        };
+        return if prefix == b"wd" {
+            crate::eval_result_string(
+                &mut worker.js_runtime.handle_scope(),
+                quot_unescape(value).as_ref(),
+            )
+        } else {
+            quot_unescape(value)
+        };
     }
     "".to_owned()
 }
@@ -183,21 +182,19 @@ fn attr_parse_or_static(
     key: &[u8],
 ) -> Vec<u8> {
     if let Some((prefix, Some(value))) = attributes.get(key) {
-        if let Ok(value) = std::str::from_utf8(value.as_slice()) {
-            let prefix = if let Some(prefix) = prefix {
-                prefix.as_slice()
-            } else {
-                b""
-            };
-            return if prefix == b"wd" {
-                crate::eval_result(
-                    &mut worker.js_runtime.handle_scope(),
-                    quot_unescape(value).as_ref(),
-                )
-            } else {
-                quot_unescape(value).as_bytes().to_vec()
-            };
-        }
+        let prefix = if let Some(prefix) = prefix {
+            prefix.as_slice()
+        } else {
+            b""
+        };
+        return if prefix == b"wd" {
+            crate::eval_result(
+                &mut worker.js_runtime.handle_scope(),
+                quot_unescape(value).as_ref(),
+            )
+        } else {
+            quot_unescape(value).as_bytes().to_vec()
+        };
     }
     vec![]
 }

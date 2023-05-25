@@ -12,6 +12,7 @@ use deno_runtime::{
     deno_fetch::{
         create_http_client,
         reqwest::{self, header::LOCATION, Response, Url},
+        CreateHttpClientOptions,
     },
 };
 use log::error;
@@ -70,8 +71,10 @@ impl ModuleLoader for WdModuleLoader {
                         buf
                     } else {
                         let url = module_specifier.to_string();
-                        let client =
-                            create_http_client("wild-doc".into(), None, vec![], None, None, None)?;
+                        let client = create_http_client(
+                            "wild-doc".into(),
+                            CreateHttpClientOptions::default(),
+                        )?;
                         let resp = get_redirected_response(&client, url).await?;
                         match resp.bytes().await {
                             Ok(resp) => {

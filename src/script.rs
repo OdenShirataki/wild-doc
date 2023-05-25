@@ -54,8 +54,8 @@ impl Script {
 
     pub fn parse_xml<T: IncludeAdaptor>(
         &mut self,
-        input_json: &str,
-        xml: &str,
+        input_json: &[u8],
+        xml: &[u8],
         include_adaptor: &mut T,
     ) -> Result<super::WildDocResult> {
         let mut worker = MainWorker::bootstrap_from_options(
@@ -75,7 +75,7 @@ impl Script {
     ,input:"#
                 .to_owned()
                 + (if input_json.len() > 0 {
-                    input_json
+                    std::str::from_utf8(input_json)?
                 } else {
                     "{}"
                 })
@@ -159,7 +159,7 @@ wd.v=key=>{
             }
         }
 
-        let result_body = self.parse(&mut worker, xml.as_bytes(), b"", include_adaptor)?;
+        let result_body = self.parse(&mut worker, xml, b"", include_adaptor)?;
         let result_options = {
             let mut result_options = String::new();
             let scope = &mut worker.js_runtime.handle_scope();
@@ -179,14 +179,14 @@ wd.v=key=>{
             options_json: result_options,
         })
     }
-    fn run_script(worker: &mut MainWorker, file_name: &str, src: &str) -> Result<()> {
+    fn run_script(worker: &mut MainWorker, file_name: &str, src: &[u8]) -> Result<()> {
         deno_runtime::tokio_util::create_basic_runtime().block_on(async {
             let script_name = "wd://script".to_owned() + file_name;
             let mod_id = worker
                 .js_runtime
                 .load_side_module(
                     &ModuleSpecifier::parse(&script_name)?,
-                    Some(src.to_owned().into()),
+                    Some(String::from_utf8(src.to_vec())?.into()),
                 )
                 .await?;
             worker.evaluate_module(mod_id).await?;
@@ -256,9 +256,7 @@ wd.v=key=>{
                 if let Some((None, Some(var))) = attributes.get(b"var".as_slice()) {
                     worker.execute_script(
                         "stack.push",
-                        ("wd.stack.push({".to_owned()
-                            + crate::quot_unescape(std::str::from_utf8(var)?).as_str()
-                            + "});")
+                        ("wd.stack.push({".to_owned() + crate::quot_unescape(var).as_str() + "});")
                             .into(),
                     )?;
                 }
@@ -271,7 +269,7 @@ wd.v=key=>{
                     } else {
                         ""
                     },
-                    std::str::from_utf8(xml_util::inner(&name, tokenizer).as_slice())?,
+                    xml_util::inner(&name, tokenizer).as_slice(),
                 ) {
                     return Err(e);
                 }
@@ -305,11 +303,11 @@ wd.v=key=>{
             }
             b"tag" => {
                 let mut r: Vec<u8> = Vec::new();
-                let (name, attr) = Self::custom_tag(&crate::attr2map(&attributes), worker);
+                let (name, mut attr) = Self::custom_tag(&crate::attr2map(&attributes), worker);
                 tag_stack.push(name.clone());
                 r.push(b'<');
                 r.append(&mut name.into_bytes());
-                r.append(&mut attr.into_bytes());
+                r.append(&mut attr);
                 r.push(b'>');
                 return Ok(r);
             }
@@ -376,10 +374,7 @@ wd.v=key=>{
                             r.append(
                                 &mut crate::eval_result_string(
                                     &mut worker.js_runtime.handle_scope(),
-                                    crate::quot_unescape(
-                                        std::str::from_utf8(value.as_bytes()).unwrap(),
-                                    )
-                                    .as_ref(),
+                                    crate::quot_unescape(value.as_bytes()).as_ref(),
                                 )
                                 .as_bytes()
                                 .to_vec(),
@@ -393,10 +388,7 @@ wd.v=key=>{
                                 r.append(
                                     &mut crate::eval_result_string(
                                         &mut worker.js_runtime.handle_scope(),
-                                        crate::quot_unescape(
-                                            std::str::from_utf8(value.as_bytes()).unwrap(),
-                                        )
-                                        .as_ref(),
+                                        crate::quot_unescape(value.as_bytes()).as_ref(),
                                     )
                                     .as_bytes()
                                     .to_vec(),
@@ -462,10 +454,11 @@ wd.v=key=>{
                     let attributes = tag.attributes();
                     let name = tag.name();
                     if name.as_bytes() == b"wd:tag" {
-                        let (name, attr) = Self::custom_tag(&crate::attr2map(&attributes), worker);
+                        let (name, mut attr) =
+                            Self::custom_tag(&crate::attr2map(&attributes), worker);
                         r.push(b'<');
                         r.append(&mut name.into_bytes());
-                        r.append(&mut attr.into_bytes());
+                        r.append(&mut attr);
                         r.push(b'>');
                     } else {
                         if Self::is_wd_tag(&name) {
@@ -717,62 +710,58 @@ wd.v=key=>{
     fn custom_tag(
         attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
         worker: &mut MainWorker,
-    ) -> (String, String) {
+    ) -> (String, Vec<u8>) {
         let scope = &mut worker.js_runtime.handle_scope();
         let context = scope.get_current_context();
         let scope = &mut v8::ContextScope::new(scope, context);
-        let mut html_attr = "".to_string();
+        let mut html_attr = vec![];
         let mut name = "".to_string();
         for (local, (prefix, value)) in attributes {
             if let Some(value) = value {
-                if let Ok(value) = std::str::from_utf8(value) {
-                    let prefix = if let Some(prefix) = prefix {
-                        prefix.to_vec()
-                    } else {
-                        b"".to_vec()
-                    };
-                    if prefix == b"wd-tag" && local == b"name" {
-                        name = crate::eval_result_string(scope, value);
-                    } else {
-                        if prefix == b"wd-attr" && local == b"replace" {
-                            let attr =
-                                crate::eval_result_string(scope, &crate::quot_unescape(value));
-                            if attr.len() > 0 {
-                                html_attr.push(' ');
-                                html_attr.push_str(&attr);
-                            }
-                        } else {
-                            let is_wd = prefix == b"wd";
-                            let local = if let Ok(local) = std::str::from_utf8(local) {
-                                local
-                            } else {
-                                ""
-                            };
-                            let attr_key = if is_wd {
-                                local.to_owned()
-                            } else {
-                                (if let Ok(prefix) = std::str::from_utf8(&prefix) {
-                                    prefix.to_owned() + ":"
-                                } else {
-                                    "".to_owned()
-                                }) + local
-                            };
-                            html_attr.push(' ');
-                            html_attr.push_str(&attr_key);
-
-                            html_attr.push_str("=\"");
-                            if is_wd {
-                                html_attr.push_str(&crate::eval_result_string(scope, value));
-                            } else {
-                                html_attr.push_str(
-                                    &value
-                                        .replace("&", "&amp;")
-                                        .replace("<", "&lt;")
-                                        .replace(">", "&gt;"),
-                                );
-                            }
-                            html_attr.push('"');
+                let prefix = if let Some(prefix) = prefix {
+                    prefix.to_vec()
+                } else {
+                    b"".to_vec()
+                };
+                if prefix == b"wd-tag" && local == b"name" {
+                    name = crate::eval_result_string(scope, value);
+                } else {
+                    if prefix == b"wd-attr" && local == b"replace" {
+                        let attr = crate::eval_result_string(
+                            scope,
+                            crate::quot_unescape(value).as_bytes(),
+                        );
+                        if attr.len() > 0 {
+                            html_attr.push(b' ');
+                            html_attr.append(&mut attr.into_bytes());
                         }
+                    } else {
+                        let is_wd = prefix == b"wd";
+                        let mut attr_key = if is_wd {
+                            local.to_vec()
+                        } else {
+                            let mut prefix = prefix.to_vec();
+                            prefix.push(b':');
+                            prefix.append(&mut local.to_vec());
+                            prefix
+                        };
+                        html_attr.push(b' ');
+                        html_attr.append(&mut attr_key);
+                        html_attr.push(b'=');
+                        html_attr.push(b'"');
+                        if is_wd {
+                            html_attr
+                                .append(&mut crate::eval_result_string(scope, value).into_bytes());
+                        } else {
+                            html_attr.append(
+                                &mut unsafe { std::str::from_utf8_unchecked(value) }
+                                    .replace("&", "&amp;")
+                                    .replace("<", "&lt;")
+                                    .replace(">", "&gt;")
+                                    .into_bytes(),
+                            );
+                        }
+                        html_attr.push(b'"');
                     }
                 }
             }

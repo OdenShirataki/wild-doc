@@ -17,7 +17,7 @@ let mut wd=WildDoc::new(
 ).unwrap();
 
 //update data.
-/*wd.run(r#"<wd><wd:session name="hoge">
+/*wd.run(br#"<wd><wd:session name="hoge">
     <wd:update commit="1">
         <collection name="person">
             <field name="name">Noah</field>
@@ -34,7 +34,7 @@ let mut wd=WildDoc::new(
     </wd:update>
 </wd:session></wd>"#,b"").unwrap();*/
 
-let update_xml=r#"<wd><wd:session name="hoge">
+let update_xml=br#"<wd><wd:session name="hoge">
 <wd:update commit="1">
     <collection name="person">
         <field name="name"><wd:print wd:value="wd.input.name" /></field>
@@ -42,21 +42,21 @@ let update_xml=r#"<wd><wd:session name="hoge">
     </collection>
 </wd:update>
 </wd:session></wd>"#;
-wd.run(update_xml,r#"{
+wd.run(update_xml,br#"{
     "name":"Noah"
     ,"from":"US"
 }"#).unwrap();
-wd.run(update_xml,r#"{
+wd.run(update_xml,br#"{
     "name":"Liam"
     ,"from":"US"
 }"#).unwrap();
-wd.run(update_xml,r#"{
+wd.run(update_xml,br#"{
     "name":"Olivia"
     ,"from":"UK"
 }"#).unwrap();
 
 //select data.
-let r=wd.run(r#"<wd>
+let r=wd.run(br#"<wd>
     <wd:search name="p" collection="person">
     </wd:search>
     <wd:result var="q" search="p" sort="field.name ASC,serial">
@@ -71,11 +71,11 @@ let r=wd.run(r#"<wd>
     </wd:result>
     <input type="text" name="hoge" />
     <wd:include src="body.xml" />
-</wd>"#,"").unwrap();
+</wd>"#,b"").unwrap();
 println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //seaech data
-let r=wd.run(r#"<wd>
+let r=wd.run(br#"<wd>
     <wd:search name="p" collection="person">
         <field name="country" method="match" value="US" />
     </wd:search>
@@ -89,11 +89,11 @@ let r=wd.run(r#"<wd>
             </li></wd:for>
         </ul>
     </wd:result>
-</wd>"#,"").unwrap();
+</wd>"#,b"").unwrap();
 println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //use javascript
-let r=wd.run(r#"<wd>
+let r=wd.run(br#"<wd>
     <wd:script>
         const ymd=function(){
             const now=new Date();
@@ -122,11 +122,11 @@ let r=wd.run(r#"<wd>
             </li></wd:for>
         </ul>
     </wd:result>
-</wd>"#,"").unwrap();
+</wd>"#,b"").unwrap();
 println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
 
 //search in update section.
-wd.run(r#"<wd><wd:session name="hoge">
+wd.run(br#"<wd><wd:session name="hoge">
     <wd:update commit="1">
         <wd:search name="person" collection="person"></wd:search>
         <wd:result var="q" search="person">
@@ -139,8 +139,8 @@ wd.run(r#"<wd><wd:session name="hoge">
             </wd:for>
         </wd:result>
     </wd:update>
-</wd:session></wd>"#,"").unwrap();
-let r=wd.run(r#"<wd>
+</wd:session></wd>"#,b"").unwrap();
+let r=wd.run(br#"<wd>
     <wd:search name="p" collection="person"></wd:search>
     <wd:result var="q" search="p">
         <div>
@@ -152,11 +152,11 @@ let r=wd.run(r#"<wd>
             </li></wd:for>
         </ul>
     </wd:result>
-</wd>"#,"").unwrap();
+</wd>"#,b"").unwrap();
 println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //use WebAPI
-let r=wd.run(r#"<wd>
+let r=wd.run(br#"<wd>
     <wd:script>
         import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
         console.log(uuidv4());
@@ -182,7 +182,7 @@ let r=wd.run(r#"<wd>
     </wd:script>
     a:<wd:print wd:value="wd.general.a" />
     v:<wd:print wd:value="wd.general.b" />
-</wd>"#,r#"{
+</wd>"#,br#"{
     "name":"Ken"
     ,"from":"US"
 }"#).unwrap();
@@ -208,9 +208,9 @@ BODY
 
 ### rust
 ```rust
-let r=wd.exec(r#"<wd><wd:stack var="body_path:'body.xml'">
+let r=wd.run(br#"<wd:stack var="body_path:'body.xml'">
     <wd:include src="layout.xml" />
-<wd:stack></wd>"#);
+<wd:stack>"#,b"");
     println!("{}",r);
 ```
 

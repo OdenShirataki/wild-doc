@@ -60,16 +60,15 @@ pub(super) fn case<T: IncludeAdaptor>(
 
     let cmp_src = String::from_utf8(match attributes.get(b"value".as_slice()) {
         Some((None, Some(value))) => {
-            let mut r = b"'".to_vec();
-            r.append(&mut value.to_vec());
-            r.append(&mut b"'".to_vec());
+            let mut r = value.to_vec();
+            r.push(b'\'');
             r
         }
         Some((Some(prefix), Some(value))) => {
             if prefix == b"wd" {
-                let mut r = b"(".to_vec();
+                let mut r = vec![b'('];
                 r.append(&mut value.to_vec());
-                r.append(&mut b")".to_vec());
+                r.push(b')');
                 r
             } else {
                 b"''".to_vec()
@@ -103,13 +102,13 @@ pub(super) fn case<T: IncludeAdaptor>(
                                             if let Some(_) = prefix {
                                                 value.to_vec()
                                             } else {
-                                                let mut r = b"'".to_vec();
+                                                let mut r = vec![b'\''];
                                                 r.append(&mut value.to_vec());
-                                                r.append(&mut b"'".to_vec());
+                                                r.push(b'\'');
                                                 r
                                             }
                                         } else {
-                                            b"''".to_vec()
+                                            vec![b'\'', b'\'']
                                         },
                                     )?
                                     .as_str()),
