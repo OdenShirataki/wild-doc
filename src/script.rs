@@ -419,6 +419,28 @@ wd.v=key=>{
         let mut tokenizer = BufReadEvaluator::from_reader(BufReader::new(xml)).into_iter();
         while let Some(token) = tokenizer.next() {
             match token {
+                Token::ProcessingInstruction(token) => {
+                    let mut exists = false;
+                    if let Some(i) = token.instructions() {
+                        if token.target().to_str()? == "typescript" {
+                            exists = true;
+                            if let Err(e) = Self::run_script(
+                                worker,
+                                if let Some(last) = self.include_stack.last() {
+                                    last
+                                } else {
+                                    ""
+                                },
+                                i.as_bytes(),
+                            ) {
+                                return Err(e);
+                            }
+                        }
+                    }
+                    if !exists {
+                        r.append(&mut token.as_bytes().to_vec());
+                    }
+                }
                 Token::StartTag(tag) => {
                     let attributes = tag.attributes();
                     let name = tag.name();
