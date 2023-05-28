@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     ffi::c_void,
-    io::{self, BufReader},
+    io::{self},
     path::PathBuf,
     rc::Rc,
     sync::{Arc, RwLock},
@@ -13,13 +13,10 @@ use deno_runtime::{
     worker::{MainWorker, WorkerOptions},
 };
 use maybe_xml::{
-    eval::bufread::{self, BufReadEvaluator},
-    token::{
-        owned::Token,
-        prop::{Attributes, TagName},
-    },
+    scanner::{Scanner, State},
+    token::prop::{Attributes, TagName},
 };
-use semilattice_database_session::{Condition, Session, SessionDatabase};
+use semilattice_database_session::{Session, SessionDatabase};
 
 mod process;
 
@@ -194,127 +191,6 @@ wd.v=key=>{
         })
     }
 
-    fn parse_wd_start_tag<T: IncludeAdaptor>(
-        &mut self,
-        tokenizer: &mut bufread::IntoIter<BufReader<&[u8]>>,
-        worker: &mut MainWorker,
-        include_adaptor: &mut T,
-        tag_stack: &mut Vec<String>,
-        search_map: &mut HashMap<String, (i32, Vec<Condition>)>,
-        name: &TagName,
-        attributes: &Option<Attributes>,
-    ) -> Result<Vec<u8>> {
-        match name.local().as_bytes() {
-            b"session" => {
-                self.session(worker, &crate::attr2map(attributes))?;
-            }
-            b"session_sequence_cursor" => {
-                self.session_sequence(worker, &crate::attr2map(attributes))?;
-            }
-            b"sessions" => {
-                self.sessions(worker, &crate::attr2map(&attributes));
-            }
-            b"re" => {
-                let parsed = self.parse(
-                    worker,
-                    &xml_util::inner(&name, tokenizer),
-                    b"",
-                    include_adaptor,
-                )?;
-                return Ok(self.parse(worker, &parsed, b"", include_adaptor)?);
-            }
-            b"letitgo" => {
-                return Ok(xml_util::inner(&name, tokenizer));
-            }
-            b"update" => {
-                update::update(
-                    self,
-                    worker,
-                    &xml_util::inner(&name, tokenizer),
-                    &crate::attr2map(&attributes),
-                    include_adaptor,
-                )?;
-            }
-            b"search" => {
-                search::search(
-                    self,
-                    worker,
-                    tokenizer,
-                    &name,
-                    &crate::attr2map(&attributes),
-                    search_map,
-                );
-            }
-            b"result" => {
-                result::result(self, worker, &crate::attr2map(&attributes), search_map);
-            }
-            b"collections" => {
-                self.collections(worker, &crate::attr2map(&attributes));
-            }
-            b"stack" => {
-                let attributes = crate::attr2map(&attributes);
-                if let Some((None, Some(var))) = attributes.get(b"var".as_slice()) {
-                    worker.execute_script(
-                        "stack.push",
-                        ("wd.stack.push({".to_owned() + crate::quot_unescape(var).as_str() + "});")
-                            .into(),
-                    )?;
-                }
-            }
-            b"script" => {
-                if let Err(e) = Self::run_script(
-                    worker,
-                    if let Some(last) = self.include_stack.last() {
-                        last
-                    } else {
-                        ""
-                    },
-                    xml_util::inner(&name, tokenizer).as_slice(),
-                ) {
-                    return Err(e);
-                }
-            }
-            b"case" => {
-                return Ok(process::case(
-                    self,
-                    &crate::attr2map(&attributes),
-                    &xml_util::inner(&name, tokenizer),
-                    worker,
-                    include_adaptor,
-                )?);
-            }
-            b"if" => {
-                return Ok(process::r#if(
-                    self,
-                    &crate::attr2map(&attributes),
-                    &xml_util::inner(&name, tokenizer),
-                    worker,
-                    include_adaptor,
-                )?);
-            }
-            b"for" => {
-                return Ok(process::r#for(
-                    self,
-                    &crate::attr2map(&attributes),
-                    &xml_util::inner(&name, tokenizer),
-                    worker,
-                    include_adaptor,
-                )?);
-            }
-            b"tag" => {
-                let mut r: Vec<u8> = Vec::new();
-                let (name, mut attr) = Self::custom_tag(&crate::attr2map(&attributes), worker);
-                tag_stack.push(name.clone());
-                r.push(b'<');
-                r.append(&mut name.into_bytes());
-                r.append(&mut attr);
-                r.push(b'>');
-                return Ok(r);
-            }
-            _ => {}
-        }
-        Ok(vec![])
-    }
     fn parse_wd_start_or_empty_tag<T: IncludeAdaptor>(
         &mut self,
         worker: &mut MainWorker,
@@ -405,6 +281,7 @@ wd.v=key=>{
             }
         }
     }
+
     pub fn parse<T: IncludeAdaptor>(
         &mut self,
         worker: &mut MainWorker,
@@ -412,18 +289,21 @@ wd.v=key=>{
         break_tag: &[u8],
         include_adaptor: &mut T,
     ) -> Result<Vec<u8>> {
+        let mut r: Vec<u8> = Vec::new();
         let mut tag_stack = vec![];
         let mut search_map = HashMap::new();
-        let mut r: Vec<u8> = Vec::new();
+        let mut xml = xml;
 
-        let mut tokenizer = BufReadEvaluator::from_reader(BufReader::new(xml)).into_iter();
-        while let Some(token) = tokenizer.next() {
-            match token {
-                Token::ProcessingInstruction(token) => {
-                    let mut exists = false;
-                    if let Some(i) = token.instructions() {
-                        if token.target().to_str()? == "typescript" {
-                            exists = true;
+        let mut scanner = Scanner::new();
+
+        while let Some(state) = scanner.scan(&xml) {
+            match state {
+                State::ScannedProcessingInstruction(pos) => {
+                    let token_bytes = &xml[..pos];
+                    let token =
+                        maybe_xml::token::borrowed::ProcessingInstruction::from(token_bytes);
+                    if token.target().to_str()? == "typescript" {
+                        if let Some(i) = token.instructions() {
                             if let Err(e) = Self::run_script(
                                 worker,
                                 if let Some(last) = self.include_stack.last() {
@@ -436,32 +316,163 @@ wd.v=key=>{
                                 return Err(e);
                             }
                         }
+                    } else {
+                        r.append(&mut token_bytes.to_vec());
                     }
-                    if !exists {
-                        r.append(&mut token.as_bytes().to_vec());
-                    }
+                    xml = &xml[pos..];
                 }
-                Token::StartTag(tag) => {
-                    let attributes = tag.attributes();
-                    let name = tag.name();
+                State::ScannedStartTag(pos) => {
+                    let token_bytes = &xml[..pos];
+                    xml = &xml[pos..];
+                    let token = maybe_xml::token::borrowed::StartTag::from(token_bytes);
+                    let attributes = token.attributes();
+                    let name = token.name();
                     if Self::is_wd_tag(&name) {
                         if let Some(mut parsed) = self.parse_wd_start_or_empty_tag(
                             worker,
                             include_adaptor,
                             name.local().as_bytes(),
-                            &tag.attributes(),
+                            &attributes,
                         )? {
                             r.append(&mut parsed);
                         } else {
-                            r.append(&mut self.parse_wd_start_tag(
-                                &mut tokenizer,
-                                worker,
-                                include_adaptor,
-                                &mut tag_stack,
-                                &mut search_map,
-                                &name,
-                                &attributes,
-                            )?);
+                            match name.local().as_bytes() {
+                                b"session" => {
+                                    self.session(worker, &crate::attr2map(&attributes))?;
+                                }
+                                b"session_sequence_cursor" => {
+                                    self.session_sequence(worker, &crate::attr2map(&attributes))?;
+                                }
+                                b"sessions" => {
+                                    self.sessions(worker, &crate::attr2map(&attributes));
+                                }
+                                b"re" => {
+                                    let inner_end = xml_util::inner_with_scan(xml);
+                                    let parsed = self.parse(
+                                        worker,
+                                        &xml[..inner_end],
+                                        b"",
+                                        include_adaptor,
+                                    )?;
+                                    xml = &xml[inner_end..];
+                                    r.append(&mut self.parse(
+                                        worker,
+                                        &parsed,
+                                        b"",
+                                        include_adaptor,
+                                    )?);
+                                }
+                                b"letitgo" => {
+                                    let inner_end = xml_util::inner_with_scan(xml);
+                                    r.append(&mut xml[..inner_end].to_vec());
+                                    xml = &xml[inner_end..];
+                                }
+                                b"update" => {
+                                    let inner_end = xml_util::inner_with_scan(xml);
+                                    update::update(
+                                        self,
+                                        worker,
+                                        &xml[..inner_end],
+                                        &crate::attr2map(&attributes),
+                                        include_adaptor,
+                                    )?;
+                                    xml = &xml[inner_end..];
+                                }
+                                b"search" => {
+                                    xml = search::search(
+                                        self,
+                                        worker,
+                                        xml,
+                                        &crate::attr2map(&attributes),
+                                        &mut search_map,
+                                    );
+                                }
+                                b"result" => {
+                                    result::result(
+                                        self,
+                                        worker,
+                                        &crate::attr2map(&attributes),
+                                        &search_map,
+                                    );
+                                }
+                                b"collections" => {
+                                    self.collections(worker, &crate::attr2map(&attributes));
+                                }
+                                b"stack" => {
+                                    let attributes = crate::attr2map(&attributes);
+                                    if let Some((None, Some(var))) =
+                                        attributes.get(b"var".as_slice())
+                                    {
+                                        worker.execute_script(
+                                            "stack.push",
+                                            ("wd.stack.push({".to_owned()
+                                                + crate::quot_unescape(var).as_str()
+                                                + "});")
+                                                .into(),
+                                        )?;
+                                    }
+                                }
+                                b"script" => {
+                                    let inner_end = xml_util::inner_with_scan(xml);
+                                    if let Err(e) = Self::run_script(
+                                        worker,
+                                        if let Some(last) = self.include_stack.last() {
+                                            last
+                                        } else {
+                                            ""
+                                        },
+                                        &xml[..inner_end],
+                                    ) {
+                                        return Err(e);
+                                    }
+                                    xml = &xml[inner_end..];
+                                }
+                                b"case" => {
+                                    let inner_end = xml_util::inner_with_scan(xml);
+                                    r.append(&mut process::case(
+                                        self,
+                                        &crate::attr2map(&attributes),
+                                        &xml[..inner_end],
+                                        worker,
+                                        include_adaptor,
+                                    )?);
+                                    xml = &xml[inner_end..];
+                                }
+                                b"if" => {
+                                    let inner_end = xml_util::inner_with_scan(xml);
+                                    r.append(&mut process::r#if(
+                                        self,
+                                        &crate::attr2map(&attributes),
+                                        &xml[..inner_end],
+                                        worker,
+                                        include_adaptor,
+                                    )?);
+                                    xml = &xml[inner_end..];
+                                }
+                                b"for" => {
+                                    let inner_end = xml_util::inner_with_scan(xml);
+                                    r.append(&mut process::r#for(
+                                        self,
+                                        &crate::attr2map(&attributes),
+                                        &xml[..inner_end],
+                                        worker,
+                                        include_adaptor,
+                                    )?);
+                                    xml = &xml[inner_end..];
+                                }
+                                b"tag" => {
+                                    let mut r: Vec<u8> = Vec::new();
+                                    let (name, mut attr) =
+                                        Self::custom_tag(&crate::attr2map(&attributes), worker);
+                                    tag_stack.push(name.clone());
+                                    r.push(b'<');
+                                    r.append(&mut name.into_bytes());
+                                    r.append(&mut attr);
+                                    r.push(b'>');
+                                    return Ok(r);
+                                }
+                                _ => {}
+                            }
                         }
                     } else {
                         r.push(b'<');
@@ -472,15 +483,20 @@ wd.v=key=>{
                         r.push(b'>');
                     }
                 }
-                Token::EmptyElementTag(tag) => {
-                    let attributes = tag.attributes();
-                    let name = tag.name();
+                State::ScannedEmptyElementTag(pos) => {
+                    let token_bytes = &xml[..pos];
+                    xml = &xml[pos..];
+                    let token = maybe_xml::token::borrowed::EmptyElementTag::from(token_bytes);
+                    let attributes = token.attributes();
+                    let name = token.name();
                     if name.as_bytes() == b"wd:tag" {
                         let (name, mut attr) =
                             Self::custom_tag(&crate::attr2map(&attributes), worker);
                         r.push(b'<');
                         r.append(&mut name.into_bytes());
                         r.append(&mut attr);
+                        r.push(b' ');
+                        r.push(b'/');
                         r.push(b'>');
                     } else {
                         if Self::is_wd_tag(&name) {
@@ -498,13 +514,17 @@ wd.v=key=>{
                             if let Some(ref attributes) = attributes {
                                 self.output_attrbutes(worker, &mut r, attributes)
                             }
+                            r.push(b' ');
                             r.push(b'/');
                             r.push(b'>');
                         }
                     }
                 }
-                Token::EndTag(tag) => {
-                    let name = tag.name();
+                State::ScannedEndTag(pos) => {
+                    let token_bytes = &xml[..pos];
+                    xml = &xml[pos..];
+                    let token = maybe_xml::token::borrowed::EndTag::from(token_bytes);
+                    let name = token.name();
                     if name.as_bytes() == break_tag {
                         break;
                     }
@@ -547,29 +567,27 @@ wd.v=key=>{
                             _ => {}
                         }
                     } else {
-                        r.append(&mut tag.as_bytes().to_vec());
+                        r.append(&mut token_bytes.to_vec());
                     }
                 }
-                maybe_xml::token::owned::Token::Declaration(token) => {
-                    r.append(&mut token.as_bytes().to_vec());
+                State::ScannedCharacters(pos)
+                | State::ScannedCdata(pos)
+                | State::ScannedComment(pos)
+                | State::ScannedDeclaration(pos) => {
+                    r.append(&mut xml[..pos].to_vec());
+                    xml = &xml[pos..];
                 }
-                maybe_xml::token::owned::Token::Characters(token) => {
-                    r.append(&mut token.as_bytes().to_vec());
-                }
-                maybe_xml::token::owned::Token::Cdata(token) => {
-                    r.append(&mut token.as_bytes().to_vec());
-                }
-                maybe_xml::token::owned::Token::Comment(token) => {
-                    r.append(&mut token.as_bytes().to_vec());
-                }
-                maybe_xml::token::owned::Token::EofWithBytesNotEvaluated(token) => {
-                    r.append(&mut token.as_bytes().to_vec());
+                State::ScanningCharacters => {
+                    r.append(&mut xml.to_vec());
+                    break;
                 }
                 _ => {}
             }
         }
+
         Ok(r)
     }
+
     fn collections(
         &self,
         worker: &mut MainWorker,

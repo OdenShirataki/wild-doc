@@ -1,27 +1,23 @@
 use std::{
     collections::HashMap,
-    io::BufReader,
     str::FromStr,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use chrono::TimeZone;
 use deno_runtime::worker::MainWorker;
-use maybe_xml::token::owned::Token;
+use maybe_xml::scanner::{Scanner, State};
 use semilattice_database_session::{search, Activity, CollectionRow, Condition, Depend, Uuid};
-
-use crate::xml_util;
 
 use super::Script;
 
-pub fn search(
+pub fn search<'a>(
     script: &mut Script,
     worker: &mut MainWorker,
-    tokenizer: &mut maybe_xml::eval::bufread::IntoIter<BufReader<&[u8]>>,
-    tag_name: &maybe_xml::token::prop::TagName,
+    xml: &'a [u8],
     attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     search_map: &mut HashMap<String, (i32, Vec<Condition>)>,
-) {
+) -> &'a [u8] {
     let name = crate::attr_parse_or_static_string(worker, attributes, b"name");
     let collection_name = crate::attr_parse_or_static_string(worker, attributes, b"collection");
     if name != "" && collection_name != "" {
@@ -32,20 +28,21 @@ pub fn search(
             .unwrap()
             .collection_id(&collection_name)
         {
-            let condition = make_conditions(script, attributes, tokenizer, worker);
+            let (last_xml, condition) = make_conditions(script, attributes, xml, worker);
             search_map.insert(name.to_owned(), (collection_id, condition));
-            return;
+            return last_xml;
         }
     }
-    let _ = xml_util::inner(tag_name, tokenizer);
+    return xml;
 }
-fn make_conditions(
+
+fn make_conditions<'a>(
     script: &Script,
     attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
-    tokenizer: &mut maybe_xml::eval::bufread::IntoIter<BufReader<&[u8]>>,
+    xml: &'a [u8],
     worker: &mut MainWorker,
-) -> Vec<Condition> {
-    let mut conditions = condition_loop(script, tokenizer, worker);
+) -> (&'a [u8], Vec<Condition>) {
+    let (last_xml, mut conditions) = condition_loop(script, xml, worker);
 
     if let Some((None, Some(activity))) = attributes.get(b"activity".as_slice()) {
         if activity == b"inactive" {
@@ -94,7 +91,98 @@ fn make_conditions(
             }
         }
     }
-    conditions
+    (last_xml, conditions)
+}
+
+fn condition_loop<'a>(
+    script: &Script,
+    xml: &'a [u8],
+    worker: &mut MainWorker,
+) -> (&'a [u8], Vec<Condition>) {
+    let mut result_conditions = Vec::new();
+    let mut xml = xml;
+    let mut scanner = Scanner::new();
+    while let Some(state) = scanner.scan(xml) {
+        match state {
+            State::ScannedStartTag(pos) => {
+                let token_bytes = &xml[..pos];
+                xml = &xml[pos..];
+                let token = maybe_xml::token::borrowed::StartTag::from(token_bytes);
+                let name = token.name();
+                if let None = name.namespace_prefix() {
+                    match name.local().as_bytes() {
+                        b"narrow" => {
+                            let (last_xml, cond) = condition_loop(script, xml, worker);
+                            result_conditions.push(Condition::Narrow(cond));
+                            xml = last_xml;
+                        }
+                        b"wide" => {
+                            let (last_xml, cond) = condition_loop(script, xml, worker);
+                            result_conditions.push(Condition::Wide(cond));
+                            xml = last_xml;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            State::ScannedEmptyElementTag(pos) => {
+                let token_bytes = &xml[..pos];
+                xml = &xml[pos..];
+                let token = maybe_xml::token::borrowed::EmptyElementTag::from(token_bytes);
+                let name = token.name();
+                match name.local().as_bytes() {
+                    b"row" => {
+                        if let Some(c) =
+                            condition_row(&crate::attr2map(&token.attributes()), worker)
+                        {
+                            result_conditions.push(c);
+                        }
+                    }
+                    b"field" => {
+                        if let Some(c) =
+                            condition_field(&crate::attr2map(&token.attributes()), worker)
+                        {
+                            result_conditions.push(c);
+                        }
+                    }
+                    b"uuid" => {
+                        if let Some(c) =
+                            condition_uuid(&crate::attr2map(&token.attributes()), worker)
+                        {
+                            result_conditions.push(c);
+                        }
+                    }
+                    b"depend" => {
+                        if let Some(c) =
+                            condition_depend(script, worker, &crate::attr2map(&token.attributes()))
+                        {
+                            result_conditions.push(c);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            State::ScannedEndTag(pos) => {
+                let token = maybe_xml::token::borrowed::EndTag::from(&xml[..pos]);
+                xml = &xml[pos..];
+                match token.name().as_bytes() {
+                    b"wd:search" | b"narrow" | b"wide" => {
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            State::ScannedCharacters(pos)
+            | State::ScannedCdata(pos)
+            | State::ScannedComment(pos)
+            | State::ScannedDeclaration(pos)
+            | State::ScannedProcessingInstruction(pos) => {
+                xml = &xml[pos..];
+            }
+            _ => {}
+        }
+    }
+    (xml, result_conditions)
 }
 
 fn condition_depend(
@@ -129,91 +217,6 @@ fn condition_depend(
         }
     }
     None
-}
-
-fn condition_loop(
-    script: &Script,
-    tokenizer: &mut maybe_xml::eval::bufread::IntoIter<BufReader<&[u8]>>,
-    worker: &mut MainWorker,
-) -> Vec<Condition> {
-    let mut conditions = Vec::new();
-    while let Some(token) = tokenizer.next() {
-        match token {
-            Token::StartTag(tag) => {
-                let name = tag.name();
-                if let None = name.namespace_prefix() {
-                    match name.local().as_bytes() {
-                        b"narrow" => {
-                            conditions
-                                .push(Condition::Narrow(condition_loop(script, tokenizer, worker)));
-                        }
-                        b"wide" => {
-                            conditions
-                                .push(Condition::Wide(condition_loop(script, tokenizer, worker)));
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            Token::EmptyElementTag(tag) => {
-                let name = tag.name();
-                if let None = name.namespace_prefix() {
-                    match name.local().as_bytes() {
-                        b"row" => {
-                            if let Some(c) =
-                                condition_row(&crate::attr2map(&tag.attributes()), worker)
-                            {
-                                conditions.push(c);
-                            }
-                        }
-                        b"field" => {
-                            if let Some(c) =
-                                condition_field(&crate::attr2map(&tag.attributes()), worker)
-                            {
-                                conditions.push(c);
-                            }
-                        }
-                        b"uuid" => {
-                            if let Some(c) =
-                                condition_uuid(&crate::attr2map(&tag.attributes()), worker)
-                            {
-                                conditions.push(c);
-                            }
-                        }
-                        b"depend" => {
-                            if let Some(c) = condition_depend(
-                                script,
-                                worker,
-                                &crate::attr2map(&tag.attributes()),
-                            ) {
-                                conditions.push(c);
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            Token::EndTag(tag) => {
-                let name = tag.name();
-                match (
-                    if let Some(prefix) = name.namespace_prefix() {
-                        prefix.to_vec()
-                    } else {
-                        b"".to_vec()
-                    }
-                    .as_slice(),
-                    name.local().as_bytes(),
-                ) {
-                    (b"wd", b"search") | (b"", b"narrow") | (b"", b"wide") => {
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
-        }
-    }
-    conditions
 }
 
 fn condition_row<'a>(

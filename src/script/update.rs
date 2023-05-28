@@ -1,10 +1,10 @@
 use chrono::TimeZone;
 use deno_runtime::{deno_core::serde_json, worker::MainWorker};
-use maybe_xml::{eval::bufread::BufReadEvaluator, token::owned::Token};
+use maybe_xml::scanner::{Scanner, State};
 use semilattice_database_session::{
     Activity, CollectionRow, Depends, KeyValue, Pend, Record, Term,
 };
-use std::{collections::HashMap, error, fmt, io::BufReader};
+use std::{collections::HashMap, error, fmt};
 
 use crate::{
     anyhow::{anyhow, Result},
@@ -21,9 +21,7 @@ pub fn update<T: crate::IncludeAdaptor>(
     include_adaptor: &mut T,
 ) -> Result<()> {
     let inner_xml = script.parse(worker, xml, b"", include_adaptor)?;
-    let mut tokenizer =
-        BufReadEvaluator::from_reader(BufReader::new(inner_xml.as_slice())).into_iter();
-    let updates = make_update_struct(script, &mut tokenizer, worker)?;
+    let updates = make_update_struct(script, inner_xml.as_slice(), worker)?;
     if let Some((ref mut session, _)) = script.sessions.last_mut() {
         let session_rows = script
             .database
@@ -128,15 +126,20 @@ fn depend(
 
 fn make_update_struct(
     script: &mut Script,
-    tokenizer: &mut maybe_xml::eval::bufread::IntoIter<BufReader<&[u8]>>,
+    xml: &[u8],
     worker: &mut MainWorker,
 ) -> Result<Vec<Record>> {
     let mut updates = Vec::new();
-    while let Some(token) = tokenizer.next() {
-        match token {
-            Token::StartTag(tag_collection) => {
-                if tag_collection.name().as_bytes() == b"collection" {
-                    let attributes = crate::attr2map(&tag_collection.attributes());
+    let mut xml = xml;
+    let mut scanner = Scanner::new();
+    while let Some(state) = scanner.scan(&xml) {
+        match state {
+            State::ScannedStartTag(pos) => {
+                let token_bytes = &xml[..pos];
+                xml = &xml[pos..];
+                let token_collection = maybe_xml::token::borrowed::StartTag::from(token_bytes);
+                if token_collection.name().as_bytes() == b"collection" {
+                    let attributes = crate::attr2map(&token_collection.attributes());
                     if let Some((None, Some(collection_name))) = attributes.get(b"name".as_slice())
                     {
                         let collection_id = script
@@ -151,21 +154,27 @@ fn make_update_struct(
                         let mut depends = Vec::new();
                         let mut fields = HashMap::new();
                         let mut deps = 1;
-                        while let Some(token) = tokenizer.next() {
-                            match token {
-                                Token::StartTag(tag) => {
+                        while let Some(state) = scanner.scan(&xml) {
+                            match state {
+                                State::ScannedStartTag(pos) => {
                                     deps += 1;
-                                    let name = tag.name();
+
+                                    let token_bytes = &xml[..pos];
+                                    xml = &xml[..pos];
+                                    let token =
+                                        maybe_xml::token::borrowed::StartTag::from(token_bytes);
+                                    let name = token.name();
                                     if let None = name.namespace_prefix() {
                                         match name.local().as_bytes() {
                                             b"field" => {
                                                 let field_name = crate::attr_parse_or_static_string(
                                                     worker,
-                                                    &crate::attr2map(&tag.attributes()),
+                                                    &crate::attr2map(&token.attributes()),
                                                     b"name",
                                                 );
-                                                let xml_inner = xml_util::inner(&name, tokenizer);
-                                                let cont = std::str::from_utf8(&xml_inner)?;
+                                                let inner_end = xml_util::inner_with_scan(xml);
+                                                let cont = std::str::from_utf8(&xml[..inner_end])?;
+                                                xml = &xml[inner_end..];
                                                 fields.insert(
                                                     field_name,
                                                     cont.replace("&gt;", ">")
@@ -176,17 +185,13 @@ fn make_update_struct(
                                                 );
                                             }
                                             b"pends" => {
-                                                let inner_xml = xml_util::inner(&name, tokenizer);
-                                                let pends_tmp = make_update_struct(
-                                                    script,
-                                                    &mut BufReadEvaluator::from_reader(
-                                                        BufReader::new(inner_xml.as_slice()),
-                                                    )
-                                                    .into_iter(),
-                                                    worker,
-                                                )?;
+                                                let inner_end = xml_util::inner_with_scan(xml);
+                                                let inner_xml = &xml[..inner_end];
+                                                xml = &xml[inner_end..];
+                                                let pends_tmp =
+                                                    make_update_struct(script, inner_xml, worker)?;
                                                 if let Some((None, Some(key))) =
-                                                    crate::attr2map(&tag.attributes())
+                                                    crate::attr2map(&token.attributes())
                                                         .get(&b"key".to_vec())
                                                 {
                                                     pends.push(Pend::new(
@@ -199,14 +204,19 @@ fn make_update_struct(
                                         }
                                     }
                                 }
-                                Token::EmptyElementTag(tag) => {
-                                    let name = tag.name();
+                                State::ScannedEmptyElementTag(pos) => {
+                                    let token_bytes = &xml[..pos];
+                                    xml = &xml[..pos];
+                                    let token = maybe_xml::token::borrowed::EmptyElementTag::from(
+                                        token_bytes,
+                                    );
+                                    let name = token.name();
                                     if let None = name.namespace_prefix() {
                                         match name.local().as_bytes() {
                                             b"depend" => {
                                                 depend(
                                                     script,
-                                                    &crate::attr2map(&tag.attributes()),
+                                                    &crate::attr2map(&token.attributes()),
                                                     &mut depends,
                                                     worker,
                                                 )?;
@@ -215,12 +225,17 @@ fn make_update_struct(
                                         }
                                     }
                                 }
-                                Token::EndTag(tag) => {
+                                State::ScannedEndTag(pos) => {
                                     deps -= 1;
+
+                                    let token_bytes = &xml[..pos];
+                                    xml = &xml[..pos];
+                                    let token =
+                                        maybe_xml::token::borrowed::StartTag::from(token_bytes);
                                     if deps < 0 {
                                         return Err(anyhow!("invalid XML"));
                                     }
-                                    if tag_collection.name() == tag.name() {
+                                    if token_collection.name() == token.name() {
                                         break;
                                     }
                                 }
@@ -327,6 +342,13 @@ fn make_update_struct(
                         }
                     }
                 }
+            }
+            State::ScannedCharacters(pos)
+            | State::ScannedCdata(pos)
+            | State::ScannedComment(pos)
+            | State::ScannedDeclaration(pos)
+            | State::ScannedProcessingInstruction(pos) => {
+                xml = &xml[pos..];
             }
             _ => {}
         }

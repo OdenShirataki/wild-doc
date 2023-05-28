@@ -1,7 +1,7 @@
-use std::{collections::HashMap, io::BufReader};
+use std::collections::HashMap;
 
 use deno_runtime::{deno_core::v8, worker::MainWorker};
-use maybe_xml::eval::bufread::BufReadEvaluator;
+use maybe_xml::scanner::{Scanner, State};
 
 use crate::{anyhow::Result, xml_util, IncludeAdaptor};
 
@@ -37,7 +37,8 @@ pub(crate) fn get_include_content<T: IncludeAdaptor>(
                 false
             };
             script.include_stack.push(filename);
-            let r = script.parse(worker, xml.clone().as_slice(), b"", include_adaptor)?;
+            let r =
+                script.parse(worker, xml.clone().as_slice(), b"", include_adaptor)?; //TTODO:ここでcloneしていてはcacheの意味がない
             script.include_stack.pop();
             if stack_push {
                 worker.execute_script("stack.pop", "wd.stack.pop();".to_owned().into())?;
@@ -56,8 +57,6 @@ pub(super) fn case<T: IncludeAdaptor>(
     worker: &mut MainWorker,
     include_adaptor: &mut T,
 ) -> Result<Vec<u8>> {
-    let mut r = Vec::new();
-
     let cmp_src = String::from_utf8(match attributes.get(b"value".as_slice()) {
         Some((None, Some(value))) => {
             let mut r = value.to_vec();
@@ -76,72 +75,73 @@ pub(super) fn case<T: IncludeAdaptor>(
         }
         _ => b"''".to_vec(),
     })?;
+    let mut xml = xml;
+    let mut scanner = Scanner::new();
+    while let Some(state) = scanner.scan(&xml) {
+        match state {
+            State::ScannedStartTag(pos) => {
+                let token_bytes = &xml[..pos];
+                xml = &xml[pos..];
+                let token = maybe_xml::token::borrowed::StartTag::from(token_bytes);
+                let name = token.name();
 
-    let mut tokenizer = BufReadEvaluator::from_reader(BufReader::new(xml)).into_iter();
-    while let Some(token) = tokenizer.next() {
-        match token {
-            maybe_xml::token::owned::Token::StartTag(tag) => {
-                let name = tag.name();
-                if if let Some(prefix) = name.namespace_prefix() {
-                    prefix.as_bytes() == b"wd"
-                } else {
-                    false
-                } {
-                    let attributes = crate::attr2map(&tag.attributes());
-                    match name.local().as_bytes() {
-                        b"when" => {
-                            let xml = xml_util::inner(&name, &mut tokenizer);
-                            if crate::eval_result(
-                                &mut worker.js_runtime.handle_scope(),
-                                &(cmp_src.to_owned()
-                                    + "=="
-                                    + String::from_utf8(
-                                        if let Some((prefix, Some(value))) =
-                                            attributes.get(b"value".as_slice())
-                                        {
-                                            if let Some(_) = prefix {
-                                                value.to_vec()
-                                            } else {
-                                                let mut r = vec![b'\''];
-                                                r.append(&mut value.to_vec());
-                                                r.push(b'\'');
-                                                r
-                                            }
-                                        } else {
-                                            vec![b'\'', b'\'']
-                                        },
-                                    )?
-                                    .as_str()),
-                            ) == b"true"
+                match name.as_bytes() {
+                    b"wd:when" => {
+                        let inner_end = xml_util::inner_with_scan(xml);
+                        let cmp = cmp_src.to_owned()
+                            + "=="
+                            + std::str::from_utf8(&if let Some((prefix, Some(value))) =
+                                crate::attr2map(&token.attributes()).get(b"value".as_slice())
                             {
-                                r.append(&mut script.parse(
-                                    worker,
-                                    xml.as_slice(),
-                                    b"",
-                                    include_adaptor,
-                                )?);
-                                break;
-                            }
-                        }
-                        b"else" => {
-                            let xml = xml_util::inner(&name, &mut tokenizer);
-                            r.append(&mut script.parse(
+                                if let Some(_) = prefix {
+                                    value.to_vec()
+                                } else {
+                                    let mut r = vec![b'\''];
+                                    r.append(&mut value.to_vec());
+                                    r.push(b'\'');
+                                    r
+                                }
+                            } else {
+                                vec![b'\'', b'\'']
+                            })?;
+                        if crate::eval_result(&mut worker.js_runtime.handle_scope(), cmp.as_str())
+                            == b"true"
+                        {
+                            return Ok(script.parse(
                                 worker,
-                                xml.as_slice(),
+                                &xml[..inner_end],
                                 b"",
                                 include_adaptor,
                             )?);
                         }
-                        _ => {
-                            break;
-                        }
+                        xml = &xml[inner_end..];
                     }
+                    b"wd:else" => {
+                        let inner_end = xml_util::inner_with_scan(xml);
+                        return Ok(script.parse(
+                            worker,
+                            &xml[..inner_end],
+                            b"",
+                            include_adaptor,
+                        )?);
+                    }
+                    _ => {}
                 }
             }
-            _ => {}
+            State::ScannedEmptyElementTag(pos)
+            | State::ScannedEndTag(pos)
+            | State::ScannedCharacters(pos)
+            | State::ScannedCdata(pos)
+            | State::ScannedComment(pos)
+            | State::ScannedDeclaration(pos) => {
+                xml = &xml[pos..];
+            }
+            _ => {
+                break;
+            }
         }
     }
-    Ok(r)
+    Ok(vec![])
 }
 
 pub(super) fn r#if<T: IncludeAdaptor>(
