@@ -1,6 +1,6 @@
 use maybe_xml::scanner::{Scanner, State};
 
-pub(crate) fn inner_with_scan<'a>(xml: &'a [u8]) -> usize {
+pub(crate) fn inner<'a>(xml: &'a [u8]) -> (&[u8], usize) {
     let mut pos = 0;
     let mut deps = 0;
     let mut scanner = Scanner::new();
@@ -12,10 +12,10 @@ pub(crate) fn inner_with_scan<'a>(xml: &'a [u8]) -> usize {
             }
             State::ScannedEndTag(end) => {
                 deps -= 1;
-                pos += end;
                 if deps < 0 {
-                    return pos;
+                    return (&xml[..pos], pos + end);
                 }
+                pos += end;
             }
             State::ScannedProcessingInstruction(end)
             | State::ScannedCharacters(end)
@@ -26,5 +26,5 @@ pub(crate) fn inner_with_scan<'a>(xml: &'a [u8]) -> usize {
             _ => {}
         }
     }
-    0
+    (&xml[..0], 0)
 }

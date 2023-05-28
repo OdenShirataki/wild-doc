@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use deno_runtime::{deno_core::v8, worker::MainWorker};
-use maybe_xml::scanner::{Scanner, State};
+use maybe_xml::{scanner::{Scanner, State}, token};
 
 use crate::{anyhow::Result, xml_util, IncludeAdaptor};
 
@@ -37,8 +37,7 @@ pub(crate) fn get_include_content<T: IncludeAdaptor>(
                 false
             };
             script.include_stack.push(filename);
-            let r =
-                script.parse(worker, xml.clone().as_slice(), b"", include_adaptor)?; //TTODO:ここでcloneしていてはcacheの意味がない
+            let r = script.parse(worker, xml.as_slice(), b"", include_adaptor)?;
             script.include_stack.pop();
             if stack_push {
                 worker.execute_script("stack.pop", "wd.stack.pop();".to_owned().into())?;
@@ -82,12 +81,12 @@ pub(super) fn case<T: IncludeAdaptor>(
             State::ScannedStartTag(pos) => {
                 let token_bytes = &xml[..pos];
                 xml = &xml[pos..];
-                let token = maybe_xml::token::borrowed::StartTag::from(token_bytes);
+                let token = token::borrowed::StartTag::from(token_bytes);
                 let name = token.name();
 
                 match name.as_bytes() {
                     b"wd:when" => {
-                        let inner_end = xml_util::inner_with_scan(xml);
+                        let (inner_xml, outer_end) = xml_util::inner(xml);
                         let cmp = cmp_src.to_owned()
                             + "=="
                             + std::str::from_utf8(&if let Some((prefix, Some(value))) =
@@ -107,23 +106,13 @@ pub(super) fn case<T: IncludeAdaptor>(
                         if crate::eval_result(&mut worker.js_runtime.handle_scope(), cmp.as_str())
                             == b"true"
                         {
-                            return Ok(script.parse(
-                                worker,
-                                &xml[..inner_end],
-                                b"",
-                                include_adaptor,
-                            )?);
+                            return Ok(script.parse(worker, inner_xml, b"", include_adaptor)?);
                         }
-                        xml = &xml[inner_end..];
+                        xml = &xml[outer_end..];
                     }
                     b"wd:else" => {
-                        let inner_end = xml_util::inner_with_scan(xml);
-                        return Ok(script.parse(
-                            worker,
-                            &xml[..inner_end],
-                            b"",
-                            include_adaptor,
-                        )?);
+                        let (inner_xml, _) = xml_util::inner(xml);
+                        return Ok(script.parse(worker, inner_xml, b"", include_adaptor)?);
                     }
                     _ => {}
                 }

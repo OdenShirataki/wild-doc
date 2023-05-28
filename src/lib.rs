@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::Result;
 use deno_runtime::{deno_core::v8, deno_napi::v8::NewStringType, worker::MainWorker};
+use maybe_xml::token;
 pub use semilattice_database_session::anyhow;
 use semilattice_database_session::SessionDatabase;
 
@@ -128,7 +129,7 @@ pub(crate) fn quot_unescape(value: &[u8]) -> String {
 }
 
 fn attr2map<'a>(
-    attributes: &'a Option<maybe_xml::token::prop::Attributes>,
+    attributes: &'a Option<token::prop::Attributes>,
 ) -> HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)> {
     let mut map = HashMap::new();
     if let Some(attributes) = attributes {

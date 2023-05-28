@@ -17,7 +17,7 @@ let mut wd=WildDoc::new(
 ).unwrap();
 
 //update data.
-/*wd.run(br#"<wd><wd:session name="hoge">
+/*wd.run(br#"<wd:session name="hoge">
     <wd:update commit="1">
         <collection name="person">
             <field name="name">Noah</field>
@@ -32,16 +32,16 @@ let mut wd=WildDoc::new(
             <field name="country">UK</field>
         </collection>
     </wd:update>
-</wd:session></wd>"#,b"").unwrap();*/
+</wd:session>"#,b"").unwrap();*/
 
-let update_xml=br#"<wd><wd:session name="hoge">
+let update_xml=br#"<wd:session name="hoge">
 <wd:update commit="1">
     <collection name="person">
         <field name="name"><wd:print wd:value="wd.input.name" /></field>
         <field name="country"><wd:print wd:value="wd.input.from" /></field>
     </collection>
 </wd:update>
-</wd:session></wd>"#;
+</wd:session>"#;
 wd.run(update_xml,br#"{
     "name":"Noah"
     ,"from":"US"
@@ -56,7 +56,7 @@ wd.run(update_xml,br#"{
 }"#).unwrap();
 
 //select data.
-let r=wd.run(br#"<wd>
+let r=wd.run(br#"
     <wd:search name="p" collection="person">
     </wd:search>
     <wd:result var="q" search="p" sort="field.name ASC,serial">
@@ -71,11 +71,11 @@ let r=wd.run(br#"<wd>
     </wd:result>
     <input type="text" name="hoge" />
     <wd:include src="body.xml" />
-</wd>"#,b"").unwrap();
+"#,b"").unwrap();
 println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //seaech data
-let r=wd.run(br#"<wd>
+let r=wd.run(br#"
     <wd:search name="p" collection="person">
         <field name="country" method="match" value="US" />
     </wd:search>
@@ -89,12 +89,12 @@ let r=wd.run(br#"<wd>
             </li></wd:for>
         </ul>
     </wd:result>
-</wd>"#,b"").unwrap();
+"#,b"").unwrap();
 println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //use javascript
-let r=wd.run(br#"<wd>
-    <wd:script>
+let r=wd.run(br#"
+    <?typescript
         const ymd=function(){
             const now=new Date();
             return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
@@ -105,7 +105,7 @@ let r=wd.run(br#"<wd>
             return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
         };
         wd.result_options['test']="OK";
-    </wd:script>
+    ?>
     <wd:search name="p" collection="person">
         <field name="country" method="match" wd:value="wd.general.uk" />
     </wd:search>
@@ -126,7 +126,7 @@ let r=wd.run(br#"<wd>
 println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
 
 //search in update section.
-wd.run(br#"<wd><wd:session name="hoge">
+wd.run(br#"<wd:session name="hoge">
     <wd:update commit="1">
         <wd:search name="person" collection="person"></wd:search>
         <wd:result var="q" search="person">
@@ -139,8 +139,8 @@ wd.run(br#"<wd><wd:session name="hoge">
             </wd:for>
         </wd:result>
     </wd:update>
-</wd:session></wd>"#,b"").unwrap();
-let r=wd.run(br#"<wd>
+</wd:session>"#,b"").unwrap();
+let r=wd.run(br#"
     <wd:search name="p" collection="person"></wd:search>
     <wd:result var="q" search="p">
         <div>
@@ -152,12 +152,12 @@ let r=wd.run(br#"<wd>
             </li></wd:for>
         </ul>
     </wd:result>
-</wd>"#,b"").unwrap();
+"#,b"").unwrap();
 println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //use WebAPI
-let r=wd.run(br#"<wd>
-    <wd:script>
+let r=wd.run(br#"
+    <?typescript
         import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
         console.log(uuidv4());
 
@@ -171,18 +171,18 @@ let r=wd.run(br#"<wd>
         console.log(crypto.randomUUID());
         wd.result_options.test="TEST";
         wd.result_options.test2=crypto.randomUUID();
-    </wd:script>
+    ?>
     a:<wd:print wd:value="wd.general.a" />
     v:<wd:print wd:value="wd.v('a')" />
     input:<wd:print wd:value="wd.input.name" />
-    <wd:script>
+    <?typescript
         wd.stack.pop();
         wd.general.a="OK2";
         wd.general.b=1>2;
-    </wd:script>
+    ?>
     a:<wd:print wd:value="wd.general.a" />
     v:<wd:print wd:value="wd.general.b" />
-</wd>"#,br#"{
+"#,br#"{
     "name":"Ken"
     ,"from":"US"
 }"#).unwrap();

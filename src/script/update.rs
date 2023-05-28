@@ -1,6 +1,9 @@
 use chrono::TimeZone;
 use deno_runtime::{deno_core::serde_json, worker::MainWorker};
-use maybe_xml::scanner::{Scanner, State};
+use maybe_xml::{
+    scanner::{Scanner, State},
+    token,
+};
 use semilattice_database_session::{
     Activity, CollectionRow, Depends, KeyValue, Pend, Record, Term,
 };
@@ -137,7 +140,7 @@ fn make_update_struct(
             State::ScannedStartTag(pos) => {
                 let token_bytes = &xml[..pos];
                 xml = &xml[pos..];
-                let token_collection = maybe_xml::token::borrowed::StartTag::from(token_bytes);
+                let token_collection = token::borrowed::StartTag::from(token_bytes);
                 if token_collection.name().as_bytes() == b"collection" {
                     let attributes = crate::attr2map(&token_collection.attributes());
                     if let Some((None, Some(collection_name))) = attributes.get(b"name".as_slice())
@@ -160,9 +163,8 @@ fn make_update_struct(
                                     deps += 1;
 
                                     let token_bytes = &xml[..pos];
-                                    xml = &xml[..pos];
-                                    let token =
-                                        maybe_xml::token::borrowed::StartTag::from(token_bytes);
+                                    xml = &xml[pos..];
+                                    let token = token::borrowed::StartTag::from(token_bytes);
                                     let name = token.name();
                                     if let None = name.namespace_prefix() {
                                         match name.local().as_bytes() {
@@ -172,12 +174,12 @@ fn make_update_struct(
                                                     &crate::attr2map(&token.attributes()),
                                                     b"name",
                                                 );
-                                                let inner_end = xml_util::inner_with_scan(xml);
-                                                let cont = std::str::from_utf8(&xml[..inner_end])?;
-                                                xml = &xml[inner_end..];
+                                                let (inner_xml, outer_end) = xml_util::inner(xml);
+                                                xml = &xml[outer_end..];
                                                 fields.insert(
                                                     field_name,
-                                                    cont.replace("&gt;", ">")
+                                                    std::str::from_utf8(inner_xml)?
+                                                        .replace("&gt;", ">")
                                                         .replace("&lt;", "<")
                                                         .replace("&#039;", "'")
                                                         .replace("&quot;", "\"")
@@ -185,9 +187,8 @@ fn make_update_struct(
                                                 );
                                             }
                                             b"pends" => {
-                                                let inner_end = xml_util::inner_with_scan(xml);
-                                                let inner_xml = &xml[..inner_end];
-                                                xml = &xml[inner_end..];
+                                                let (inner_xml, outer_end) = xml_util::inner(xml);
+                                                xml = &xml[outer_end..];
                                                 let pends_tmp =
                                                     make_update_struct(script, inner_xml, worker)?;
                                                 if let Some((None, Some(key))) =
@@ -206,10 +207,8 @@ fn make_update_struct(
                                 }
                                 State::ScannedEmptyElementTag(pos) => {
                                     let token_bytes = &xml[..pos];
-                                    xml = &xml[..pos];
-                                    let token = maybe_xml::token::borrowed::EmptyElementTag::from(
-                                        token_bytes,
-                                    );
+                                    xml = &xml[pos..];
+                                    let token = token::borrowed::EmptyElementTag::from(token_bytes);
                                     let name = token.name();
                                     if let None = name.namespace_prefix() {
                                         match name.local().as_bytes() {
@@ -225,19 +224,19 @@ fn make_update_struct(
                                         }
                                     }
                                 }
-                                State::ScannedEndTag(pos) => {
+                                State::ScannedEndTag(_) => {
                                     deps -= 1;
-
-                                    let token_bytes = &xml[..pos];
-                                    xml = &xml[..pos];
-                                    let token =
-                                        maybe_xml::token::borrowed::StartTag::from(token_bytes);
                                     if deps < 0 {
                                         return Err(anyhow!("invalid XML"));
                                     }
-                                    if token_collection.name() == token.name() {
-                                        break;
-                                    }
+                                    break;
+                                }
+                                State::ScannedCharacters(pos)
+                                | State::ScannedCdata(pos)
+                                | State::ScannedComment(pos)
+                                | State::ScannedDeclaration(pos)
+                                | State::ScannedProcessingInstruction(pos) => {
+                                    xml = &xml[pos..];
                                 }
                                 _ => {}
                             }
@@ -343,6 +342,9 @@ fn make_update_struct(
                     }
                 }
             }
+            State::ScannedEndTag(_) => {
+                break;
+            }
             State::ScannedCharacters(pos)
             | State::ScannedCdata(pos)
             | State::ScannedComment(pos)
@@ -350,7 +352,9 @@ fn make_update_struct(
             | State::ScannedProcessingInstruction(pos) => {
                 xml = &xml[pos..];
             }
-            _ => {}
+            _ => {
+                break;
+            }
         }
     }
     Ok(updates)

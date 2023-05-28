@@ -14,7 +14,10 @@ use deno_runtime::{
 };
 use maybe_xml::{
     scanner::{Scanner, State},
-    token::prop::{Attributes, TagName},
+    token::{
+        self,
+        prop::{Attributes, TagName},
+    },
 };
 use semilattice_database_session::{Session, SessionDatabase};
 
@@ -300,8 +303,7 @@ wd.v=key=>{
             match state {
                 State::ScannedProcessingInstruction(pos) => {
                     let token_bytes = &xml[..pos];
-                    let token =
-                        maybe_xml::token::borrowed::ProcessingInstruction::from(token_bytes);
+                    let token = token::borrowed::ProcessingInstruction::from(token_bytes);
                     if token.target().to_str()? == "typescript" {
                         if let Some(i) = token.instructions() {
                             if let Err(e) = Self::run_script(
@@ -324,7 +326,7 @@ wd.v=key=>{
                 State::ScannedStartTag(pos) => {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
-                    let token = maybe_xml::token::borrowed::StartTag::from(token_bytes);
+                    let token = token::borrowed::StartTag::from(token_bytes);
                     let attributes = token.attributes();
                     let name = token.name();
                     if Self::is_wd_tag(&name) {
@@ -347,14 +349,10 @@ wd.v=key=>{
                                     self.sessions(worker, &crate::attr2map(&attributes));
                                 }
                                 b"re" => {
-                                    let inner_end = xml_util::inner_with_scan(xml);
-                                    let parsed = self.parse(
-                                        worker,
-                                        &xml[..inner_end],
-                                        b"",
-                                        include_adaptor,
-                                    )?;
-                                    xml = &xml[inner_end..];
+                                    let (inner_xml, outer_end) = xml_util::inner(xml);
+                                    let parsed =
+                                        self.parse(worker, inner_xml, b"", include_adaptor)?;
+                                    xml = &xml[outer_end..];
                                     r.append(&mut self.parse(
                                         worker,
                                         &parsed,
@@ -363,20 +361,20 @@ wd.v=key=>{
                                     )?);
                                 }
                                 b"letitgo" => {
-                                    let inner_end = xml_util::inner_with_scan(xml);
-                                    r.append(&mut xml[..inner_end].to_vec());
-                                    xml = &xml[inner_end..];
+                                    let (inner_xml, outer_end) = xml_util::inner(xml);
+                                    r.append(&mut inner_xml.to_vec());
+                                    xml = &xml[outer_end..];
                                 }
                                 b"update" => {
-                                    let inner_end = xml_util::inner_with_scan(xml);
+                                    let (inner_xml, outer_end) = xml_util::inner(xml);
                                     update::update(
                                         self,
                                         worker,
-                                        &xml[..inner_end],
+                                        inner_xml,
                                         &crate::attr2map(&attributes),
                                         include_adaptor,
                                     )?;
-                                    xml = &xml[inner_end..];
+                                    xml = &xml[outer_end..];
                                 }
                                 b"search" => {
                                     xml = search::search(
@@ -412,53 +410,38 @@ wd.v=key=>{
                                         )?;
                                     }
                                 }
-                                b"script" => {
-                                    let inner_end = xml_util::inner_with_scan(xml);
-                                    if let Err(e) = Self::run_script(
-                                        worker,
-                                        if let Some(last) = self.include_stack.last() {
-                                            last
-                                        } else {
-                                            ""
-                                        },
-                                        &xml[..inner_end],
-                                    ) {
-                                        return Err(e);
-                                    }
-                                    xml = &xml[inner_end..];
-                                }
                                 b"case" => {
-                                    let inner_end = xml_util::inner_with_scan(xml);
+                                    let (inner_xml, outer_end) = xml_util::inner(xml);
                                     r.append(&mut process::case(
                                         self,
                                         &crate::attr2map(&attributes),
-                                        &xml[..inner_end],
+                                        inner_xml,
                                         worker,
                                         include_adaptor,
                                     )?);
-                                    xml = &xml[inner_end..];
+                                    xml = &xml[outer_end..];
                                 }
                                 b"if" => {
-                                    let inner_end = xml_util::inner_with_scan(xml);
+                                    let (inner_xml, outer_end) = xml_util::inner(xml);
                                     r.append(&mut process::r#if(
                                         self,
                                         &crate::attr2map(&attributes),
-                                        &xml[..inner_end],
+                                        inner_xml,
                                         worker,
                                         include_adaptor,
                                     )?);
-                                    xml = &xml[inner_end..];
+                                    xml = &xml[outer_end..];
                                 }
                                 b"for" => {
-                                    let inner_end = xml_util::inner_with_scan(xml);
+                                    let (inner_xml, outer_end) = xml_util::inner(xml);
                                     r.append(&mut process::r#for(
                                         self,
                                         &crate::attr2map(&attributes),
-                                        &xml[..inner_end],
+                                        inner_xml,
                                         worker,
                                         include_adaptor,
                                     )?);
-                                    xml = &xml[inner_end..];
+                                    xml = &xml[outer_end..];
                                 }
                                 b"tag" => {
                                     let mut r: Vec<u8> = Vec::new();
@@ -486,7 +469,7 @@ wd.v=key=>{
                 State::ScannedEmptyElementTag(pos) => {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
-                    let token = maybe_xml::token::borrowed::EmptyElementTag::from(token_bytes);
+                    let token = token::borrowed::EmptyElementTag::from(token_bytes);
                     let attributes = token.attributes();
                     let name = token.name();
                     if name.as_bytes() == b"wd:tag" {
@@ -523,7 +506,7 @@ wd.v=key=>{
                 State::ScannedEndTag(pos) => {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
-                    let token = maybe_xml::token::borrowed::EndTag::from(token_bytes);
+                    let token = token::borrowed::EndTag::from(token_bytes);
                     let name = token.name();
                     if name.as_bytes() == break_tag {
                         break;

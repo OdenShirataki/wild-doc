@@ -6,7 +6,10 @@ use std::{
 
 use chrono::TimeZone;
 use deno_runtime::worker::MainWorker;
-use maybe_xml::scanner::{Scanner, State};
+use maybe_xml::{
+    scanner::{Scanner, State},
+    token,
+};
 use semilattice_database_session::{search, Activity, CollectionRow, Condition, Depend, Uuid};
 
 use super::Script;
@@ -107,7 +110,7 @@ fn condition_loop<'a>(
             State::ScannedStartTag(pos) => {
                 let token_bytes = &xml[..pos];
                 xml = &xml[pos..];
-                let token = maybe_xml::token::borrowed::StartTag::from(token_bytes);
+                let token = token::borrowed::StartTag::from(token_bytes);
                 let name = token.name();
                 if let None = name.namespace_prefix() {
                     match name.local().as_bytes() {
@@ -128,7 +131,7 @@ fn condition_loop<'a>(
             State::ScannedEmptyElementTag(pos) => {
                 let token_bytes = &xml[..pos];
                 xml = &xml[pos..];
-                let token = maybe_xml::token::borrowed::EmptyElementTag::from(token_bytes);
+                let token = token::borrowed::EmptyElementTag::from(token_bytes);
                 let name = token.name();
                 match name.local().as_bytes() {
                     b"row" => {
@@ -163,7 +166,7 @@ fn condition_loop<'a>(
                 }
             }
             State::ScannedEndTag(pos) => {
-                let token = maybe_xml::token::borrowed::EndTag::from(&xml[..pos]);
+                let token = token::borrowed::EndTag::from(&xml[..pos]);
                 xml = &xml[pos..];
                 match token.name().as_bytes() {
                     b"wd:search" | b"narrow" | b"wide" => {
