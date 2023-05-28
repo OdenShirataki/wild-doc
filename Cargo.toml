@@ -15,11 +15,9 @@ keywords = ["database","javascript","TypeScript","xml","html"]
 categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
 
 [dependencies]
-rustc-hash = { version = "1.0", default-features = false }
 maybe_xml = "0.3"
 chrono = "0.4"
-log = "0.4.17"
-ring = "0.16.20"
+ring = "0.16"
 deno_runtime = "0.114.0"
 deno_ast = { version = "0.26.0", features = ["transpiling"] }
 

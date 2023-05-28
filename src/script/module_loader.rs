@@ -15,7 +15,6 @@ use deno_runtime::{
         CreateHttpClientOptions,
     },
 };
-use log::error;
 use ring::digest::{Context, SHA256};
 use std::{
     fs::{File, OpenOptions},
@@ -171,7 +170,6 @@ fn resolve_redirect_from_response(request_url: &Url, response: &Response) -> Res
     debug_assert!(response.status().is_redirection());
     if let Some(location) = response.headers().get(LOCATION) {
         let location_string = location.to_str().unwrap();
-        log::debug!("Redirecting to {:?}...", &location_string);
         let new_url = resolve_url_from_location(request_url, location_string);
         Ok(new_url)
     } else {
@@ -236,7 +234,7 @@ fn base_url_to_filename(url: &Url) -> Option<PathBuf> {
         }
         "data" | "blob" => (),
         scheme => {
-            error!("Don't know how to create cache name for scheme: {}", scheme);
+            eprintln!("Don't know how to create cache name for scheme: {}", scheme);
             return None;
         }
     };
