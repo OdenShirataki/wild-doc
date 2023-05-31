@@ -8,7 +8,11 @@ use std::{
 };
 
 use deno_runtime::{
-    deno_core::{self, serde_v8, v8, v8::READ_ONLY, ModuleSpecifier},
+    deno_core::{
+        self, serde_v8,
+        v8::{self, PropertyAttribute},
+        ModuleSpecifier,
+    },
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
 };
@@ -143,18 +147,23 @@ wd.v=key=>{
                     scope,
                     v8str_include_adaptor.into(),
                     v8ext_include_adaptor.into(),
-                    READ_ONLY,
+                    PropertyAttribute::READ_ONLY,
                 );
 
                 let addr = self as *mut Self as *mut c_void;
                 let v8ext_script = v8::External::new(scope, addr);
-                wd.define_own_property(scope, v8str_script.into(), v8ext_script.into(), READ_ONLY);
+                wd.define_own_property(
+                    scope,
+                    v8str_script.into(),
+                    v8ext_script.into(),
+                    PropertyAttribute::READ_ONLY,
+                );
 
                 wd.define_own_property(
                     scope,
                     v8str_get_contents.into(),
                     v8func_get_contents.into(),
-                    READ_ONLY,
+                    PropertyAttribute::READ_ONLY,
                 );
             }
         }
@@ -588,7 +597,12 @@ wd.v=key=>{
                 deno_core::serde_v8::to_v8(scope, self.database.read().unwrap().collections()),
                 v8::String::new(scope, &var),
             ) {
-                obj.define_own_property(scope, v8str_var.into(), array.into(), v8::READ_ONLY);
+                obj.define_own_property(
+                    scope,
+                    v8str_var.into(),
+                    array.into(),
+                    PropertyAttribute::READ_ONLY,
+                );
             }
         }
         stack::push(context, scope, obj);
@@ -651,7 +665,12 @@ wd.v=key=>{
                 v8::String::new(scope, &var),
             ) {
                 if let Ok(array) = deno_core::serde_v8::to_v8(scope, sessions) {
-                    obj.define_own_property(scope, v8str_var.into(), array.into(), v8::READ_ONLY);
+                    obj.define_own_property(
+                        scope,
+                        v8str_var.into(),
+                        array.into(),
+                        PropertyAttribute::READ_ONLY,
+                    );
                 }
             }
         }
@@ -692,12 +711,17 @@ wd.v=key=>{
                 ) {
                     let max = v8::Integer::new(scope, cursor.max as i32);
                     let current = v8::Integer::new(scope, cursor.current as i32);
-                    obj.define_own_property(scope, v8str_max.into(), max.into(), v8::READ_ONLY);
+                    obj.define_own_property(
+                        scope,
+                        v8str_max.into(),
+                        max.into(),
+                        PropertyAttribute::READ_ONLY,
+                    );
                     obj.define_own_property(
                         scope,
                         v8str_current.into(),
                         current.into(),
-                        v8::READ_ONLY,
+                        PropertyAttribute::READ_ONLY,
                     );
                 }
             }

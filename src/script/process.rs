@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 use deno_runtime::{deno_core::v8, worker::MainWorker};
-use maybe_xml::{scanner::{Scanner, State}, token};
+use maybe_xml::{
+    scanner::{Scanner, State},
+    token,
+};
 
 use crate::{anyhow::Result, xml_util, IncludeAdaptor};
 
@@ -56,7 +59,7 @@ pub(super) fn case<T: IncludeAdaptor>(
     worker: &mut MainWorker,
     include_adaptor: &mut T,
 ) -> Result<Vec<u8>> {
-    let cmp_src = String::from_utf8(match attributes.get(b"value".as_slice()) {
+    let cmp_src = match attributes.get(b"value".as_slice()) {
         Some((None, Some(value))) => {
             let mut r = value.to_vec();
             r.push(b'\'');
@@ -73,7 +76,7 @@ pub(super) fn case<T: IncludeAdaptor>(
             }
         }
         _ => b"''".to_vec(),
-    })?;
+    };
     let mut xml = xml;
     let mut scanner = Scanner::new();
     while let Some(state) = scanner.scan(&xml) {
@@ -87,7 +90,7 @@ pub(super) fn case<T: IncludeAdaptor>(
                 match name.as_bytes() {
                     b"wd:when" => {
                         let (inner_xml, outer_end) = xml_util::inner(xml);
-                        let cmp = cmp_src.to_owned()
+                        let cmp = String::from_utf8(cmp_src.clone())?
                             + "=="
                             + std::str::from_utf8(&if let Some((prefix, Some(value))) =
                                 crate::attr2map(&token.attributes()).get(b"value".as_slice())

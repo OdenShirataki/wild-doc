@@ -51,22 +51,11 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         })
     }
 
-    fn run_inner(
-        database: Arc<RwLock<SessionDatabase>>,
-        xml: &[u8],
-        input_json: &[u8],
-        include_adaptor: &mut impl IncludeAdaptor,
-        module_cache_dir: &PathBuf,
-    ) -> Result<WildDocResult> {
-        Script::new(database, module_cache_dir.clone()).parse_xml(input_json, xml, include_adaptor)
-    }
     pub fn run(&mut self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {
-        Self::run_inner(
-            self.database.clone(),
-            xml,
+        Script::new(self.database.clone(), self.module_cache_dir.clone()).parse_xml(
             input_json,
+            xml,
             &mut self.default_include_adaptor,
-            &self.module_cache_dir,
         )
     }
     pub fn run_specify_include_adaptor(
@@ -75,12 +64,10 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         input_json: &[u8],
         include_adaptor: &mut impl IncludeAdaptor,
     ) -> Result<WildDocResult> {
-        Self::run_inner(
-            self.database.clone(),
-            xml,
+        Script::new(self.database.clone(), self.module_cache_dir.clone()).parse_xml(
             input_json,
+            xml,
             include_adaptor,
-            &self.module_cache_dir,
         )
     }
 }

@@ -1,5 +1,5 @@
 use deno_runtime::{
-    deno_napi::v8::{self, HandleScope, READ_ONLY},
+    deno_napi::v8::{self, HandleScope, PropertyAttribute},
     worker::MainWorker,
 };
 use semilattice_database_session::{Condition, Order, OrderKey, Session, SessionDatabase};
@@ -126,15 +126,25 @@ fn depends_array<'a>(
             ) {
                 if let Some(collection_name) = v8::String::new(scope, collection.name()) {
                     let depend = v8::Object::new(scope);
-                    depend.define_own_property(scope, v8str_key.into(), key.into(), READ_ONLY);
+                    depend.define_own_property(
+                        scope,
+                        v8str_key.into(),
+                        key.into(),
+                        PropertyAttribute::READ_ONLY,
+                    );
                     depend.define_own_property(
                         scope,
                         v8str_collection.into(),
                         collection_name.into(),
-                        READ_ONLY,
+                        PropertyAttribute::READ_ONLY,
                     );
                     let row = v8::BigInt::new_from_i64(scope, d.row() as i64); //TODO u32 integer
-                    depend.define_own_property(scope, v8str_row.into(), row.into(), READ_ONLY);
+                    depend.define_own_property(
+                        scope,
+                        v8str_row.into(),
+                        row.into(),
+                        PropertyAttribute::READ_ONLY,
+                    );
 
                     array.set_index(scope, index, depend.into());
                     index += 1;
@@ -246,34 +256,59 @@ fn set_values<'s>(
 
     if let Some(key) = v8::String::new(scope, "row") {
         let row = v8::BigInt::new_from_i64(scope, row);
-        obj.define_own_property(scope, key.into(), row.into(), READ_ONLY);
+        obj.define_own_property(scope, key.into(), row.into(), PropertyAttribute::READ_ONLY);
     }
     if let (Some(collection_name), Some(key)) = (
         v8::String::new(scope, collection_name),
         v8::String::new(scope, "collection"),
     ) {
-        obj.define_own_property(scope, key.into(), collection_name.into(), READ_ONLY);
+        obj.define_own_property(
+            scope,
+            key.into(),
+            collection_name.into(),
+            PropertyAttribute::READ_ONLY,
+        );
     }
     if let Some(key) = v8::String::new(scope, "collection_id") {
         let collection_id = v8::Integer::new(scope, collection_id as i32);
-        obj.define_own_property(scope, key.into(), collection_id.into(), READ_ONLY);
+        obj.define_own_property(
+            scope,
+            key.into(),
+            collection_id.into(),
+            PropertyAttribute::READ_ONLY,
+        );
     }
     if let Some(key) = v8::String::new(scope, "activity") {
         let activity = v8::Integer::new(scope, activity);
-        obj.define_own_property(scope, key.into(), activity.into(), READ_ONLY);
+        obj.define_own_property(
+            scope,
+            key.into(),
+            activity.into(),
+            PropertyAttribute::READ_ONLY,
+        );
     }
     if let (Some(term_begin), Some(key)) = (
         v8::Date::new(scope, (term_begin as f64) * 1000.0),
         v8::String::new(scope, "term_begin"),
     ) {
-        obj.define_own_property(scope, key.into(), term_begin.into(), READ_ONLY);
+        obj.define_own_property(
+            scope,
+            key.into(),
+            term_begin.into(),
+            PropertyAttribute::READ_ONLY,
+        );
     }
     if term_end > 0 {
         if let (Some(term_end), Some(key)) = (
             v8::Date::new(scope, (term_end as f64) * 1000.0),
             v8::String::new(scope, "term_end"),
         ) {
-            obj.define_own_property(scope, key.into(), term_end.into(), READ_ONLY);
+            obj.define_own_property(
+                scope,
+                key.into(),
+                term_end.into(),
+                PropertyAttribute::READ_ONLY,
+            );
         }
     }
 
@@ -283,7 +318,12 @@ fn set_values<'s>(
 fn set_serial<'s>(scope: &mut HandleScope<'s>, object: v8::Local<'s, v8::Object>, serial: u32) {
     if let Some(v8str_serial) = v8::String::new(scope, "serial") {
         let serial = v8::Integer::new_from_unsigned(scope, serial);
-        object.define_own_property(scope, v8str_serial.into(), serial.into(), READ_ONLY);
+        object.define_own_property(
+            scope,
+            v8str_serial.into(),
+            serial.into(),
+            PropertyAttribute::READ_ONLY,
+        );
     }
 }
 fn set_last_update<'s>(
@@ -297,7 +337,7 @@ fn set_last_update<'s>(
                 scope,
                 v8str_last_update.into(),
                 last_update.into(),
-                READ_ONLY,
+                PropertyAttribute::READ_ONLY,
             );
         }
     }
@@ -305,7 +345,12 @@ fn set_last_update<'s>(
 fn set_uuid<'s>(scope: &mut HandleScope<'s>, object: v8::Local<'s, v8::Object>, uuid: &str) {
     if let Some(v8str_uuid) = v8::String::new(scope, "uuid") {
         let uuid = v8::String::new(scope, uuid).unwrap();
-        object.define_own_property(scope, v8str_uuid.into(), uuid.into(), READ_ONLY);
+        object.define_own_property(
+            scope,
+            v8str_uuid.into(),
+            uuid.into(),
+            PropertyAttribute::READ_ONLY,
+        );
     }
 }
 
@@ -413,20 +458,20 @@ pub(super) fn result(
                                     scope,
                                     v8str_session.into(),
                                     v8ext_session.into(),
-                                    READ_ONLY,
+                                    PropertyAttribute::READ_ONLY,
                                 );
 
                                 obj.define_own_property(
                                     scope,
                                     v8str_field.into(),
                                     v8func_field.into(),
-                                    READ_ONLY,
+                                    PropertyAttribute::READ_ONLY,
                                 );
                                 obj.define_own_property(
                                     scope,
                                     v8str_depends.into(),
                                     v8func_depends.into(),
-                                    READ_ONLY,
+                                    PropertyAttribute::READ_ONLY,
                                 );
 
                                 if row > 0 {
@@ -484,13 +529,13 @@ pub(super) fn result(
                                     scope,
                                     v8str_field.into(),
                                     v8func_field.into(),
-                                    READ_ONLY,
+                                    PropertyAttribute::READ_ONLY,
                                 );
                                 obj.define_own_property(
                                     scope,
                                     v8str_depends.into(),
                                     v8func_depends.into(),
-                                    READ_ONLY,
+                                    PropertyAttribute::READ_ONLY,
                                 );
 
                                 return_obj.set_index(scope, i, obj.into());
