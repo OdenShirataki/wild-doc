@@ -214,8 +214,7 @@ wd.v=key=>{
                 )));
             }
             b"include" => {
-                return Ok(Some(process::get_include_content(
-                    self,
+                return Ok(Some(self.get_include_content(
                     include_adaptor,
                     &crate::attr2map(&attributes),
                 )?));
@@ -356,8 +355,7 @@ wd.v=key=>{
                                 }
                                 b"update" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    update::update(
-                                        self,
+                                    self.update(
                                         inner_xml,
                                         &crate::attr2map(&attributes),
                                         include_adaptor,
@@ -365,19 +363,14 @@ wd.v=key=>{
                                     xml = &xml[outer_end..];
                                 }
                                 b"search" => {
-                                    xml = search::search(
-                                        self,
+                                    xml = self.search(
                                         xml,
                                         &crate::attr2map(&attributes),
                                         &mut search_map,
                                     );
                                 }
                                 b"result" => {
-                                    result::result(
-                                        self,
-                                        &crate::attr2map(&attributes),
-                                        &search_map,
-                                    );
+                                    self.result(&crate::attr2map(&attributes), &search_map);
                                 }
                                 b"collections" => {
                                     self.collections(&crate::attr2map(&attributes));
@@ -398,8 +391,7 @@ wd.v=key=>{
                                 }
                                 b"case" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut process::case(
-                                        self,
+                                    r.append(&mut self.case(
                                         &crate::attr2map(&attributes),
                                         inner_xml,
                                         include_adaptor,
@@ -408,8 +400,7 @@ wd.v=key=>{
                                 }
                                 b"if" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut process::r#if(
-                                        self,
+                                    r.append(&mut self.r#if(
                                         &crate::attr2map(&attributes),
                                         inner_xml,
                                         include_adaptor,
@@ -418,8 +409,7 @@ wd.v=key=>{
                                 }
                                 b"for" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut process::r#for(
-                                        self,
+                                    r.append(&mut self.r#for(
                                         &crate::attr2map(&attributes),
                                         inner_xml,
                                         include_adaptor,
@@ -780,18 +770,18 @@ wd.v=key=>{
         }
         (name, html_attr)
     }
-}
 
-fn get_wddb<'s>(scope: &mut v8::HandleScope<'s>) -> Option<&'s Arc<RwLock<SessionDatabase>>> {
-    if let Some(database) = v8::String::new(scope, "wd.database")
-        .and_then(|code| v8::Script::compile(scope, code, None))
-        .and_then(|v| v.run(scope))
-    {
-        Some(unsafe {
-            &*(v8::Local::<v8::External>::cast(database).value()
-                as *const Arc<RwLock<SessionDatabase>>)
-        })
-    } else {
-        None
+    fn get_wddb<'s>(scope: &mut v8::HandleScope<'s>) -> Option<&'s Arc<RwLock<SessionDatabase>>> {
+        if let Some(database) = v8::String::new(scope, "wd.database")
+            .and_then(|code| v8::Script::compile(scope, code, None))
+            .and_then(|v| v.run(scope))
+        {
+            Some(unsafe {
+                &*(v8::Local::<v8::External>::cast(database).value()
+                    as *const Arc<RwLock<SessionDatabase>>)
+            })
+        } else {
+            None
+        }
     }
 }
