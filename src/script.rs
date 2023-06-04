@@ -137,12 +137,12 @@ wd.v=key=>{
                     .and_then(|v| v.run(scope))
                     .and_then(|v| v8::Local::<v8::Object>::try_from(v).ok()),
                 v8::String::new(scope, "include_adaptor"),
-                v8::String::new(scope, "script"),
+                v8::String::new(scope, "database"),
                 v8::String::new(scope, "get_contents"),
                 func_get_contents,
             ) {
-                let addr = include_adaptor as *mut T as *mut c_void;
-                let v8ext_include_adaptor = v8::External::new(scope, addr);
+                let v8ext_include_adaptor =
+                    v8::External::new(scope, include_adaptor as *mut T as *mut c_void);
                 wd.define_own_property(
                     scope,
                     v8str_include_adaptor.into(),
@@ -150,8 +150,10 @@ wd.v=key=>{
                     PropertyAttribute::READ_ONLY,
                 );
 
-                let addr = self as *mut Self as *mut c_void;
-                let v8ext_script = v8::External::new(scope, addr);
+                let v8ext_script = v8::External::new(
+                    scope,
+                    &self.database as *const Arc<RwLock<SessionDatabase>> as *mut c_void,
+                );
                 wd.define_own_property(
                     scope,
                     v8str_script.into(),
@@ -806,14 +808,14 @@ wd.v=key=>{
 }
 
 fn get_wddb<'s>(scope: &mut v8::HandleScope<'s>) -> Option<&'s mut Arc<RwLock<SessionDatabase>>> {
-    if let Some(script) = v8::String::new(scope, "wd.script")
+    if let Some(database) = v8::String::new(scope, "wd.database")
         .and_then(|code| v8::Script::compile(scope, code, None))
         .and_then(|v| v.run(scope))
     {
-        Some(
-            &mut unsafe { &mut *(v8::Local::<v8::External>::cast(script).value() as *mut Script) }
-                .database,
-        )
+        Some(unsafe {
+            &mut *(v8::Local::<v8::External>::cast(database).value()
+                as *mut Arc<RwLock<SessionDatabase>>)
+        })
     } else {
         None
     }
