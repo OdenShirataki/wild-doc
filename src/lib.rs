@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     io,
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use anyhow::Result;
@@ -33,7 +33,7 @@ impl WildDocResult {
 }
 pub struct WildDoc<T: IncludeAdaptor> {
     database: Arc<RwLock<SessionDatabase>>,
-    default_include_adaptor: T,
+    default_include_adaptor: Arc<Mutex<T>>,
     cache_dir: PathBuf,
 }
 impl<T: IncludeAdaptor> WildDoc<T> {
@@ -46,7 +46,7 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         }
         Ok(Self {
             database: Arc::new(RwLock::new(SessionDatabase::new(dir)?)),
-            default_include_adaptor,
+            default_include_adaptor: Arc::new(Mutex::new(default_include_adaptor)),
             cache_dir,
         })
     }
@@ -55,19 +55,19 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         Script::new(self.database.clone(), self.cache_dir.clone()).parse_xml(
             input_json,
             xml,
-            &mut self.default_include_adaptor,
+            self.default_include_adaptor.clone(),
         )
     }
-    pub fn run_specify_include_adaptor(
+    pub fn run_specify_include_adaptor<I: IncludeAdaptor>(
         &mut self,
         xml: &[u8],
         input_json: &[u8],
-        include_adaptor: &mut impl IncludeAdaptor,
+        include_adaptor: I,
     ) -> Result<WildDocResult> {
         Script::new(self.database.clone(), self.cache_dir.clone()).parse_xml(
             input_json,
             xml,
-            include_adaptor,
+            Arc::new(Mutex::new(include_adaptor)),
         )
     }
 }

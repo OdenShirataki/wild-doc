@@ -7,7 +7,11 @@ use maybe_xml::{
 use semilattice_database_session::{
     Activity, CollectionRow, Depends, KeyValue, Pend, Record, Term,
 };
-use std::{collections::HashMap, error, fmt};
+use std::{
+    collections::HashMap,
+    error, fmt,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     anyhow::{anyhow, Result},
@@ -34,7 +38,7 @@ impl Script {
         &mut self,
         xml: &[u8],
         attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
-        include_adaptor: &mut T,
+        include_adaptor: Arc<Mutex<T>>,
     ) -> Result<()> {
         let inner_xml = self.parse(xml, include_adaptor)?;
         let updates = self.make_update_struct(inner_xml.as_slice())?;
