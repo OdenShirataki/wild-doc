@@ -56,7 +56,7 @@ fn depends(
         get_collection_id(scope, this),
         get_row(scope, this),
     ) {
-        if let Ok(db) = db.clone().read() {
+        if let Ok(db) = db.read() {
             let key = if args.length() > 0 {
                 args.get(0).to_string(scope)
             } else {
@@ -80,7 +80,7 @@ fn session_depends(
         get_row(scope, this),
         get_session(scope, this),
     ) {
-        if let Ok(db) = db.clone().read() {
+        if let Ok(db) = db.read() {
             let key = if args.length() > 0 {
                 args.get(0).to_string(scope)
             } else {
@@ -170,7 +170,7 @@ fn field(
     ) {
         if let Some(field_name) = args.get(0).to_string(scope) {
             let field_name = field_name.to_rust_string_lossy(scope);
-            if let Some(data) = db.clone().read().unwrap().collection(collection_id) {
+            if let Some(data) = db.read().unwrap().collection(collection_id) {
                 if let Some(str) = v8::String::new(
                     scope,
                     std::str::from_utf8(data.field_bytes(row as u32, &field_name)).unwrap(),
@@ -197,7 +197,7 @@ fn session_field(
     ) {
         if let Some(field_name) = args.get(0).to_string(scope) {
             let field_name = field_name.to_rust_string_lossy(scope);
-            if let Some(data) = db.clone().read().unwrap().collection(collection_id) {
+            if let Some(data) = db.read().unwrap().collection(collection_id) {
                 let bytes = session.collection_field_bytes(&data, row, &field_name);
                 if let Some(str) = v8::String::new(scope, std::str::from_utf8(&bytes).unwrap()) {
                     rv.set(str.into());
@@ -495,8 +495,7 @@ pub(super) fn result(
                             v8::Function::new(scope, field),
                             v8::Function::new(scope, depends),
                         ) {
-                            let mut search =
-                                script.database.clone().read().unwrap().search(collection);
+                            let mut search = script.database.read().unwrap().search(collection);
                             for c in conditions {
                                 search = search.search(c.clone());
                             }

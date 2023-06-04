@@ -33,7 +33,7 @@ pub fn update<T: crate::IncludeAdaptor>(
             .unwrap()
             .update(session, updates)?;
         let commit_rows = if crate::attr_parse_or_static(worker, &attributes, b"commit") == b"1" {
-            script.database.clone().write().unwrap().commit(session)?
+            script.database.write().unwrap().commit(session)?
         } else {
             vec![]
         };

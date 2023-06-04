@@ -614,11 +614,9 @@ wd.v=key=>{
             } else {
                 None
             };
-            if let Ok(mut session) = Session::new(
-                &self.database.clone().read().unwrap(),
-                &session_name,
-                expire,
-            ) {
+            if let Ok(mut session) =
+                Session::new(&self.database.read().unwrap(), &session_name, expire)
+            {
                 let cursor = crate::attr_parse_or_static_string(worker, &attributes, b"cursor");
                 if cursor != "" {
                     if let Ok(cursor) = cursor.parse::<usize>() {
@@ -729,7 +727,7 @@ wd.v=key=>{
         if let Ok(parsed) = str_expire.parse::<i64>() {
             expire = parsed;
         }
-        self.database.clone().write().unwrap().session_gc(expire)
+        self.database.write().unwrap().session_gc(expire)
     }
     fn delete_collection(
         &mut self,
