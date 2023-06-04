@@ -1,5 +1,5 @@
 use chrono::TimeZone;
-use deno_runtime::{deno_core::serde_json, worker::MainWorker};
+use deno_runtime::deno_core::serde_json;
 use maybe_xml::{
     scanner::{Scanner, State},
     token,
@@ -18,13 +18,12 @@ use super::Script;
 
 pub fn update<T: crate::IncludeAdaptor>(
     script: &mut Script,
-    worker: &mut MainWorker,
     xml: &[u8],
     attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     include_adaptor: &mut T,
 ) -> Result<()> {
-    let inner_xml = script.parse(worker, xml, include_adaptor)?;
-    let updates = make_update_struct(script, inner_xml.as_slice(), worker)?;
+    let inner_xml = script.parse(xml, include_adaptor)?;
+    let updates = make_update_struct(script, inner_xml.as_slice())?;
     if let Some((ref mut session, _)) = script.sessions.last_mut() {
         let session_rows = script
             .database
@@ -32,18 +31,20 @@ pub fn update<T: crate::IncludeAdaptor>(
             .read()
             .unwrap()
             .update(session, updates)?;
-        let commit_rows = if crate::attr_parse_or_static(worker, &attributes, b"commit") == b"1" {
-            script.database.write().unwrap().commit(session)?
-        } else {
-            vec![]
-        };
-        let src = crate::attr_parse_or_static_string(worker, &attributes, b"result_callback");
+        let commit_rows =
+            if crate::attr_parse_or_static(&mut script.worker, &attributes, b"commit") == b"1" {
+                script.database.write().unwrap().commit(session)?
+            } else {
+                vec![]
+            };
+        let src =
+            crate::attr_parse_or_static_string(&mut script.worker, &attributes, b"result_callback");
         if src.len() > 0 {
             if let (Ok(json_commit_rows), Ok(json_session_rows)) = (
                 serde_json::to_string(&commit_rows),
                 serde_json::to_string(&session_rows),
             ) {
-                let _ = worker.execute_script(
+                let _ = script.worker.execute_script(
                     "commit",
                     ("{const update_result={commit_rows:".to_owned()
                         + json_commit_rows.as_str()
@@ -77,11 +78,11 @@ fn depend(
     script: &mut Script,
     attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     depends: &mut Vec<(String, CollectionRow)>,
-    worker: &mut MainWorker,
 ) -> Result<(), DependError> {
-    let key = crate::attr_parse_or_static_string(worker, attributes, b"key");
-    let collection = crate::attr_parse_or_static_string(worker, attributes, b"collection");
-    let row = crate::attr_parse_or_static_string(worker, attributes, b"row");
+    let key = crate::attr_parse_or_static_string(&mut script.worker, attributes, b"key");
+    let collection =
+        crate::attr_parse_or_static_string(&mut script.worker, attributes, b"collection");
+    let row = crate::attr_parse_or_static_string(&mut script.worker, attributes, b"row");
 
     if let (Ok(row), Some(collection_id)) = (
         row.parse::<i64>(),
@@ -127,11 +128,7 @@ fn depend(
     }
 }
 
-fn make_update_struct(
-    script: &mut Script,
-    xml: &[u8],
-    worker: &mut MainWorker,
-) -> Result<Vec<Record>> {
+fn make_update_struct(script: &mut Script, xml: &[u8]) -> Result<Vec<Record>> {
     let mut updates = Vec::new();
     let mut xml = xml;
     let mut scanner = Scanner::new();
@@ -170,7 +167,7 @@ fn make_update_struct(
                                         match name.local().as_bytes() {
                                             b"field" => {
                                                 let field_name = crate::attr_parse_or_static_string(
-                                                    worker,
+                                                    &mut script.worker,
                                                     &crate::attr2map(&token.attributes()),
                                                     b"name",
                                                 );
@@ -190,7 +187,7 @@ fn make_update_struct(
                                                 let (inner_xml, outer_end) = xml_util::inner(xml);
                                                 xml = &xml[outer_end..];
                                                 let pends_tmp =
-                                                    make_update_struct(script, inner_xml, worker)?;
+                                                    make_update_struct(script, inner_xml)?;
                                                 if let Some((None, Some(key))) =
                                                     crate::attr2map(&token.attributes())
                                                         .get(&b"key".to_vec())
@@ -217,7 +214,6 @@ fn make_update_struct(
                                                     script,
                                                     &crate::attr2map(&token.attributes()),
                                                     &mut depends,
-                                                    worker,
                                                 )?;
                                             }
                                             _ => {}
@@ -241,10 +237,13 @@ fn make_update_struct(
                                 _ => {}
                             }
                         }
-                        let row: i64 =
-                            crate::attr_parse_or_static_string(worker, &attributes, b"row")
-                                .parse()
-                                .unwrap_or(0);
+                        let row: i64 = crate::attr_parse_or_static_string(
+                            &mut script.worker,
+                            &attributes,
+                            b"row",
+                        )
+                        .parse()
+                        .unwrap_or(0);
 
                         let is_delete =
                             if let Some((None, Some(v))) = attributes.get(b"delete".as_slice()) {
@@ -260,15 +259,18 @@ fn make_update_struct(
                         if is_delete {
                             updates.push(Record::Delete { collection_id, row });
                         } else {
-                            let activity =
-                                crate::attr_parse_or_static(worker, &attributes, b"activity");
+                            let activity = crate::attr_parse_or_static(
+                                &mut script.worker,
+                                &attributes,
+                                b"activity",
+                            );
                             let activity = match &*activity {
                                 b"inactive" => Activity::Inactive,
                                 b"0" => Activity::Inactive,
                                 _ => Activity::Active,
                             };
                             let term_begin = crate::attr_parse_or_static_string(
-                                worker,
+                                &mut script.worker,
                                 &attributes,
                                 b"term_begin",
                             );
@@ -285,7 +287,7 @@ fn make_update_struct(
                                 Term::Default
                             };
                             let term_end = crate::attr_parse_or_static_string(
-                                worker,
+                                &mut script.worker,
                                 &attributes,
                                 b"term_end",
                             );
@@ -325,7 +327,7 @@ fn make_update_struct(
                                     term_end,
                                     fields: f,
                                     depends: if crate::attr_parse_or_static_string(
-                                        worker,
+                                        &mut script.worker,
                                         &attributes,
                                         b"inherit_depend_if_empty",
                                     ) == "true"

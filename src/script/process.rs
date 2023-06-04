@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use deno_runtime::{deno_core::v8, worker::MainWorker};
+use deno_runtime::deno_core::v8;
 use maybe_xml::{
     scanner::{Scanner, State},
     token,
@@ -12,15 +12,15 @@ use super::Script;
 
 pub(crate) fn get_include_content<T: IncludeAdaptor>(
     script: &mut super::Script,
-    worker: &mut MainWorker,
     include_adaptor: &mut T,
     attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
 ) -> Result<Vec<u8>> {
-    let src = crate::attr_parse_or_static_string(worker, attributes, b"src");
+    let src = crate::attr_parse_or_static_string(&mut script.worker, attributes, b"src");
     let (xml, filename) = if let Some(xml) = include_adaptor.include(&src) {
         (Some(xml), src)
     } else {
-        let substitute = crate::attr_parse_or_static_string(worker, attributes, b"substitute");
+        let substitute =
+            crate::attr_parse_or_static_string(&mut script.worker, attributes, b"substitute");
         if let Some(xml) = include_adaptor.include(&substitute) {
             (Some(xml), substitute)
         } else {
@@ -29,9 +29,9 @@ pub(crate) fn get_include_content<T: IncludeAdaptor>(
     };
     if let Some(xml) = xml {
         if xml.len() > 0 {
-            let var = crate::attr_parse_or_static_string(worker, attributes, b"var");
+            let var = crate::attr_parse_or_static_string(&mut script.worker, attributes, b"var");
             let stack_push = if var.len() > 0 {
-                worker.execute_script(
+                script.worker.execute_script(
                     "stack.push",
                     ("wd.stack.push({".to_owned() + (&var).as_str() + "});").into(),
                 )?;
@@ -40,10 +40,12 @@ pub(crate) fn get_include_content<T: IncludeAdaptor>(
                 false
             };
             script.include_stack.push(filename);
-            let r = script.parse(worker, xml.as_slice(), include_adaptor)?;
+            let r = script.parse(xml.as_slice(), include_adaptor)?;
             script.include_stack.pop();
             if stack_push {
-                worker.execute_script("stack.pop", "wd.stack.pop();".to_owned().into())?;
+                script
+                    .worker
+                    .execute_script("stack.pop", "wd.stack.pop();".to_owned().into())?;
             }
             return Ok(r);
         }
@@ -56,7 +58,6 @@ pub(super) fn case<T: IncludeAdaptor>(
     script: &mut Script,
     attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     xml: &[u8],
-    worker: &mut MainWorker,
     include_adaptor: &mut T,
 ) -> Result<Vec<u8>> {
     let cmp_src = match attributes.get(b"value".as_slice()) {
@@ -106,16 +107,18 @@ pub(super) fn case<T: IncludeAdaptor>(
                             } else {
                                 vec![b'\'', b'\'']
                             })?;
-                        if crate::eval_result(&mut worker.js_runtime.handle_scope(), cmp.as_str())
-                            == b"true"
+                        if crate::eval_result(
+                            &mut script.worker.js_runtime.handle_scope(),
+                            cmp.as_str(),
+                        ) == b"true"
                         {
-                            return Ok(script.parse(worker, inner_xml, include_adaptor)?);
+                            return Ok(script.parse(inner_xml, include_adaptor)?);
                         }
                         xml = &xml[outer_end..];
                     }
                     b"wd:else" => {
                         let (inner_xml, _) = xml_util::inner(xml);
-                        return Ok(script.parse(worker, inner_xml, include_adaptor)?);
+                        return Ok(script.parse(inner_xml, include_adaptor)?);
                     }
                     _ => {}
                 }
@@ -140,11 +143,10 @@ pub(super) fn r#if<T: IncludeAdaptor>(
     script: &mut Script,
     attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     xml: &[u8],
-    worker: &mut MainWorker,
     include_adaptor: &mut T,
 ) -> Result<Vec<u8>> {
-    if crate::attr_parse_or_static(worker, attributes, b"value") == b"true" {
-        return script.parse(worker, xml, include_adaptor);
+    if crate::attr_parse_or_static(&mut script.worker, attributes, b"value") == b"true" {
+        return script.parse(xml, include_adaptor);
     }
     Ok(vec![])
 }
@@ -153,18 +155,17 @@ pub(super) fn r#for<T: IncludeAdaptor>(
     script: &mut Script,
     attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     xml: &[u8],
-    worker: &mut MainWorker,
     include_adaptor: &mut T,
 ) -> Result<Vec<u8>> {
     let mut r = Vec::new();
-    let var = crate::attr_parse_or_static_string(worker, attributes, b"var");
+    let var = crate::attr_parse_or_static_string(&mut script.worker, attributes, b"var");
     if var != "" {
         if let Some((Some(prefix), Some(source))) = attributes.get(b"in".as_slice()) {
             if prefix == b"wd" {
                 let (is_array, keys) = {
                     let mut is_array = true;
                     let mut keys = vec![];
-                    let scope = &mut worker.js_runtime.handle_scope();
+                    let scope = &mut script.worker.js_runtime.handle_scope();
                     let context = scope.get_current_context();
                     let scope = &mut v8::ContextScope::new(scope, context);
                     if let Some(rs) = {
@@ -222,15 +223,17 @@ pub(super) fn r#for<T: IncludeAdaptor>(
                         .as_str()
                         + "})";
                     {
-                        let scope = &mut worker.js_runtime.handle_scope();
+                        let scope = &mut script.worker.js_runtime.handle_scope();
                         let context = scope.get_current_context();
                         let scope = &mut v8::ContextScope::new(scope, context);
                         v8::String::new(scope, &source)
                             .and_then(|code| v8::Script::compile(scope, code, None))
                             .and_then(|v| v.run(scope));
                     }
-                    r.append(&mut script.parse(worker, xml, include_adaptor)?);
-                    worker.execute_script("pop stack", "wd.stack.pop()".to_owned().into())?;
+                    r.append(&mut script.parse(xml, include_adaptor)?);
+                    script
+                        .worker
+                        .execute_script("pop stack", "wd.stack.pop()".to_owned().into())?;
                 }
             }
         }

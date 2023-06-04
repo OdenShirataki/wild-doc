@@ -16,13 +16,13 @@ use super::Script;
 
 pub fn search<'a>(
     script: &mut Script,
-    worker: &mut MainWorker,
     xml: &'a [u8],
     attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     search_map: &mut HashMap<String, (i32, Vec<Condition>)>,
 ) -> &'a [u8] {
-    let name = crate::attr_parse_or_static_string(worker, attributes, b"name");
-    let collection_name = crate::attr_parse_or_static_string(worker, attributes, b"collection");
+    let name = crate::attr_parse_or_static_string(&mut script.worker, attributes, b"name");
+    let collection_name =
+        crate::attr_parse_or_static_string(&mut script.worker, attributes, b"collection");
     if name != "" && collection_name != "" {
         if let Some(collection_id) = script
             .database
@@ -31,7 +31,7 @@ pub fn search<'a>(
             .unwrap()
             .collection_id(&collection_name)
         {
-            let (last_xml, condition) = make_conditions(script, attributes, xml, worker);
+            let (last_xml, condition) = make_conditions(script, attributes, xml);
             search_map.insert(name.to_owned(), (collection_id, condition));
             return last_xml;
         }
@@ -40,12 +40,11 @@ pub fn search<'a>(
 }
 
 fn make_conditions<'a>(
-    script: &Script,
+    script: &mut Script,
     attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     xml: &'a [u8],
-    worker: &mut MainWorker,
 ) -> (&'a [u8], Vec<Condition>) {
-    let (last_xml, mut conditions) = condition_loop(script, xml, worker);
+    let (last_xml, mut conditions) = condition_loop(script, xml);
 
     if let Some((None, Some(activity))) = attributes.get(b"activity".as_slice()) {
         if activity == b"inactive" {
@@ -97,11 +96,7 @@ fn make_conditions<'a>(
     (last_xml, conditions)
 }
 
-fn condition_loop<'a>(
-    script: &Script,
-    xml: &'a [u8],
-    worker: &mut MainWorker,
-) -> (&'a [u8], Vec<Condition>) {
+fn condition_loop<'a>(script: &mut Script, xml: &'a [u8]) -> (&'a [u8], Vec<Condition>) {
     let mut result_conditions = Vec::new();
     let mut xml = xml;
     let mut scanner = Scanner::new();
@@ -115,12 +110,12 @@ fn condition_loop<'a>(
                 if let None = name.namespace_prefix() {
                     match name.local().as_bytes() {
                         b"narrow" => {
-                            let (last_xml, cond) = condition_loop(script, xml, worker);
+                            let (last_xml, cond) = condition_loop(script, xml);
                             result_conditions.push(Condition::Narrow(cond));
                             xml = last_xml;
                         }
                         b"wide" => {
-                            let (last_xml, cond) = condition_loop(script, xml, worker);
+                            let (last_xml, cond) = condition_loop(script, xml);
                             result_conditions.push(Condition::Wide(cond));
                             xml = last_xml;
                         }
@@ -136,28 +131,30 @@ fn condition_loop<'a>(
                 match name.local().as_bytes() {
                     b"row" => {
                         if let Some(c) =
-                            condition_row(&crate::attr2map(&token.attributes()), worker)
+                            condition_row(&crate::attr2map(&token.attributes()), &mut script.worker)
                         {
                             result_conditions.push(c);
                         }
                     }
                     b"field" => {
-                        if let Some(c) =
-                            condition_field(&crate::attr2map(&token.attributes()), worker)
-                        {
+                        if let Some(c) = condition_field(
+                            &crate::attr2map(&token.attributes()),
+                            &mut script.worker,
+                        ) {
                             result_conditions.push(c);
                         }
                     }
                     b"uuid" => {
-                        if let Some(c) =
-                            condition_uuid(&crate::attr2map(&token.attributes()), worker)
-                        {
+                        if let Some(c) = condition_uuid(
+                            &crate::attr2map(&token.attributes()),
+                            &mut script.worker,
+                        ) {
                             result_conditions.push(c);
                         }
                     }
                     b"depend" => {
                         if let Some(c) =
-                            condition_depend(script, worker, &crate::attr2map(&token.attributes()))
+                            condition_depend(script, &crate::attr2map(&token.attributes()))
                         {
                             result_conditions.push(c);
                         }
@@ -189,12 +186,12 @@ fn condition_loop<'a>(
 }
 
 fn condition_depend(
-    script: &Script,
-    worker: &mut MainWorker,
+    script: &mut Script,
     attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
 ) -> Option<Condition> {
-    let row = crate::attr_parse_or_static_string(worker, attributes, b"row");
-    let collection_name = crate::attr_parse_or_static_string(worker, attributes, b"collection");
+    let row = crate::attr_parse_or_static_string(&mut script.worker, attributes, b"row");
+    let collection_name =
+        crate::attr_parse_or_static_string(&mut script.worker, attributes, b"collection");
 
     if row != "" && collection_name != "" {
         if let (Ok(row), Some(collection_id)) = (
@@ -208,7 +205,7 @@ fn condition_depend(
         ) {
             let in_session = row < 0;
 
-            let key = crate::attr_parse_or_static_string(worker, attributes, b"key");
+            let key = crate::attr_parse_or_static_string(&mut script.worker, attributes, b"key");
             return Some(Condition::Depend(Depend::new(
                 &key,
                 if in_session {

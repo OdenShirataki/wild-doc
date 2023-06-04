@@ -1,7 +1,4 @@
-use deno_runtime::{
-    deno_napi::v8::{self, HandleScope, PropertyAttribute},
-    worker::MainWorker,
-};
+use deno_runtime::deno_napi::v8::{self, HandleScope, PropertyAttribute};
 use semilattice_database_session::{Condition, Order, OrderKey, Session, SessionDatabase};
 use std::{collections::HashMap, ffi::c_void};
 
@@ -356,18 +353,19 @@ fn set_uuid<'s>(scope: &mut HandleScope<'s>, object: v8::Local<'s, v8::Object>, 
 
 pub(super) fn result(
     script: &mut Script,
-    worker: &mut MainWorker,
     attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     search_map: &HashMap<String, (i32, Vec<Condition>)>,
 ) {
-    let search = crate::attr_parse_or_static_string(worker, attributes, b"search");
-    let var = crate::attr_parse_or_static_string(worker, attributes, b"var");
+    let search = crate::attr_parse_or_static_string(&mut script.worker, attributes, b"search");
+    let var = crate::attr_parse_or_static_string(&mut script.worker, attributes, b"var");
 
     let orders = make_order(&crate::attr_parse_or_static_string(
-        worker, attributes, b"sort",
+        &mut script.worker,
+        attributes,
+        b"sort",
     ));
 
-    let scope = &mut worker.js_runtime.handle_scope();
+    let scope = &mut script.worker.js_runtime.handle_scope();
     let context = scope.get_current_context();
     let scope = &mut v8::ContextScope::new(scope, context);
 

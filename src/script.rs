@@ -3,7 +3,6 @@ use std::{
     ffi::c_void,
     io::{self},
     path::PathBuf,
-    rc::Rc,
     sync::{Arc, RwLock},
 };
 
@@ -39,9 +38,7 @@ use module_loader::WdModuleLoader;
 pub struct Script {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<(Session, bool)>,
-    main_module: ModuleSpecifier,
-    module_loader: Rc<WdModuleLoader>,
-    permissions: PermissionsContainer,
+    worker: MainWorker,
     include_stack: Vec<String>,
 }
 impl Script {
@@ -49,9 +46,14 @@ impl Script {
         Self {
             database,
             sessions: vec![],
-            main_module: deno_core::resolve_url("wd://main").unwrap(),
-            module_loader: WdModuleLoader::new(module_cache_dir),
-            permissions: PermissionsContainer::allow_all(),
+            worker: MainWorker::bootstrap_from_options(
+                deno_core::resolve_url("wd://main").unwrap(),
+                PermissionsContainer::allow_all(),
+                WorkerOptions {
+                    module_loader: WdModuleLoader::new(module_cache_dir),
+                    ..Default::default()
+                },
+            ),
             include_stack: vec![],
         }
     }
@@ -62,15 +64,7 @@ impl Script {
         xml: &[u8],
         include_adaptor: &mut T,
     ) -> Result<super::WildDocResult> {
-        let mut worker = MainWorker::bootstrap_from_options(
-            self.main_module.clone(),
-            self.permissions.clone(),
-            WorkerOptions {
-                module_loader: self.module_loader.clone(),
-                ..Default::default()
-            },
-        );
-        worker.execute_script(
+        self.worker.execute_script(
             "init",
             (r#"wd={
     general:{}
@@ -95,7 +89,7 @@ wd.v=key=>{
                 .into(),
         )?;
         {
-            let scope = &mut worker.js_runtime.handle_scope();
+            let scope = &mut self.worker.js_runtime.handle_scope();
             let context = scope.get_current_context();
             let scope = &mut v8::ContextScope::new(scope, context);
 
@@ -170,10 +164,10 @@ wd.v=key=>{
             }
         }
 
-        let result_body = self.parse(&mut worker, xml, include_adaptor)?;
+        let result_body = self.parse(xml, include_adaptor)?;
         let result_options = {
             let mut result_options = String::new();
-            let scope = &mut worker.js_runtime.handle_scope();
+            let scope = &mut self.worker.js_runtime.handle_scope();
             let context = scope.get_current_context();
             let scope = &mut v8::ContextScope::new(scope, context);
             if let Some(json) = v8::String::new(scope, "wd.result_options")
@@ -207,7 +201,6 @@ wd.v=key=>{
 
     fn parse_wd_start_or_empty_tag<T: IncludeAdaptor>(
         &mut self,
-        worker: &mut MainWorker,
         include_adaptor: &mut T,
         name: &[u8],
         attributes: &Option<Attributes>,
@@ -215,7 +208,7 @@ wd.v=key=>{
         match name {
             b"print" => {
                 return Ok(Some(crate::attr_parse_or_static(
-                    worker,
+                    &mut self.worker,
                     &crate::attr2map(attributes),
                     b"value",
                 )));
@@ -223,16 +216,15 @@ wd.v=key=>{
             b"include" => {
                 return Ok(Some(process::get_include_content(
                     self,
-                    worker,
                     include_adaptor,
                     &crate::attr2map(&attributes),
                 )?));
             }
             b"delete_collection" => {
-                self.delete_collection(worker, &crate::attr2map(attributes))?;
+                self.delete_collection(&crate::attr2map(attributes))?;
             }
             b"session_gc" => {
-                self.session_gc(worker, &crate::attr2map(attributes))?;
+                self.session_gc(&crate::attr2map(attributes))?;
             }
             _ => {}
         }
@@ -245,12 +237,7 @@ wd.v=key=>{
             false
         }
     }
-    fn output_attrbutes(
-        &mut self,
-        worker: &mut MainWorker,
-        r: &mut Vec<u8>,
-        attributes: &Attributes,
-    ) {
+    fn output_attrbutes(&mut self, r: &mut Vec<u8>, attributes: &Attributes) {
         for attribute in attributes.iter() {
             r.push(b' ');
             let name = attribute.name();
@@ -263,7 +250,7 @@ wd.v=key=>{
                             r.push(b'"');
                             r.append(
                                 &mut crate::eval_result_string(
-                                    &mut worker.js_runtime.handle_scope(),
+                                    &mut self.worker.js_runtime.handle_scope(),
                                     crate::quot_unescape(value.as_bytes()).as_ref(),
                                 )
                                 .as_bytes()
@@ -277,7 +264,7 @@ wd.v=key=>{
                             if let Some(value) = attribute.value() {
                                 r.append(
                                     &mut crate::eval_result_string(
-                                        &mut worker.js_runtime.handle_scope(),
+                                        &mut self.worker.js_runtime.handle_scope(),
                                         crate::quot_unescape(value.as_bytes()).as_ref(),
                                     )
                                     .as_bytes()
@@ -298,7 +285,6 @@ wd.v=key=>{
 
     pub fn parse<T: IncludeAdaptor>(
         &mut self,
-        worker: &mut MainWorker,
         xml: &[u8],
         include_adaptor: &mut T,
     ) -> Result<Vec<u8>> {
@@ -317,7 +303,7 @@ wd.v=key=>{
                     if token.target().to_str()? == "typescript" {
                         if let Some(i) = token.instructions() {
                             if let Err(e) = Self::run_script(
-                                worker,
+                                &mut self.worker,
                                 if let Some(last) = self.include_stack.last() {
                                     last
                                 } else {
@@ -341,7 +327,6 @@ wd.v=key=>{
                     let name = token.name();
                     if Self::is_wd_tag(&name) {
                         if let Some(mut parsed) = self.parse_wd_start_or_empty_tag(
-                            worker,
                             include_adaptor,
                             name.local().as_bytes(),
                             &attributes,
@@ -350,19 +335,19 @@ wd.v=key=>{
                         } else {
                             match name.local().as_bytes() {
                                 b"session" => {
-                                    self.session(worker, &crate::attr2map(&attributes))?;
+                                    self.session(&crate::attr2map(&attributes))?;
                                 }
                                 b"session_sequence_cursor" => {
-                                    self.session_sequence(worker, &crate::attr2map(&attributes))?;
+                                    self.session_sequence(&crate::attr2map(&attributes))?;
                                 }
                                 b"sessions" => {
-                                    self.sessions(worker, &crate::attr2map(&attributes));
+                                    self.sessions(&crate::attr2map(&attributes));
                                 }
                                 b"re" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let parsed = self.parse(worker, inner_xml, include_adaptor)?;
+                                    let parsed = self.parse(inner_xml, include_adaptor)?;
                                     xml = &xml[outer_end..];
-                                    r.append(&mut self.parse(worker, &parsed, include_adaptor)?);
+                                    r.append(&mut self.parse(&parsed, include_adaptor)?);
                                 }
                                 b"letitgo" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
@@ -373,7 +358,6 @@ wd.v=key=>{
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
                                     update::update(
                                         self,
-                                        worker,
                                         inner_xml,
                                         &crate::attr2map(&attributes),
                                         include_adaptor,
@@ -383,7 +367,6 @@ wd.v=key=>{
                                 b"search" => {
                                     xml = search::search(
                                         self,
-                                        worker,
                                         xml,
                                         &crate::attr2map(&attributes),
                                         &mut search_map,
@@ -392,20 +375,19 @@ wd.v=key=>{
                                 b"result" => {
                                     result::result(
                                         self,
-                                        worker,
                                         &crate::attr2map(&attributes),
                                         &search_map,
                                     );
                                 }
                                 b"collections" => {
-                                    self.collections(worker, &crate::attr2map(&attributes));
+                                    self.collections(&crate::attr2map(&attributes));
                                 }
                                 b"stack" => {
                                     let attributes = crate::attr2map(&attributes);
                                     if let Some((None, Some(var))) =
                                         attributes.get(b"var".as_slice())
                                     {
-                                        worker.execute_script(
+                                        self.worker.execute_script(
                                             "stack.push",
                                             ("wd.stack.push({".to_owned()
                                                 + crate::quot_unescape(var).as_str()
@@ -420,7 +402,6 @@ wd.v=key=>{
                                         self,
                                         &crate::attr2map(&attributes),
                                         inner_xml,
-                                        worker,
                                         include_adaptor,
                                     )?);
                                     xml = &xml[outer_end..];
@@ -431,7 +412,6 @@ wd.v=key=>{
                                         self,
                                         &crate::attr2map(&attributes),
                                         inner_xml,
-                                        worker,
                                         include_adaptor,
                                     )?);
                                     xml = &xml[outer_end..];
@@ -442,15 +422,16 @@ wd.v=key=>{
                                         self,
                                         &crate::attr2map(&attributes),
                                         inner_xml,
-                                        worker,
                                         include_adaptor,
                                     )?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"tag" => {
                                     let mut r: Vec<u8> = Vec::new();
-                                    let (name, mut attr) =
-                                        Self::custom_tag(&crate::attr2map(&attributes), worker);
+                                    let (name, mut attr) = Self::custom_tag(
+                                        &crate::attr2map(&attributes),
+                                        &mut self.worker,
+                                    );
                                     tag_stack.push(name.clone());
                                     r.push(b'<');
                                     r.append(&mut name.into_bytes());
@@ -465,7 +446,7 @@ wd.v=key=>{
                         r.push(b'<');
                         r.append(&mut name.to_vec());
                         if let Some(ref attributes) = attributes {
-                            self.output_attrbutes(worker, &mut r, attributes)
+                            self.output_attrbutes(&mut r, attributes)
                         }
                         r.push(b'>');
                     }
@@ -478,7 +459,7 @@ wd.v=key=>{
                     let name = token.name();
                     if name.as_bytes() == b"wd:tag" {
                         let (name, mut attr) =
-                            Self::custom_tag(&crate::attr2map(&attributes), worker);
+                            Self::custom_tag(&crate::attr2map(&attributes), &mut self.worker);
                         r.push(b'<');
                         r.append(&mut name.into_bytes());
                         r.append(&mut attr);
@@ -488,7 +469,6 @@ wd.v=key=>{
                     } else {
                         if Self::is_wd_tag(&name) {
                             if let Some(mut parsed) = self.parse_wd_start_or_empty_tag(
-                                worker,
                                 include_adaptor,
                                 name.local().as_bytes(),
                                 &attributes,
@@ -499,7 +479,7 @@ wd.v=key=>{
                             r.push(b'<');
                             r.append(&mut name.to_vec());
                             if let Some(ref attributes) = attributes {
-                                self.output_attrbutes(worker, &mut r, attributes)
+                                self.output_attrbutes(&mut r, attributes)
                             }
                             r.push(b' ');
                             r.push(b'/');
@@ -523,7 +503,7 @@ wd.v=key=>{
                             | b"collections"
                             | b"sessions"
                             | b"session_sequence_cursor" => {
-                                let _ = worker.execute_script(
+                                let _ = self.worker.execute_script(
                                     "stack.pop",
                                     "wd.stack.pop();".to_owned().into(),
                                 );
@@ -572,14 +552,10 @@ wd.v=key=>{
         Ok(r)
     }
 
-    fn collections(
-        &self,
-        worker: &mut MainWorker,
-        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
-    ) {
-        let var = crate::attr_parse_or_static_string(worker, attributes, b"var");
+    fn collections(&mut self, attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>) {
+        let var = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"var");
 
-        let scope = &mut worker.js_runtime.handle_scope();
+        let scope = &mut self.worker.js_runtime.handle_scope();
         let context = scope.get_current_context();
         let scope = &mut v8::ContextScope::new(scope, context);
 
@@ -601,16 +577,17 @@ wd.v=key=>{
     }
     fn session(
         &mut self,
-        worker: &mut MainWorker,
         attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     ) -> io::Result<()> {
-        let session_name = crate::attr_parse_or_static_string(worker, &attributes, b"name");
+        let session_name =
+            crate::attr_parse_or_static_string(&mut self.worker, &attributes, b"name");
 
         if session_name != "" {
             let clear_on_close =
-                crate::attr_parse_or_static(worker, &attributes, b"clear_on_close");
+                crate::attr_parse_or_static(&mut self.worker, &attributes, b"clear_on_close");
 
-            let expire = crate::attr_parse_or_static_string(worker, &attributes, b"expire");
+            let expire =
+                crate::attr_parse_or_static_string(&mut self.worker, &attributes, b"expire");
             let expire = if expire.len() > 0 {
                 expire.parse::<i64>().ok()
             } else {
@@ -619,13 +596,16 @@ wd.v=key=>{
             if let Ok(mut session) =
                 Session::new(&self.database.read().unwrap(), &session_name, expire)
             {
-                let cursor = crate::attr_parse_or_static_string(worker, &attributes, b"cursor");
+                let cursor =
+                    crate::attr_parse_or_static_string(&mut self.worker, &attributes, b"cursor");
                 if cursor != "" {
                     if let Ok(cursor) = cursor.parse::<usize>() {
                         session.set_sequence_cursor(cursor)
                     }
                 }
-                if crate::attr_parse_or_static(worker, &attributes, b"initialize") == b"true" {
+                if crate::attr_parse_or_static(&mut self.worker, &attributes, b"initialize")
+                    == b"true"
+                {
                     self.database
                         .clone()
                         .read()
@@ -637,14 +617,10 @@ wd.v=key=>{
         }
         Ok(())
     }
-    fn sessions(
-        &self,
-        worker: &mut MainWorker,
-        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
-    ) {
-        let var = crate::attr_parse_or_static_string(worker, attributes, b"var");
+    fn sessions(&mut self, attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>) {
+        let var = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"var");
 
-        let scope = &mut worker.js_runtime.handle_scope();
+        let scope = &mut self.worker.js_runtime.handle_scope();
         let context = scope.get_current_context();
         let scope = &mut v8::ContextScope::new(scope, context);
 
@@ -668,11 +644,10 @@ wd.v=key=>{
     }
     fn session_sequence(
         &mut self,
-        worker: &mut MainWorker,
         attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     ) -> io::Result<()> {
         let str_max = {
-            let s = crate::attr_parse_or_static_string(worker, attributes, b"max");
+            let s = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"max");
             if s == "" {
                 "wd:session_sequence_max".to_owned()
             } else {
@@ -680,7 +655,7 @@ wd.v=key=>{
             }
         };
         let str_current = {
-            let s = crate::attr_parse_or_static_string(worker, attributes, b"current");
+            let s = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"current");
             if s == "" {
                 "wd:session_sequence_current".to_owned()
             } else {
@@ -688,7 +663,7 @@ wd.v=key=>{
             }
         };
 
-        let scope = &mut worker.js_runtime.handle_scope();
+        let scope = &mut self.worker.js_runtime.handle_scope();
         let context = scope.get_current_context();
         let scope = &mut v8::ContextScope::new(scope, context);
 
@@ -721,10 +696,10 @@ wd.v=key=>{
     }
     fn session_gc(
         &mut self,
-        worker: &mut MainWorker,
         attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     ) -> io::Result<()> {
-        let str_expire = crate::attr_parse_or_static_string(worker, attributes, b"expire");
+        let str_expire =
+            crate::attr_parse_or_static_string(&mut self.worker, attributes, b"expire");
         let mut expire = 60 * 60 * 24;
         if let Ok(parsed) = str_expire.parse::<i64>() {
             expire = parsed;
@@ -733,10 +708,10 @@ wd.v=key=>{
     }
     fn delete_collection(
         &mut self,
-        worker: &mut MainWorker,
         attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     ) -> Result<()> {
-        let str_collection = crate::attr_parse_or_static_string(worker, attributes, b"collection");
+        let str_collection =
+            crate::attr_parse_or_static_string(&mut self.worker, attributes, b"collection");
         self.database
             .clone()
             .write()
@@ -807,14 +782,14 @@ wd.v=key=>{
     }
 }
 
-fn get_wddb<'s>(scope: &mut v8::HandleScope<'s>) -> Option<&'s mut Arc<RwLock<SessionDatabase>>> {
+fn get_wddb<'s>(scope: &mut v8::HandleScope<'s>) -> Option<&'s Arc<RwLock<SessionDatabase>>> {
     if let Some(database) = v8::String::new(scope, "wd.database")
         .and_then(|code| v8::Script::compile(scope, code, None))
         .and_then(|v| v.run(scope))
     {
         Some(unsafe {
-            &mut *(v8::Local::<v8::External>::cast(database).value()
-                as *mut Arc<RwLock<SessionDatabase>>)
+            &*(v8::Local::<v8::External>::cast(database).value()
+                as *const Arc<RwLock<SessionDatabase>>)
         })
     } else {
         None
