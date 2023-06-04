@@ -34,25 +34,25 @@ impl WildDocResult {
 pub struct WildDoc<T: IncludeAdaptor> {
     database: Arc<RwLock<SessionDatabase>>,
     default_include_adaptor: T,
-    module_cache_dir: PathBuf,
+    cache_dir: PathBuf,
 }
 impl<T: IncludeAdaptor> WildDoc<T> {
     pub fn new<P: AsRef<Path>>(dir: P, default_include_adaptor: T) -> io::Result<Self> {
         let dir = dir.as_ref();
-        let mut module_cache_dir = dir.to_path_buf();
-        module_cache_dir.push("modules");
-        if !module_cache_dir.exists() {
-            std::fs::create_dir_all(&module_cache_dir)?;
+        let mut cache_dir = dir.to_path_buf();
+        cache_dir.push("modules");
+        if !cache_dir.exists() {
+            std::fs::create_dir_all(&cache_dir)?;
         }
         Ok(Self {
             database: Arc::new(RwLock::new(SessionDatabase::new(dir)?)),
             default_include_adaptor,
-            module_cache_dir,
+            cache_dir,
         })
     }
 
     pub fn run(&mut self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {
-        Script::new(self.database.clone(), self.module_cache_dir.clone()).parse_xml(
+        Script::new(self.database.clone(), self.cache_dir.clone()).parse_xml(
             input_json,
             xml,
             &mut self.default_include_adaptor,
@@ -64,7 +64,7 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         input_json: &[u8],
         include_adaptor: &mut impl IncludeAdaptor,
     ) -> Result<WildDocResult> {
-        Script::new(self.database.clone(), self.module_cache_dir.clone()).parse_xml(
+        Script::new(self.database.clone(), self.cache_dir.clone()).parse_xml(
             input_json,
             xml,
             include_adaptor,

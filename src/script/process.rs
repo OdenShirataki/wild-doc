@@ -40,7 +40,7 @@ pub(crate) fn get_include_content<T: IncludeAdaptor>(
                 false
             };
             script.include_stack.push(filename);
-            let r = script.parse(worker, xml.as_slice(), b"", include_adaptor)?;
+            let r = script.parse(worker, xml.as_slice(), include_adaptor)?;
             script.include_stack.pop();
             if stack_push {
                 worker.execute_script("stack.pop", "wd.stack.pop();".to_owned().into())?;
@@ -109,13 +109,13 @@ pub(super) fn case<T: IncludeAdaptor>(
                         if crate::eval_result(&mut worker.js_runtime.handle_scope(), cmp.as_str())
                             == b"true"
                         {
-                            return Ok(script.parse(worker, inner_xml, b"", include_adaptor)?);
+                            return Ok(script.parse(worker, inner_xml, include_adaptor)?);
                         }
                         xml = &xml[outer_end..];
                     }
                     b"wd:else" => {
                         let (inner_xml, _) = xml_util::inner(xml);
-                        return Ok(script.parse(worker, inner_xml, b"", include_adaptor)?);
+                        return Ok(script.parse(worker, inner_xml, include_adaptor)?);
                     }
                     _ => {}
                 }
@@ -144,7 +144,7 @@ pub(super) fn r#if<T: IncludeAdaptor>(
     include_adaptor: &mut T,
 ) -> Result<Vec<u8>> {
     if crate::attr_parse_or_static(worker, attributes, b"value") == b"true" {
-        return script.parse(worker, xml, b"", include_adaptor);
+        return script.parse(worker, xml, include_adaptor);
     }
     Ok(vec![])
 }
@@ -229,7 +229,7 @@ pub(super) fn r#for<T: IncludeAdaptor>(
                             .and_then(|code| v8::Script::compile(scope, code, None))
                             .and_then(|v| v.run(scope));
                     }
-                    r.append(&mut script.parse(worker, xml, b"", include_adaptor)?);
+                    r.append(&mut script.parse(worker, xml, include_adaptor)?);
                     worker.execute_script("pop stack", "wd.stack.pop()".to_owned().into())?;
                 }
             }

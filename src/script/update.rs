@@ -23,7 +23,7 @@ pub fn update<T: crate::IncludeAdaptor>(
     attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     include_adaptor: &mut T,
 ) -> Result<()> {
-    let inner_xml = script.parse(worker, xml, b"", include_adaptor)?;
+    let inner_xml = script.parse(worker, xml, include_adaptor)?;
     let updates = make_update_struct(script, inner_xml.as_slice(), worker)?;
     if let Some((ref mut session, _)) = script.sessions.last_mut() {
         let session_rows = script

@@ -168,7 +168,7 @@ wd.v=key=>{
             }
         }
 
-        let result_body = self.parse(&mut worker, xml, b"", include_adaptor)?;
+        let result_body = self.parse(&mut worker, xml, include_adaptor)?;
         let result_options = {
             let mut result_options = String::new();
             let scope = &mut worker.js_runtime.handle_scope();
@@ -298,7 +298,6 @@ wd.v=key=>{
         &mut self,
         worker: &mut MainWorker,
         xml: &[u8],
-        break_tag: &[u8],
         include_adaptor: &mut T,
     ) -> Result<Vec<u8>> {
         let mut r: Vec<u8> = Vec::new();
@@ -359,15 +358,9 @@ wd.v=key=>{
                                 }
                                 b"re" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let parsed =
-                                        self.parse(worker, inner_xml, b"", include_adaptor)?;
+                                    let parsed = self.parse(worker, inner_xml, include_adaptor)?;
                                     xml = &xml[outer_end..];
-                                    r.append(&mut self.parse(
-                                        worker,
-                                        &parsed,
-                                        b"",
-                                        include_adaptor,
-                                    )?);
+                                    r.append(&mut self.parse(worker, &parsed, include_adaptor)?);
                                 }
                                 b"letitgo" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
@@ -517,9 +510,6 @@ wd.v=key=>{
                     xml = &xml[pos..];
                     let token = token::borrowed::EndTag::from(token_bytes);
                     let name = token.name();
-                    if name.as_bytes() == break_tag {
-                        break;
-                    }
                     if if let Some(prefix) = name.namespace_prefix() {
                         prefix.as_bytes() == b"wd"
                     } else {
