@@ -35,14 +35,19 @@ mod update;
 mod module_loader;
 use module_loader::WdModuleLoader;
 
-pub struct Script {
+pub struct Script<T: IncludeAdaptor> {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<(Session, bool)>,
     worker: MainWorker,
+    include_adaptor: Arc<Mutex<T>>,
     include_stack: Vec<String>,
 }
-impl Script {
-    pub fn new(database: Arc<RwLock<SessionDatabase>>, module_cache_dir: PathBuf) -> Self {
+impl<T: IncludeAdaptor> Script<T> {
+    pub fn new(
+        database: Arc<RwLock<SessionDatabase>>,
+        include_adaptor: Arc<Mutex<T>>,
+        module_cache_dir: PathBuf,
+    ) -> Self {
         Self {
             database,
             sessions: vec![],
@@ -54,16 +59,12 @@ impl Script {
                     ..Default::default()
                 },
             ),
+            include_adaptor,
             include_stack: vec![],
         }
     }
 
-    pub fn parse_xml<T: IncludeAdaptor>(
-        &mut self,
-        input_json: &[u8],
-        xml: &[u8],
-        include_adaptor: Arc<Mutex<T>>,
-    ) -> Result<super::WildDocResult> {
+    pub fn parse_xml(&mut self, input_json: &[u8], xml: &[u8]) -> Result<super::WildDocResult> {
         self.worker.execute_script(
             "init",
             (r#"wd={
@@ -137,7 +138,7 @@ wd.v=key=>{
             ) {
                 let v8ext_include_adaptor = v8::External::new(
                     scope,
-                    &include_adaptor as *const Arc<Mutex<T>> as *mut c_void,
+                    &self.include_adaptor as *const Arc<Mutex<T>> as *mut c_void,
                 );
                 wd.define_own_property(
                     scope,
@@ -166,7 +167,7 @@ wd.v=key=>{
             }
         }
 
-        let result_body = self.parse(xml, include_adaptor)?;
+        let result_body = self.parse(xml)?;
         let result_options = {
             let mut result_options = String::new();
             let scope = &mut self.worker.js_runtime.handle_scope();
@@ -201,9 +202,8 @@ wd.v=key=>{
         })
     }
 
-    fn parse_wd_start_or_empty_tag<T: IncludeAdaptor>(
+    fn parse_wd_start_or_empty_tag(
         &mut self,
-        include_adaptor: Arc<Mutex<T>>,
         name: &[u8],
         attributes: &Option<Attributes>,
     ) -> Result<Option<Vec<u8>>> {
@@ -216,10 +216,9 @@ wd.v=key=>{
                 )));
             }
             b"include" => {
-                return Ok(Some(self.get_include_content(
-                    include_adaptor,
-                    &crate::attr2map(&attributes),
-                )?));
+                return Ok(Some(
+                    self.get_include_content(&crate::attr2map(&attributes))?,
+                ));
             }
             b"delete_collection" => {
                 self.delete_collection(&crate::attr2map(attributes))?;
@@ -284,11 +283,7 @@ wd.v=key=>{
         }
     }
 
-    pub fn parse<T: IncludeAdaptor>(
-        &mut self,
-        xml: &[u8],
-        include_adaptor: Arc<Mutex<T>>,
-    ) -> Result<Vec<u8>> {
+    pub fn parse(&mut self, xml: &[u8]) -> Result<Vec<u8>> {
         let mut r: Vec<u8> = Vec::new();
         let mut tag_stack = vec![];
         let mut search_map = HashMap::new();
@@ -327,11 +322,9 @@ wd.v=key=>{
                     let attributes = token.attributes();
                     let name = token.name();
                     if Self::is_wd_tag(&name) {
-                        if let Some(mut parsed) = self.parse_wd_start_or_empty_tag(
-                            include_adaptor.clone(),
-                            name.local().as_bytes(),
-                            &attributes,
-                        )? {
+                        if let Some(mut parsed) =
+                            self.parse_wd_start_or_empty_tag(name.local().as_bytes(), &attributes)?
+                        {
                             r.append(&mut parsed);
                         } else {
                             match name.local().as_bytes() {
@@ -346,9 +339,9 @@ wd.v=key=>{
                                 }
                                 b"re" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let parsed = self.parse(inner_xml, include_adaptor.clone())?;
+                                    let parsed = self.parse(inner_xml)?;
                                     xml = &xml[outer_end..];
-                                    r.append(&mut self.parse(&parsed, include_adaptor.clone())?);
+                                    r.append(&mut self.parse(&parsed)?);
                                 }
                                 b"letitgo" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
@@ -357,11 +350,7 @@ wd.v=key=>{
                                 }
                                 b"update" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    self.update(
-                                        inner_xml,
-                                        &crate::attr2map(&attributes),
-                                        include_adaptor.clone(),
-                                    )?;
+                                    self.update(inner_xml, &crate::attr2map(&attributes))?;
                                     xml = &xml[outer_end..];
                                 }
                                 b"search" => {
@@ -393,29 +382,24 @@ wd.v=key=>{
                                 }
                                 b"case" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut self.case(
-                                        &crate::attr2map(&attributes),
-                                        inner_xml,
-                                        include_adaptor.clone(),
-                                    )?);
+                                    r.append(
+                                        &mut self.case(&crate::attr2map(&attributes), inner_xml)?,
+                                    );
                                     xml = &xml[outer_end..];
                                 }
                                 b"if" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut self.r#if(
-                                        &crate::attr2map(&attributes),
-                                        inner_xml,
-                                        include_adaptor.clone(),
-                                    )?);
+                                    r.append(
+                                        &mut self.r#if(&crate::attr2map(&attributes), inner_xml)?,
+                                    );
                                     xml = &xml[outer_end..];
                                 }
                                 b"for" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut self.r#for(
-                                        &crate::attr2map(&attributes),
-                                        inner_xml,
-                                        include_adaptor.clone(),
-                                    )?);
+                                    r.append(
+                                        &mut self
+                                            .r#for(&crate::attr2map(&attributes), inner_xml)?,
+                                    );
                                     xml = &xml[outer_end..];
                                 }
                                 b"tag" => {
@@ -460,11 +444,9 @@ wd.v=key=>{
                         r.push(b'>');
                     } else {
                         if Self::is_wd_tag(&name) {
-                            if let Some(mut parsed) = self.parse_wd_start_or_empty_tag(
-                                include_adaptor.clone(),
-                                name.local().as_bytes(),
-                                &attributes,
-                            )? {
+                            if let Some(mut parsed) = self
+                                .parse_wd_start_or_empty_tag(name.local().as_bytes(), &attributes)?
+                            {
                                 r.append(&mut parsed);
                             }
                         } else {
@@ -772,18 +754,18 @@ wd.v=key=>{
         }
         (name, html_attr)
     }
+}
 
-    fn get_wddb<'s>(scope: &mut v8::HandleScope<'s>) -> Option<&'s Arc<RwLock<SessionDatabase>>> {
-        if let Some(database) = v8::String::new(scope, "wd.database")
-            .and_then(|code| v8::Script::compile(scope, code, None))
-            .and_then(|v| v.run(scope))
-        {
-            Some(unsafe {
-                &*(v8::Local::<v8::External>::cast(database).value()
-                    as *const Arc<RwLock<SessionDatabase>>)
-            })
-        } else {
-            None
-        }
+fn get_wddb<'s>(scope: &mut v8::HandleScope<'s>) -> Option<&'s Arc<RwLock<SessionDatabase>>> {
+    if let Some(database) = v8::String::new(scope, "wd.database")
+        .and_then(|code| v8::Script::compile(scope, code, None))
+        .and_then(|v| v.run(scope))
+    {
+        Some(unsafe {
+            &*(v8::Local::<v8::External>::cast(database).value()
+                as *const Arc<RwLock<SessionDatabase>>)
+        })
+    } else {
+        None
     }
 }

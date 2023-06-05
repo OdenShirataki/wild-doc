@@ -2,10 +2,13 @@ use deno_runtime::deno_napi::v8::{self, HandleScope, PropertyAttribute};
 use semilattice_database_session::{Condition, Order, OrderKey, Session, SessionDatabase};
 use std::{collections::HashMap, ffi::c_void};
 
+use crate::IncludeAdaptor;
+
+use super::get_wddb;
 use super::stack;
 use super::Script;
 
-impl Script {
+impl<T: IncludeAdaptor> Script<T> {
     pub(super) fn result(
         &mut self,
         attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
@@ -248,7 +251,7 @@ fn depends(
 ) {
     let this = args.this();
     if let (Some(db), Some(collection_id), Some(row)) = (
-        Script::get_wddb(scope),
+        get_wddb(scope),
         get_collection_id(scope, this),
         get_row(scope, this),
     ) {
@@ -271,7 +274,7 @@ fn session_depends(
 ) {
     let this = args.this();
     if let (Some(db), Some(collection_id), Some(row), Some(session)) = (
-        Script::get_wddb(scope),
+        get_wddb(scope),
         get_collection_id(scope, this),
         get_row(scope, this),
         get_session(scope, this),
@@ -360,7 +363,7 @@ fn field(
     let this = args.this();
 
     if let (Some(db), Some(collection_id), Some(row)) = (
-        Script::get_wddb(scope),
+        get_wddb(scope),
         get_collection_id(scope, this),
         get_row(scope, this),
     ) {
@@ -386,7 +389,7 @@ fn session_field(
     let this = args.this();
 
     if let (Some(db), Some(collection_id), Some(row), Some(session)) = (
-        Script::get_wddb(scope),
+        get_wddb(scope),
         get_collection_id(scope, this),
         get_row(scope, this),
         get_session(scope, this),

@@ -11,8 +11,10 @@ use maybe_xml::{
 };
 use semilattice_database_session::{search, Activity, CollectionRow, Condition, Depend, Uuid};
 
+use crate::IncludeAdaptor;
+
 use super::Script;
-impl Script {
+impl<T: IncludeAdaptor> Script<T> {
     pub(crate) fn search<'a>(
         &mut self,
         xml: &'a [u8],

@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::collections::HashMap;
 
 use deno_runtime::deno_core::v8;
 use maybe_xml::{
@@ -13,19 +10,19 @@ use crate::{anyhow::Result, xml_util, IncludeAdaptor};
 
 use super::Script;
 
-impl Script {
-    pub(super) fn get_include_content<T: IncludeAdaptor>(
+impl<T: IncludeAdaptor> Script<T> {
+    pub(super) fn get_include_content(
         &mut self,
-        include_adaptor: Arc<Mutex<T>>,
         attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
     ) -> Result<Vec<u8>> {
         let src = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"src");
-        let (xml, filename) = if let Some(xml) = include_adaptor.lock().unwrap().include(&src) {
+        let (xml, filename) = if let Some(xml) = self.include_adaptor.lock().unwrap().include(&src)
+        {
             (Some(xml), src)
         } else {
             let substitute =
                 crate::attr_parse_or_static_string(&mut self.worker, attributes, b"substitute");
-            if let Some(xml) = include_adaptor.lock().unwrap().include(&substitute) {
+            if let Some(xml) = self.include_adaptor.lock().unwrap().include(&substitute) {
                 (Some(xml), substitute)
             } else {
                 (None, "".to_owned())
@@ -44,7 +41,7 @@ impl Script {
                     false
                 };
                 self.include_stack.push(filename);
-                let r = self.parse(xml.as_slice(), include_adaptor)?;
+                let r = self.parse(xml.as_slice())?;
                 self.include_stack.pop();
                 if stack_push {
                     self.worker
@@ -57,11 +54,10 @@ impl Script {
         Ok(b"".to_vec())
     }
 
-    pub(super) fn case<T: IncludeAdaptor>(
+    pub(super) fn case(
         &mut self,
         attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
         xml: &[u8],
-        include_adaptor: Arc<Mutex<T>>,
     ) -> Result<Vec<u8>> {
         let cmp_src = match attributes.get(b"value".as_slice()) {
             Some((None, Some(value))) => {
@@ -115,13 +111,13 @@ impl Script {
                                 cmp.as_str(),
                             ) == b"true"
                             {
-                                return Ok(self.parse(inner_xml, include_adaptor)?);
+                                return Ok(self.parse(inner_xml)?);
                             }
                             xml = &xml[outer_end..];
                         }
                         b"wd:else" => {
                             let (inner_xml, _) = xml_util::inner(xml);
-                            return Ok(self.parse(inner_xml, include_adaptor)?);
+                            return Ok(self.parse(inner_xml)?);
                         }
                         _ => {}
                     }
@@ -142,23 +138,21 @@ impl Script {
         Ok(vec![])
     }
 
-    pub(super) fn r#if<T: IncludeAdaptor>(
+    pub(super) fn r#if(
         &mut self,
         attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
         xml: &[u8],
-        include_adaptor: Arc<Mutex<T>>,
     ) -> Result<Vec<u8>> {
         if crate::attr_parse_or_static(&mut self.worker, attributes, b"value") == b"true" {
-            return self.parse(xml, include_adaptor);
+            return self.parse(xml);
         }
         Ok(vec![])
     }
 
-    pub(super) fn r#for<T: IncludeAdaptor>(
+    pub(super) fn r#for(
         &mut self,
         attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
         xml: &[u8],
-        include_adaptor: Arc<Mutex<T>>,
     ) -> Result<Vec<u8>> {
         let mut r = Vec::new();
         let var = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"var");
@@ -237,7 +231,7 @@ impl Script {
                                 .and_then(|code| v8::Script::compile(scope, code, None))
                                 .and_then(|v| v.run(scope));
                         }
-                        r.append(&mut self.parse(xml, include_adaptor.clone())?);
+                        r.append(&mut self.parse(xml)?);
                         self.worker
                             .execute_script("pop stack", "wd.stack.pop()".to_owned().into())?;
                     }

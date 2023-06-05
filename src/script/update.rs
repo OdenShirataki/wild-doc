@@ -7,15 +7,11 @@ use maybe_xml::{
 use semilattice_database_session::{
     Activity, CollectionRow, Depends, KeyValue, Pend, Record, Term,
 };
-use std::{
-    collections::HashMap,
-    error, fmt,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, error, fmt};
 
 use crate::{
     anyhow::{anyhow, Result},
-    xml_util,
+    xml_util, IncludeAdaptor,
 };
 
 use super::Script;
@@ -33,14 +29,13 @@ impl error::Error for DependError {
     }
 }
 
-impl Script {
-    pub fn update<T: crate::IncludeAdaptor>(
+impl<T: IncludeAdaptor> Script<T> {
+    pub fn update(
         &mut self,
         xml: &[u8],
         attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
-        include_adaptor: Arc<Mutex<T>>,
     ) -> Result<()> {
-        let inner_xml = self.parse(xml, include_adaptor)?;
+        let inner_xml = self.parse(xml)?;
         let updates = self.make_update_struct(inner_xml.as_slice())?;
         if let Some((ref mut session, _)) = self.sessions.last_mut() {
             let session_rows = self

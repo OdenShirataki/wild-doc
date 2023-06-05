@@ -52,11 +52,12 @@ impl<T: IncludeAdaptor> WildDoc<T> {
     }
 
     pub fn run(&mut self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {
-        Script::new(self.database.clone(), self.cache_dir.clone()).parse_xml(
-            input_json,
-            xml,
+        Script::new(
+            self.database.clone(),
             self.default_include_adaptor.clone(),
+            self.cache_dir.clone(),
         )
+        .parse_xml(input_json, xml)
     }
     pub fn run_specify_include_adaptor<I: IncludeAdaptor>(
         &mut self,
@@ -64,11 +65,12 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         input_json: &[u8],
         include_adaptor: I,
     ) -> Result<WildDocResult> {
-        Script::new(self.database.clone(), self.cache_dir.clone()).parse_xml(
-            input_json,
-            xml,
+        Script::new(
+            self.database.clone(),
             Arc::new(Mutex::new(include_adaptor)),
+            self.cache_dir.clone(),
         )
+        .parse_xml(input_json, xml)
     }
 }
 
