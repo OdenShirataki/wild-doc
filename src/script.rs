@@ -430,7 +430,6 @@ wd.v=key=>{
                                     xml = &xml[outer_end..];
                                 }
                                 b"tag" => {
-                                    let mut r: Vec<u8> = Vec::new();
                                     let (name, mut attr) =
                                         Self::custom_tag(&attributes, &mut self.worker);
                                     tag_stack.push(name.clone());
@@ -438,7 +437,6 @@ wd.v=key=>{
                                     r.append(&mut name.into_bytes());
                                     r.append(&mut attr);
                                     r.push(b'>');
-                                    return Ok(r);
                                 }
                                 _ => {}
                             }
