@@ -1,13 +1,11 @@
 use std::{
-    collections::HashMap,
     io,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
 };
 
 use anyhow::Result;
-use deno_runtime::{deno_core::v8, deno_napi::v8::NewStringType, worker::MainWorker};
-use maybe_xml::token;
+use deno_runtime::{deno_core::v8, deno_napi::v8::NewStringType};
 pub use semilattice_database_session::anyhow;
 use semilattice_database_session::SessionDatabase;
 
@@ -74,32 +72,6 @@ impl<T: IncludeAdaptor> WildDoc<T> {
     }
 }
 
-fn eval_result(scope: &mut v8::HandleScope, var: &str) -> Vec<u8> {
-    if let Some(v8_value) = v8::String::new(scope, var)
-        .and_then(|code| v8::Script::compile(scope, code, None))
-        .and_then(|v| v.run(scope))
-    {
-        if v8_value.is_uint8_array() {
-            if let Ok(a) = v8::Local::<v8::Uint8Array>::try_from(v8_value) {
-                if let Some(buf) = a.buffer(scope) {
-                    let len = buf.byte_length();
-                    if let Some(data) = buf.get_backing_store().data() {
-                        let ptr = data.as_ptr() as *mut u8;
-                        unsafe {
-                            return core::slice::from_raw_parts(ptr, len).to_vec();
-                        }
-                    }
-                }
-            }
-        } else {
-            if let Some(string) = v8_value.to_string(scope) {
-                return string.to_rust_string_lossy(scope).as_bytes().to_owned();
-            }
-        }
-    }
-    vec![]
-}
-
 fn eval_result_string(scope: &mut v8::HandleScope, value: &[u8]) -> String {
     if let Some(v8_value) = v8::String::new_from_one_byte(scope, value, NewStringType::Normal)
         .and_then(|code| v8::Script::compile(scope, code, None))
@@ -115,76 +87,4 @@ fn eval_result_string(scope: &mut v8::HandleScope, value: &[u8]) -> String {
 pub(crate) fn quot_unescape(value: &[u8]) -> String {
     let str = unsafe { std::str::from_utf8_unchecked(value) };
     str.replace("&#039;", "'").replace("&quot;", "\"")
-}
-
-fn attr2map<'a>(
-    attributes: &'a Option<token::prop::Attributes>,
-) -> HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)> {
-    let mut map = HashMap::new();
-    if let Some(attributes) = attributes {
-        for a in attributes.iter() {
-            let name = a.name();
-            map.insert(
-                name.local().as_bytes().to_vec(),
-                (
-                    if let Some(prefix) = name.namespace_prefix() {
-                        Some(prefix.to_vec())
-                    } else {
-                        None
-                    },
-                    if let Some(value) = a.value() {
-                        Some(value.to_vec())
-                    } else {
-                        None
-                    },
-                ),
-            );
-        }
-    }
-    map
-}
-
-fn attr_parse_or_static_string(
-    worker: &mut MainWorker,
-    attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
-    key: &[u8],
-) -> String {
-    if let Some((prefix, Some(value))) = attributes.get(key) {
-        let prefix = if let Some(prefix) = prefix {
-            prefix.as_slice()
-        } else {
-            b""
-        };
-        return if prefix == b"wd" {
-            crate::eval_result_string(
-                &mut worker.js_runtime.handle_scope(),
-                quot_unescape(value).as_ref(),
-            )
-        } else {
-            quot_unescape(value)
-        };
-    }
-    "".to_owned()
-}
-fn attr_parse_or_static(
-    worker: &mut MainWorker,
-    attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
-    key: &[u8],
-) -> Vec<u8> {
-    if let Some((prefix, Some(value))) = attributes.get(key) {
-        let prefix = if let Some(prefix) = prefix {
-            prefix.as_slice()
-        } else {
-            b""
-        };
-        return if prefix == b"wd" {
-            crate::eval_result(
-                &mut worker.js_runtime.handle_scope(),
-                quot_unescape(value).as_ref(),
-            )
-        } else {
-            quot_unescape(value).as_bytes().to_vec()
-        };
-    }
-    vec![]
 }

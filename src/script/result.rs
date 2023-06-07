@@ -6,80 +6,86 @@ use crate::IncludeAdaptor;
 
 use super::get_wddb;
 use super::stack;
+use super::AttributeMap;
 use super::Script;
 
 impl<T: IncludeAdaptor> Script<T> {
     pub(super) fn result(
         &mut self,
-        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
+        attributes: &AttributeMap,
         search_map: &HashMap<String, (i32, Vec<Condition>)>,
     ) {
-        let search = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"search");
-        let var = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"var");
-
-        let orders = make_order(&crate::attr_parse_or_static_string(
-            &mut self.worker,
-            attributes,
-            b"sort",
-        ));
-
         let scope = &mut self.worker.js_runtime.handle_scope();
         let context = scope.get_current_context();
         let scope = &mut v8::ContextScope::new(scope, context);
-
         let obj = v8::Object::new(scope);
 
-        if search != "" && var != "" {
-            if let Some(v8str_var) = v8::String::new(scope, &var) {
-                let return_obj = v8::Array::new(scope, 0);
-                if let (Some(v8str_field), Some(v8str_depends), Some((collection_id, conditions))) = (
-                    v8::String::new(scope, "field"),
-                    v8::String::new(scope, "depends"),
-                    search_map.get(&search),
-                ) {
-                    let collection_id = *collection_id;
-                    let mut session_maybe_has_collection = None;
-                    for i in (0..self.sessions.len()).rev() {
-                        if let Some(_) = self.sessions[i].0.temporary_collection(collection_id) {
-                            session_maybe_has_collection = Some(i);
-                            break;
+        if let (Some(Some(search)), Some(Some(var))) = (
+            attributes.get(b"search".as_ref()),
+            attributes.get(b"var".as_ref()),
+        ) {
+            let orders = make_order(if let Some(Some(sort)) = attributes.get(b"sort".as_ref()) {
+                sort
+            } else {
+                ""
+            });
+            if search != "" && var != "" {
+                if let Some(v8str_var) = v8::String::new(scope, &var) {
+                    let return_obj = v8::Array::new(scope, 0);
+                    if let (
+                        Some(v8str_field),
+                        Some(v8str_depends),
+                        Some((collection_id, conditions)),
+                    ) = (
+                        v8::String::new(scope, "field"),
+                        v8::String::new(scope, "depends"),
+                        search_map.get(search),
+                    ) {
+                        let collection_id = *collection_id;
+                        let mut session_maybe_has_collection = None;
+                        for i in (0..self.sessions.len()).rev() {
+                            if let Some(_) = self.sessions[i].0.temporary_collection(collection_id)
+                            {
+                                session_maybe_has_collection = Some(i);
+                                break;
+                            }
                         }
-                    }
 
-                    if let Some(collection) = self
-                        .database
-                        .clone()
-                        .read()
-                        .unwrap()
-                        .collection(collection_id)
-                    {
-                        if let Some(session_index) = session_maybe_has_collection {
-                            let session = &mut self.sessions[session_index].0;
-                            let addr = session as *mut Session as *mut c_void;
-                            let v8ext_session = v8::External::new(scope, addr);
-                            if let (
-                                Some(v8func_field),
-                                Some(v8func_depends),
-                                Some(v8str_session),
-                                Some(temporary_collection),
-                            ) = (
-                                v8::Function::new(scope, session_field),
-                                v8::Function::new(scope, session_depends),
-                                v8::String::new(scope, "session"),
-                                session.temporary_collection(collection_id),
-                            ) {
-                                let mut i = 0;
-                                let search = session.search(collection_id, conditions);
-                                for row in self
-                                    .database
-                                    .clone()
-                                    .read()
-                                    .unwrap()
-                                    .result_session(search, orders)
-                                    .unwrap()
-                                {
-                                    let (activity, term_begin, term_end) =
-                                        if let Some(tr) = temporary_collection.get(&row) {
+                        if let Some(collection) = self
+                            .database
+                            .clone()
+                            .read()
+                            .unwrap()
+                            .collection(collection_id)
+                        {
+                            if let Some(session_index) = session_maybe_has_collection {
+                                let session = &mut self.sessions[session_index].0;
+                                let addr = session as *mut Session as *mut c_void;
+                                let v8ext_session = v8::External::new(scope, addr);
+                                if let (
+                                    Some(v8func_field),
+                                    Some(v8func_depends),
+                                    Some(v8str_session),
+                                    Some(temporary_collection),
+                                ) = (
+                                    v8::Function::new(scope, session_field),
+                                    v8::Function::new(scope, session_depends),
+                                    v8::String::new(scope, "session"),
+                                    session.temporary_collection(collection_id),
+                                ) {
+                                    let mut i = 0;
+                                    let search = session.search(collection_id, conditions);
+                                    for row in self
+                                        .database
+                                        .clone()
+                                        .read()
+                                        .unwrap()
+                                        .result_session(search, orders)
+                                        .unwrap()
+                                    {
+                                        let (activity, term_begin, term_end) = if let Some(tr) =
+                                            temporary_collection.get(&row)
+                                        {
                                             (tr.activity() as i32, tr.term_begin(), tr.term_end())
                                         } else {
                                             let row = row as u32;
@@ -90,119 +96,126 @@ impl<T: IncludeAdaptor> Script<T> {
                                             )
                                         };
 
-                                    let obj = set_values(
-                                        scope,
-                                        collection_id,
-                                        collection.name(),
-                                        row,
-                                        activity,
-                                        term_begin,
-                                        term_end,
-                                    );
+                                        let obj = set_values(
+                                            scope,
+                                            collection_id,
+                                            collection.name(),
+                                            row,
+                                            activity,
+                                            term_begin,
+                                            term_end,
+                                        );
 
-                                    set_serial(
-                                        scope,
-                                        obj,
-                                        if row > 0 {
-                                            collection.serial(row as u32)
-                                        } else {
-                                            0
-                                        },
-                                    );
-
-                                    obj.define_own_property(
-                                        scope,
-                                        v8str_session.into(),
-                                        v8ext_session.into(),
-                                        PropertyAttribute::READ_ONLY,
-                                    );
-
-                                    obj.define_own_property(
-                                        scope,
-                                        v8str_field.into(),
-                                        v8func_field.into(),
-                                        PropertyAttribute::READ_ONLY,
-                                    );
-                                    obj.define_own_property(
-                                        scope,
-                                        v8str_depends.into(),
-                                        v8func_depends.into(),
-                                        PropertyAttribute::READ_ONLY,
-                                    );
-
-                                    if row > 0 {
-                                        set_last_update(
+                                        set_serial(
                                             scope,
                                             obj,
-                                            collection.last_updated(row as u32),
+                                            if row > 0 {
+                                                collection.serial(row as u32)
+                                            } else {
+                                                0
+                                            },
                                         );
-                                        set_uuid(scope, obj, &collection.uuid_string(row as u32));
-                                    } else {
-                                        if let Some(tr) = temporary_collection.get(&row) {
-                                            set_uuid(scope, obj, &tr.uuid_string());
+
+                                        obj.define_own_property(
+                                            scope,
+                                            v8str_session.into(),
+                                            v8ext_session.into(),
+                                            PropertyAttribute::READ_ONLY,
+                                        );
+
+                                        obj.define_own_property(
+                                            scope,
+                                            v8str_field.into(),
+                                            v8func_field.into(),
+                                            PropertyAttribute::READ_ONLY,
+                                        );
+                                        obj.define_own_property(
+                                            scope,
+                                            v8str_depends.into(),
+                                            v8func_depends.into(),
+                                            PropertyAttribute::READ_ONLY,
+                                        );
+
+                                        if row > 0 {
+                                            set_last_update(
+                                                scope,
+                                                obj,
+                                                collection.last_updated(row as u32),
+                                            );
+                                            set_uuid(
+                                                scope,
+                                                obj,
+                                                &collection.uuid_string(row as u32),
+                                            );
+                                        } else {
+                                            if let Some(tr) = temporary_collection.get(&row) {
+                                                set_uuid(scope, obj, &tr.uuid_string());
+                                            }
                                         }
+                                        return_obj.set_index(scope, i, obj.into());
+                                        i += 1;
                                     }
-                                    return_obj.set_index(scope, i, obj.into());
-                                    i += 1;
                                 }
-                            }
-                        } else {
-                            if let (Some(v8func_field), Some(v8func_depends)) = (
-                                v8::Function::new(scope, field),
-                                v8::Function::new(scope, depends),
-                            ) {
-                                let mut search = self.database.read().unwrap().search(collection);
-                                for c in conditions {
-                                    search = search.search(c.clone());
-                                }
+                            } else {
+                                if let (Some(v8func_field), Some(v8func_depends)) = (
+                                    v8::Function::new(scope, field),
+                                    v8::Function::new(scope, depends),
+                                ) {
+                                    let mut search =
+                                        self.database.read().unwrap().search(collection);
+                                    for c in conditions {
+                                        search = search.search(c.clone());
+                                    }
 
-                                let rows = self
-                                    .database
-                                    .clone()
-                                    .read()
-                                    .unwrap()
-                                    .result(search, &orders)
-                                    .unwrap();
-                                let mut i = 0;
-                                for row in rows {
-                                    let obj = set_values(
-                                        scope,
-                                        collection_id as i32,
-                                        collection.name(),
-                                        row as i64,
-                                        collection.activity(row) as i32,
-                                        collection.term_begin(row),
-                                        collection.term_end(row),
-                                    );
+                                    let rows = self
+                                        .database
+                                        .clone()
+                                        .read()
+                                        .unwrap()
+                                        .result(search, &orders)
+                                        .unwrap();
+                                    let mut i = 0;
+                                    for row in rows {
+                                        let obj = set_values(
+                                            scope,
+                                            collection_id as i32,
+                                            collection.name(),
+                                            row as i64,
+                                            collection.activity(row) as i32,
+                                            collection.term_begin(row),
+                                            collection.term_end(row),
+                                        );
 
-                                    set_serial(scope, obj, collection.serial(row));
+                                        set_serial(scope, obj, collection.serial(row));
 
-                                    set_last_update(scope, obj, collection.last_updated(row));
-                                    set_uuid(scope, obj, &collection.uuid_string(row));
+                                        set_last_update(scope, obj, collection.last_updated(row));
+                                        set_uuid(scope, obj, &collection.uuid_string(row));
 
-                                    obj.define_own_property(
-                                        scope,
-                                        v8str_field.into(),
-                                        v8func_field.into(),
-                                        PropertyAttribute::READ_ONLY,
-                                    );
-                                    obj.define_own_property(
-                                        scope,
-                                        v8str_depends.into(),
-                                        v8func_depends.into(),
-                                        PropertyAttribute::READ_ONLY,
-                                    );
+                                        obj.define_own_property(
+                                            scope,
+                                            v8str_field.into(),
+                                            v8func_field.into(),
+                                            PropertyAttribute::READ_ONLY,
+                                        );
+                                        obj.define_own_property(
+                                            scope,
+                                            v8str_depends.into(),
+                                            v8func_depends.into(),
+                                            PropertyAttribute::READ_ONLY,
+                                        );
 
-                                    return_obj.set_index(scope, i, obj.into());
-                                    i += 1;
+                                        return_obj.set_index(scope, i, obj.into());
+                                        i += 1;
+                                    }
                                 }
                             }
                         }
                     }
+                    obj.set(scope, v8str_var.into(), return_obj.into());
                 }
-                obj.set(scope, v8str_var.into(), return_obj.into());
             }
         }
+
         stack::push(context, scope, obj);
     }
 }

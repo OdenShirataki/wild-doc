@@ -35,6 +35,8 @@ mod update;
 mod module_loader;
 use module_loader::WdModuleLoader;
 
+type AttributeMap = HashMap<Vec<u8>, Option<String>>;
+
 pub struct Script<T: IncludeAdaptor> {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<(Session, bool)>,
@@ -205,26 +207,26 @@ wd.v=key=>{
     fn parse_wd_start_or_empty_tag(
         &mut self,
         name: &[u8],
-        attributes: &Option<Attributes>,
+        attributes: &AttributeMap,
     ) -> Result<Option<Vec<u8>>> {
         match name {
             b"print" => {
-                return Ok(Some(crate::attr_parse_or_static(
-                    &mut self.worker,
-                    &crate::attr2map(attributes),
-                    b"value",
-                )));
+                return Ok(
+                    if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
+                        Some(value.as_bytes().to_vec())
+                    } else {
+                        None
+                    },
+                );
             }
             b"include" => {
-                return Ok(Some(
-                    self.get_include_content(&crate::attr2map(&attributes))?,
-                ));
+                return Ok(Some(self.get_include_content(attributes)?));
             }
             b"delete_collection" => {
-                self.delete_collection(&crate::attr2map(attributes))?;
+                self.delete_collection(attributes)?;
             }
             b"session_gc" => {
-                self.session_gc(&crate::attr2map(attributes))?;
+                self.session_gc(attributes)?;
             }
             _ => {}
         }
@@ -237,8 +239,8 @@ wd.v=key=>{
             false
         }
     }
-    fn output_attrbutes(&mut self, r: &mut Vec<u8>, attributes: &Attributes) {
-        for attribute in attributes.iter() {
+    fn output_attrbutes(&mut self, r: &mut Vec<u8>, attributes: Attributes) {
+        for attribute in attributes {
             r.push(b' ');
             let name = attribute.name();
             if let Some(prefix) = name.namespace_prefix() {
@@ -283,6 +285,44 @@ wd.v=key=>{
         }
     }
 
+    fn parse_attibutes(&mut self, attributes: Option<Attributes>) -> AttributeMap {
+        let mut r = HashMap::new();
+        if let Some(attributes) = attributes {
+            for attribute in attributes.iter() {
+                let name = attribute.name();
+                if name.as_bytes().starts_with(b"wd:") {
+                    r.insert(
+                        name.local().as_bytes().to_vec(),
+                        if let Some(value) = attribute.value() {
+                            Some(crate::eval_result_string(
+                                &mut self.worker.js_runtime.handle_scope(),
+                                crate::quot_unescape(value.as_bytes()).as_ref(),
+                            ))
+                        } else {
+                            None
+                        },
+                    );
+                } else {
+                    r.insert(
+                        name.to_vec(),
+                        if let Some(ref value) = attribute.value() {
+                            Some(
+                                if let Ok(value) = value.to_str() {
+                                    value
+                                } else {
+                                    ""
+                                }
+                                .to_owned(),
+                            )
+                        } else {
+                            None
+                        },
+                    );
+                }
+            }
+        }
+        r
+    }
     pub fn parse(&mut self, xml: &[u8]) -> Result<Vec<u8>> {
         let mut r: Vec<u8> = Vec::new();
         let mut tag_stack = vec![];
@@ -322,6 +362,7 @@ wd.v=key=>{
                     let attributes = token.attributes();
                     let name = token.name();
                     if Self::is_wd_tag(&name) {
+                        let attributes = self.parse_attibutes(attributes);
                         if let Some(mut parsed) =
                             self.parse_wd_start_or_empty_tag(name.local().as_bytes(), &attributes)?
                         {
@@ -329,13 +370,13 @@ wd.v=key=>{
                         } else {
                             match name.local().as_bytes() {
                                 b"session" => {
-                                    self.session(&crate::attr2map(&attributes))?;
+                                    self.session(&attributes)?;
                                 }
                                 b"session_sequence_cursor" => {
-                                    self.session_sequence(&crate::attr2map(&attributes))?;
+                                    self.session_sequence(&attributes)?;
                                 }
                                 b"sessions" => {
-                                    self.sessions(&crate::attr2map(&attributes));
+                                    self.sessions(&attributes);
                                 }
                                 b"re" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
@@ -350,31 +391,24 @@ wd.v=key=>{
                                 }
                                 b"update" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    self.update(inner_xml, &crate::attr2map(&attributes))?;
+                                    self.update(inner_xml, &attributes)?;
                                     xml = &xml[outer_end..];
                                 }
                                 b"search" => {
-                                    xml = self.search(
-                                        xml,
-                                        &crate::attr2map(&attributes),
-                                        &mut search_map,
-                                    );
+                                    xml = self.search(xml, &attributes, &mut search_map);
                                 }
                                 b"result" => {
-                                    self.result(&crate::attr2map(&attributes), &search_map);
+                                    self.result(&attributes, &search_map);
                                 }
                                 b"collections" => {
-                                    self.collections(&crate::attr2map(&attributes));
+                                    self.collections(&attributes);
                                 }
                                 b"stack" => {
-                                    let attributes = crate::attr2map(&attributes);
-                                    if let Some((None, Some(var))) =
-                                        attributes.get(b"var".as_slice())
-                                    {
+                                    if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
                                         self.worker.execute_script(
                                             "stack.push",
                                             ("wd.stack.push({".to_owned()
-                                                + crate::quot_unescape(var).as_str()
+                                                + crate::quot_unescape(var.as_bytes()).as_str()
                                                 + "});")
                                                 .into(),
                                         )?;
@@ -382,32 +416,23 @@ wd.v=key=>{
                                 }
                                 b"case" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(
-                                        &mut self.case(&crate::attr2map(&attributes), inner_xml)?,
-                                    );
+                                    r.append(&mut self.case(&attributes, inner_xml)?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"if" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(
-                                        &mut self.r#if(&crate::attr2map(&attributes), inner_xml)?,
-                                    );
+                                    r.append(&mut self.r#if(&attributes, inner_xml)?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"for" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(
-                                        &mut self
-                                            .r#for(&crate::attr2map(&attributes), inner_xml)?,
-                                    );
+                                    r.append(&mut self.r#for(&attributes, inner_xml)?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"tag" => {
                                     let mut r: Vec<u8> = Vec::new();
-                                    let (name, mut attr) = Self::custom_tag(
-                                        &crate::attr2map(&attributes),
-                                        &mut self.worker,
-                                    );
+                                    let (name, mut attr) =
+                                        Self::custom_tag(&attributes, &mut self.worker);
                                     tag_stack.push(name.clone());
                                     r.push(b'<');
                                     r.append(&mut name.into_bytes());
@@ -421,7 +446,7 @@ wd.v=key=>{
                     } else {
                         r.push(b'<');
                         r.append(&mut name.to_vec());
-                        if let Some(ref attributes) = attributes {
+                        if let Some(attributes) = attributes {
                             self.output_attrbutes(&mut r, attributes)
                         }
                         r.push(b'>');
@@ -431,11 +456,10 @@ wd.v=key=>{
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
                     let token = token::borrowed::EmptyElementTag::from(token_bytes);
-                    let attributes = token.attributes();
                     let name = token.name();
                     if name.as_bytes() == b"wd:tag" {
-                        let (name, mut attr) =
-                            Self::custom_tag(&crate::attr2map(&attributes), &mut self.worker);
+                        let attributes = self.parse_attibutes(token.attributes());
+                        let (name, mut attr) = Self::custom_tag(&attributes, &mut self.worker);
                         r.push(b'<');
                         r.append(&mut name.into_bytes());
                         r.append(&mut attr);
@@ -444,6 +468,7 @@ wd.v=key=>{
                         r.push(b'>');
                     } else {
                         if Self::is_wd_tag(&name) {
+                            let attributes = self.parse_attibutes(token.attributes());
                             if let Some(mut parsed) = self
                                 .parse_wd_start_or_empty_tag(name.local().as_bytes(), &attributes)?
                             {
@@ -452,7 +477,7 @@ wd.v=key=>{
                         } else {
                             r.push(b'<');
                             r.append(&mut name.to_vec());
-                            if let Some(ref attributes) = attributes {
+                            if let Some(attributes) = token.attributes() {
                                 self.output_attrbutes(&mut r, attributes)
                             }
                             r.push(b' ');
@@ -526,85 +551,19 @@ wd.v=key=>{
         Ok(r)
     }
 
-    fn collections(&mut self, attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>) {
-        let var = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"var");
-
+    fn collections(&mut self, attributes: &AttributeMap) {
         let scope = &mut self.worker.js_runtime.handle_scope();
         let context = scope.get_current_context();
         let scope = &mut v8::ContextScope::new(scope, context);
 
         let obj = v8::Object::new(scope);
-        if var != "" {
-            if let (Ok(array), Some(v8str_var)) = (
-                deno_core::serde_v8::to_v8(scope, self.database.read().unwrap().collections()),
-                v8::String::new(scope, &var),
-            ) {
-                obj.define_own_property(
-                    scope,
-                    v8str_var.into(),
-                    array.into(),
-                    PropertyAttribute::READ_ONLY,
-                );
-            }
-        }
-        stack::push(context, scope, obj);
-    }
-    fn session(
-        &mut self,
-        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
-    ) -> io::Result<()> {
-        let session_name =
-            crate::attr_parse_or_static_string(&mut self.worker, &attributes, b"name");
 
-        if session_name != "" {
-            let clear_on_close =
-                crate::attr_parse_or_static(&mut self.worker, &attributes, b"clear_on_close");
-
-            let expire =
-                crate::attr_parse_or_static_string(&mut self.worker, &attributes, b"expire");
-            let expire = if expire.len() > 0 {
-                expire.parse::<i64>().ok()
-            } else {
-                None
-            };
-            if let Ok(mut session) =
-                Session::new(&self.database.read().unwrap(), &session_name, expire)
-            {
-                let cursor =
-                    crate::attr_parse_or_static_string(&mut self.worker, &attributes, b"cursor");
-                if cursor != "" {
-                    if let Ok(cursor) = cursor.parse::<usize>() {
-                        session.set_sequence_cursor(cursor)
-                    }
-                }
-                if crate::attr_parse_or_static(&mut self.worker, &attributes, b"initialize")
-                    == b"true"
-                {
-                    self.database
-                        .clone()
-                        .read()
-                        .unwrap()
-                        .session_restart(&mut session, expire)?;
-                }
-                self.sessions.push((session, clear_on_close == b"true"));
-            }
-        }
-        Ok(())
-    }
-    fn sessions(&mut self, attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>) {
-        let var = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"var");
-
-        let scope = &mut self.worker.js_runtime.handle_scope();
-        let context = scope.get_current_context();
-        let scope = &mut v8::ContextScope::new(scope, context);
-
-        let obj = v8::Object::new(scope);
-        if var != "" {
-            if let (Ok(sessions), Some(v8str_var)) = (
-                self.database.read().unwrap().sessions(),
-                v8::String::new(scope, &var),
-            ) {
-                if let Ok(array) = deno_core::serde_v8::to_v8(scope, sessions) {
+        if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
+            if var != "" {
+                if let (Ok(array), Some(v8str_var)) = (
+                    deno_core::serde_v8::to_v8(scope, self.database.read().unwrap().collections()),
+                    v8::String::new(scope, &var),
+                ) {
                     obj.define_own_property(
                         scope,
                         v8str_var.into(),
@@ -616,26 +575,95 @@ wd.v=key=>{
         }
         stack::push(context, scope, obj);
     }
-    fn session_sequence(
-        &mut self,
-        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
-    ) -> io::Result<()> {
-        let str_max = {
-            let s = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"max");
-            if s == "" {
-                "wd:session_sequence_max".to_owned()
-            } else {
-                s
+    fn session(&mut self, attributes: &AttributeMap) -> io::Result<()> {
+        if let Some(Some(session_name)) = attributes.get(b"name".as_ref()) {
+            if session_name != "" {
+                let clear_on_close =
+                    if let Some(Some(col)) = attributes.get(b"clear_on_close".as_ref()) {
+                        col == "true"
+                    } else {
+                        false
+                    };
+
+                let expire = if let Some(Some(expire)) = attributes.get(b"expire".as_ref()) {
+                    expire
+                } else {
+                    ""
+                };
+                let expire = if expire.len() > 0 {
+                    expire.parse::<i64>().ok()
+                } else {
+                    None
+                };
+                if let Ok(mut session) =
+                    Session::new(&self.database.read().unwrap(), session_name, expire)
+                {
+                    if let Some(Some(cursor)) = attributes.get(b"cursor".as_ref()) {
+                        if cursor != "" {
+                            if let Ok(cursor) = cursor.parse::<usize>() {
+                                session.set_sequence_cursor(cursor)
+                            }
+                        }
+                    }
+                    if let Some(Some(initialize)) = attributes.get(b"initialize".as_ref()) {
+                        if initialize == "true" {
+                            self.database
+                                .clone()
+                                .read()
+                                .unwrap()
+                                .session_restart(&mut session, expire)?;
+                        }
+                    }
+                    self.sessions.push((session, clear_on_close));
+                }
             }
-        };
-        let str_current = {
-            let s = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"current");
-            if s == "" {
-                "wd:session_sequence_current".to_owned()
-            } else {
-                s
+        }
+        Ok(())
+    }
+    fn sessions(&mut self, attributes: &AttributeMap) {
+        let scope = &mut self.worker.js_runtime.handle_scope();
+        let context = scope.get_current_context();
+        let scope = &mut v8::ContextScope::new(scope, context);
+
+        let obj = v8::Object::new(scope);
+
+        if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
+            if var != "" {
+                if let (Ok(sessions), Some(v8str_var)) = (
+                    self.database.read().unwrap().sessions(),
+                    v8::String::new(scope, &var),
+                ) {
+                    if let Ok(array) = deno_core::serde_v8::to_v8(scope, sessions) {
+                        obj.define_own_property(
+                            scope,
+                            v8str_var.into(),
+                            array.into(),
+                            PropertyAttribute::READ_ONLY,
+                        );
+                    }
+                }
             }
+        }
+        stack::push(context, scope, obj);
+    }
+    fn session_sequence(&mut self, attributes: &AttributeMap) -> io::Result<()> {
+        let mut str_max = if let Some(Some(s)) = attributes.get(b"max".as_ref()) {
+            s
+        } else {
+            ""
         };
+        if str_max == "" {
+            str_max = "wd:session_sequence_max";
+        }
+
+        let mut str_current = if let Some(Some(s)) = attributes.get(b"current".as_ref()) {
+            s
+        } else {
+            ""
+        };
+        if str_current == "" {
+            str_current = "wd:session_sequence_current";
+        }
 
         let scope = &mut self.worker.js_runtime.handle_scope();
         let context = scope.get_current_context();
@@ -668,90 +696,62 @@ wd.v=key=>{
         stack::push(context, scope, obj);
         Ok(())
     }
-    fn session_gc(
-        &mut self,
-        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
-    ) -> io::Result<()> {
-        let str_expire =
-            crate::attr_parse_or_static_string(&mut self.worker, attributes, b"expire");
+    fn session_gc(&mut self, attributes: &AttributeMap) -> io::Result<()> {
         let mut expire = 60 * 60 * 24;
-        if let Ok(parsed) = str_expire.parse::<i64>() {
-            expire = parsed;
+        if let Some(Some(str_expire)) = attributes.get(b"expire".as_ref()) {
+            if let Ok(parsed) = str_expire.parse::<i64>() {
+                expire = parsed;
+            }
         }
         self.database.write().unwrap().session_gc(expire)
     }
-    fn delete_collection(
-        &mut self,
-        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
-    ) -> Result<()> {
-        let str_collection =
-            crate::attr_parse_or_static_string(&mut self.worker, attributes, b"collection");
-        self.database
-            .clone()
-            .write()
-            .unwrap()
-            .delete_collection(&str_collection)
+    fn delete_collection(&mut self, attributes: &AttributeMap) -> Result<()> {
+        if let Some(Some(str_collection)) = attributes.get(b"collection".as_ref()) {
+            self.database
+                .clone()
+                .write()
+                .unwrap()
+                .delete_collection(str_collection)?;
+        }
+        Ok(())
     }
 
-    fn custom_tag(
-        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
-        worker: &mut MainWorker,
-    ) -> (String, Vec<u8>) {
+    fn custom_tag(attributes: &AttributeMap, worker: &mut MainWorker) -> (String, Vec<u8>) {
         let scope = &mut worker.js_runtime.handle_scope();
         let context = scope.get_current_context();
         let scope = &mut v8::ContextScope::new(scope, context);
         let mut html_attr = vec![];
         let mut name = "".to_string();
-        for (local, (prefix, value)) in attributes {
+        for (key, value) in attributes {
             if let Some(value) = value {
-                let prefix = if let Some(prefix) = prefix {
-                    prefix.to_vec()
-                } else {
-                    b"".to_vec()
-                };
-                if prefix == b"wd-tag" && local == b"name" {
-                    name = crate::eval_result_string(scope, value);
-                } else {
-                    if prefix == b"wd-attr" && local == b"replace" {
-                        let attr = crate::eval_result_string(
-                            scope,
-                            crate::quot_unescape(value).as_bytes(),
-                        );
-                        if attr.len() > 0 {
-                            html_attr.push(b' ');
-                            html_attr.append(&mut attr.into_bytes());
-                        }
-                    } else {
-                        let is_wd = prefix == b"wd";
-                        let mut attr_key = if is_wd {
-                            local.to_vec()
-                        } else {
-                            let mut prefix = prefix.to_vec();
-                            prefix.push(b':');
-                            prefix.append(&mut local.to_vec());
-                            prefix
-                        };
+                if key == b"wd-tag:name" {
+                    name = crate::eval_result_string(scope, value.as_bytes());
+                } else if key == b"wd-attr:replace" {
+                    let attr = crate::eval_result_string(
+                        scope,
+                        crate::quot_unescape(value.as_bytes()).as_bytes(),
+                    );
+                    if attr.len() > 0 {
                         html_attr.push(b' ');
-                        html_attr.append(&mut attr_key);
-                        html_attr.push(b'=');
-                        html_attr.push(b'"');
-                        if is_wd {
-                            html_attr
-                                .append(&mut crate::eval_result_string(scope, value).into_bytes());
-                        } else {
-                            html_attr.append(
-                                &mut unsafe { std::str::from_utf8_unchecked(value) }
-                                    .replace("&", "&amp;")
-                                    .replace("<", "&lt;")
-                                    .replace(">", "&gt;")
-                                    .into_bytes(),
-                            );
-                        }
-                        html_attr.push(b'"');
+                        html_attr.append(&mut attr.into_bytes());
                     }
+                } else {
+                    html_attr.push(b' ');
+                    html_attr.append(&mut key.to_vec());
+                    html_attr.push(b'=');
+                    html_attr.push(b'"');
+                    html_attr.append(
+                        &mut value
+                            .replace("&", "&amp;")
+                            .replace("<", "&lt;")
+                            .replace(">", "&gt;")
+                            .into_bytes(),
+                    );
+                    html_attr.push(b'"');
                 }
             }
         }
+
         (name, html_attr)
     }
 }

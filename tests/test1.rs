@@ -22,7 +22,7 @@ fn test1() {
     let r=wd.run(br#"<?typescript
         wd.general.test={a:1,b:2,c:3};
         console.log(wd.general.test);
-    ?><wd:for var="aa" index="i" wd:in="(()=>{return {a:1,b:2,c:3};})()"><wd:print wd:value="wd.v('i')" /> : <wd:print wd:value="wd.v('aa')" />
+    ?><wd:for var="aa" index="i" in="(()=>{return {a:1,b:2,c:3};})()"><wd:print wd:value="wd.v('i')" /> : <wd:print wd:value="wd.v('aa')" />
     </wd:for><wd:session name="logintest">
         <wd:update commit="0">
             <collection name="login">
@@ -31,11 +31,11 @@ fn test1() {
             </collection>
         </wd:update>
         <wd:search name="login" collection="login">
-        </wd:search><wd:result var="login" search="login"><wd:for var="r" index="i" wd:in="wd.v('login')">
+        </wd:search><wd:result var="login" search="login"><wd:for var="r" index="i" in="wd.v('login')">
             <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('test')" /><?typescript
                 console.log("cl",wd.v('r').depends('account'));
             ?>
-            <wd:for var="dep" index="i" wd:in="wd.v('r').depends('account')">
+            <wd:for var="dep" index="i" in="wd.v('r').depends('account')">
                 dep:<wd:print wd:value="wd.v('dep').row" />@<wd:print wd:value="wd.v('dep').collection" />
             </wd:for>
         </wd:for></wd:result>
@@ -112,7 +112,7 @@ fn test1() {
                 find <wd:print wd:value="wd.v('q').length" /> persons.
             </div>
             <ul>
-                <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                <wd:for var="r" index="i" in="wd.v('q')"><li>
                     <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').activity" /> : <wd:print wd:value="wd.v('r').uuid" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
                 </li></wd:for>
             </ul>
@@ -132,7 +132,7 @@ fn test1() {
                 find <wd:print wd:value="wd.v('q').length" /> persons from the US.
             </div>
             <ul>
-                <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                <wd:for var="r" index="i" in="wd.v('q')"><li>
                     <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
                 </li></wd:for>
             </ul>
@@ -167,7 +167,7 @@ fn test1() {
                 find <wd:print wd:value="wd.v('q').length" /> persons from the <wd:print wd:value="wd.general.uk" />.
             </div>
             <ul>
-                <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                <wd:for var="r" index="i" in="wd.v('q')"><li>
                     <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
                 </li></wd:for>
             </ul>
@@ -184,7 +184,7 @@ fn test1() {
         <wd:update commit="1">
             <wd:search name="person" collection="person"></wd:search>
             <wd:result var="q" search="person">
-                <wd:for var="r" index="i" wd:in="wd.v('q')">
+                <wd:for var="r" index="i" in="wd.v('q')">
                     hoge:<wd:print wd:value="wd.v('r').row" />
                     <collection name="person" wd:row="wd.v('r').row">
                         <field name="name">Renamed <wd:print wd:value="wd.v('r').field('name')" /></field>
@@ -201,7 +201,7 @@ fn test1() {
                 find <wd:print wd:value="wd.v('q').length" /> persons.
             </div>
             <ul>
-                <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+                <wd:for var="r" index="i" in="wd.v('q')"><li>
                     <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
                 </li></wd:for>
             </ul>

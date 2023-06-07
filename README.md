@@ -64,7 +64,7 @@ let r=wd.run(br#"
             find <wd:print wd:value="wd.v('q').length" /> persons.
         </div>
         <ul>
-            <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+            <wd:for var="r" index="i" in="wd.v('q')"><li>
                 <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
             </li></wd:for>
         </ul>
@@ -84,7 +84,7 @@ let r=wd.run(br#"
             find <wd:print wd:value="wd.v('q').length" /> persons from the US.
         </div>
         <ul>
-            <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+            <wd:for var="r" index="i" in="wd.v('q')"><li>
                 <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
             </li></wd:for>
         </ul>
@@ -117,7 +117,7 @@ let r=wd.run(br#"
             find <wd:print wd:value="wd.v('q').length" /> persons from the <wd:print wd:value="wd.general.uk" />.
         </div>
         <ul>
-            <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+            <wd:for var="r" index="i" in="wd.v('q')"><li>
                 <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
             </li></wd:for>
         </ul>
@@ -130,7 +130,7 @@ wd.run(br#"<wd:session name="hoge">
     <wd:update commit="1">
         <wd:search name="person" collection="person"></wd:search>
         <wd:result var="q" search="person">
-            <wd:for var="r" index="i" wd:in="wd.v('q')">
+            <wd:for var="r" index="i" in="wd.v('q')">
                 hoge:<wd:print wd:value="wd.v('r').row" />
                 <collection name="person" wd:row="wd.v('r').row">
                     <field name="name">Renamed <wd:print wd:value="wd.v('r').field('name')" /></field>
@@ -147,7 +147,7 @@ let r=wd.run(br#"
             find <wd:print wd:value="wd.v('q').length" /> persons.
         </div>
         <ul>
-            <wd:for var="r" index="i" wd:in="wd.v('q')"><li>
+            <wd:for var="r" index="i" in="wd.v('q')"><li>
                 <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
             </li></wd:for>
         </ul>

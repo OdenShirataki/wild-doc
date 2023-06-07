@@ -14,7 +14,7 @@ use crate::{
     xml_util, IncludeAdaptor,
 };
 
-use super::Script;
+use super::{AttributeMap, Script};
 
 #[derive(Debug, Clone)]
 struct DependError;
@@ -30,11 +30,7 @@ impl error::Error for DependError {
 }
 
 impl<T: IncludeAdaptor> Script<T> {
-    pub fn update(
-        &mut self,
-        xml: &[u8],
-        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
-    ) -> Result<()> {
+    pub fn update(&mut self, xml: &[u8], attributes: &AttributeMap) -> Result<()> {
         let inner_xml = self.parse(xml)?;
         let updates = self.make_update_struct(inner_xml.as_slice())?;
         if let Some((ref mut session, _)) = self.sessions.last_mut() {
@@ -44,33 +40,31 @@ impl<T: IncludeAdaptor> Script<T> {
                 .read()
                 .unwrap()
                 .update(session, updates)?;
-            let commit_rows =
-                if crate::attr_parse_or_static(&mut self.worker, &attributes, b"commit") == b"1" {
-                    self.database.write().unwrap().commit(session)?
-                } else {
-                    vec![]
-                };
-            let src = crate::attr_parse_or_static_string(
-                &mut self.worker,
-                &attributes,
-                b"result_callback",
-            );
-            if src.len() > 0 {
-                if let (Ok(json_commit_rows), Ok(json_session_rows)) = (
-                    serde_json::to_string(&commit_rows),
-                    serde_json::to_string(&session_rows),
-                ) {
-                    let _ = self.worker.execute_script(
-                        "commit",
-                        ("{const update_result={commit_rows:".to_owned()
-                            + json_commit_rows.as_str()
-                            + ",session_rows:"
-                            + json_session_rows.as_str()
-                            + "};"
-                            + src.as_str()
-                            + "}")
-                            .into(),
-                    );
+
+            let mut commit_rows = vec![];
+            if let Some(Some(commit)) = attributes.get(b"commit".as_ref()) {
+                if commit == "1" {
+                    commit_rows = self.database.write().unwrap().commit(session)?;
+                }
+            }
+            if let Some(Some(src)) = attributes.get(b"result_callback".as_ref()) {
+                if src.len() > 0 {
+                    if let (Ok(json_commit_rows), Ok(json_session_rows)) = (
+                        serde_json::to_string(&commit_rows),
+                        serde_json::to_string(&session_rows),
+                    ) {
+                        let _ = self.worker.execute_script(
+                            "commit",
+                            ("{const update_result={commit_rows:".to_owned()
+                                + json_commit_rows.as_str()
+                                + ",session_rows:"
+                                + json_session_rows.as_str()
+                                + "};"
+                                + src.as_str()
+                                + "}")
+                                .into(),
+                        );
+                    }
                 }
             }
         }
@@ -79,55 +73,55 @@ impl<T: IncludeAdaptor> Script<T> {
 
     fn depend(
         &mut self,
-        attributes: &HashMap<Vec<u8>, (Option<Vec<u8>>, Option<Vec<u8>>)>,
+        attributes: &AttributeMap,
         depends: &mut Vec<(String, CollectionRow)>,
     ) -> Result<(), DependError> {
-        let key = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"key");
-        let collection =
-            crate::attr_parse_or_static_string(&mut self.worker, attributes, b"collection");
-        let row = crate::attr_parse_or_static_string(&mut self.worker, attributes, b"row");
-
-        if let (Ok(row), Some(collection_id)) = (
-            row.parse::<i64>(),
-            self.database
-                .clone()
-                .read()
-                .unwrap()
-                .collection_id(&collection),
+        if let (Some(Some(key)), Some(Some(collection)), Some(Some(row))) = (
+            attributes.get(b"key".as_ref()),
+            attributes.get(b"collection".as_ref()),
+            attributes.get(b"row".as_ref()),
         ) {
-            if row == 0 {
-                return Err(DependError);
-            } else {
-                let in_session = row < 0;
-                if in_session {
-                    let mut valid = false;
-                    if let Some(session) = self.sessions.pop() {
-                        if let Some(temporary_collection) =
-                            session.0.temporary_collection(collection_id)
-                        {
-                            if let Some(_) = temporary_collection.get(&row) {
-                                valid = true;
-                            }
-                        }
-                        self.sessions.push(session);
-                    }
-                    if !valid {
-                        return Err(DependError);
-                    }
-                }
-                depends.push((
-                    key.to_owned(),
+            if let (Ok(row), Some(collection_id)) = (
+                row.parse::<i64>(),
+                self.database
+                    .clone()
+                    .read()
+                    .unwrap()
+                    .collection_id(&collection),
+            ) {
+                if row == 0 {
+                    return Err(DependError);
+                } else {
+                    let in_session = row < 0;
                     if in_session {
-                        CollectionRow::new(-collection_id, (-row) as u32)
-                    } else {
-                        CollectionRow::new(collection_id, row as u32)
-                    },
-                ));
+                        let mut valid = false;
+                        if let Some(session) = self.sessions.pop() {
+                            if let Some(temporary_collection) =
+                                session.0.temporary_collection(collection_id)
+                            {
+                                if let Some(_) = temporary_collection.get(&row) {
+                                    valid = true;
+                                }
+                            }
+                            self.sessions.push(session);
+                        }
+                        if !valid {
+                            return Err(DependError);
+                        }
+                    }
+                    depends.push((
+                        key.to_owned(),
+                        if in_session {
+                            CollectionRow::new(-collection_id, (-row) as u32)
+                        } else {
+                            CollectionRow::new(collection_id, row as u32)
+                        },
+                    ));
+                }
+                return Ok(());
             }
-            Ok(())
-        } else {
-            Err(DependError)
         }
+        Err(DependError)
     }
 
     fn make_update_struct(&mut self, xml: &[u8]) -> Result<Vec<Record>> {
@@ -141,16 +135,16 @@ impl<T: IncludeAdaptor> Script<T> {
                     xml = &xml[pos..];
                     let token_collection = token::borrowed::StartTag::from(token_bytes);
                     if token_collection.name().as_bytes() == b"collection" {
-                        let attributes = crate::attr2map(&token_collection.attributes());
-                        if let Some((None, Some(collection_name))) =
-                            attributes.get(b"name".as_slice())
+                        let token_attributes = self.parse_attibutes(token_collection.attributes());
+
+                        if let Some(Some(collection_name)) = token_attributes.get(b"name".as_ref())
                         {
                             let collection_id = self
                                 .database
                                 .clone()
                                 .write()
                                 .unwrap()
-                                .collection_id_or_create(std::str::from_utf8(collection_name)?)
+                                .collection_id_or_create(collection_name)
                                 .unwrap();
 
                             let mut pends = Vec::new();
@@ -165,21 +159,18 @@ impl<T: IncludeAdaptor> Script<T> {
                                         let token_bytes = &xml[..pos];
                                         xml = &xml[pos..];
                                         let token = token::borrowed::StartTag::from(token_bytes);
+                                        let attributes = self.parse_attibutes(token.attributes());
                                         let name = token.name();
-                                        if let None = name.namespace_prefix() {
-                                            match name.local().as_bytes() {
-                                                b"field" => {
-                                                    let field_name =
-                                                        crate::attr_parse_or_static_string(
-                                                            &mut self.worker,
-                                                            &crate::attr2map(&token.attributes()),
-                                                            b"name",
-                                                        );
-                                                    let (inner_xml, outer_end) =
-                                                        xml_util::inner(xml);
-                                                    xml = &xml[outer_end..];
+                                        match name.as_bytes() {
+                                            b"field" => {
+                                                let (inner_xml, outer_end) = xml_util::inner(xml);
+                                                xml = &xml[outer_end..];
+
+                                                if let Some(Some(field_name)) =
+                                                    attributes.get(b"name".as_ref())
+                                                {
                                                     fields.insert(
-                                                        field_name,
+                                                        field_name.clone(),
                                                         std::str::from_utf8(inner_xml)?
                                                             .replace("&gt;", ">")
                                                             .replace("&lt;", "<")
@@ -188,24 +179,20 @@ impl<T: IncludeAdaptor> Script<T> {
                                                             .replace("&amp;", "&"),
                                                     );
                                                 }
-                                                b"pends" => {
-                                                    let (inner_xml, outer_end) =
-                                                        xml_util::inner(xml);
-                                                    xml = &xml[outer_end..];
-                                                    let pends_tmp =
-                                                        self.make_update_struct(inner_xml)?;
-                                                    if let Some((None, Some(key))) =
-                                                        crate::attr2map(&token.attributes())
-                                                            .get(&b"key".to_vec())
-                                                    {
-                                                        pends.push(Pend::new(
-                                                            std::str::from_utf8(key)?,
-                                                            pends_tmp,
-                                                        ));
-                                                    }
-                                                }
-                                                _ => {}
                                             }
+                                            b"pends" => {
+                                                let (inner_xml, outer_end) = xml_util::inner(xml);
+                                                xml = &xml[outer_end..];
+                                                let pends_tmp =
+                                                    self.make_update_struct(inner_xml)?;
+
+                                                if let Some(Some(key)) =
+                                                    attributes.get(b"key".as_ref())
+                                                {
+                                                    pends.push(Pend::new(key, pends_tmp));
+                                                }
+                                            }
+                                            _ => {}
                                         }
                                     }
                                     State::ScannedEmptyElementTag(pos) => {
@@ -214,16 +201,13 @@ impl<T: IncludeAdaptor> Script<T> {
                                         let token =
                                             token::borrowed::EmptyElementTag::from(token_bytes);
                                         let name = token.name();
-                                        if let None = name.namespace_prefix() {
-                                            match name.local().as_bytes() {
-                                                b"depend" => {
-                                                    self.depend(
-                                                        &crate::attr2map(&token.attributes()),
-                                                        &mut depends,
-                                                    )?;
-                                                }
-                                                _ => {}
+                                        match name.as_bytes() {
+                                            b"depend" => {
+                                                let attributes =
+                                                    self.parse_attibutes(token.attributes());
+                                                self.depend(&attributes, &mut depends)?;
                                             }
+                                            _ => {}
                                         }
                                     }
                                     State::ScannedEndTag(_) => {
@@ -243,21 +227,16 @@ impl<T: IncludeAdaptor> Script<T> {
                                     _ => {}
                                 }
                             }
-                            let row: i64 = crate::attr_parse_or_static_string(
-                                &mut self.worker,
-                                &attributes,
-                                b"row",
-                            )
-                            .parse()
-                            .unwrap_or(0);
-
-                            let is_delete = if let Some((None, Some(v))) =
-                                attributes.get(b"delete".as_slice())
-                            {
-                                v == b"1"
-                            } else {
-                                false
-                            };
+                            let mut row: i64 = 0;
+                            if let Some(Some(str_row)) = token_attributes.get(b"row".as_ref()) {
+                                if let Ok(parsed) = str_row.parse::<i64>() {
+                                    row = parsed;
+                                }
+                            }
+                            let mut is_delete = false;
+                            if let Some(Some(str)) = token_attributes.get(b"delete".as_ref()) {
+                                is_delete = str == "1";
+                            }
                             let (collection_id, row) = if row < 0 {
                                 (-collection_id, (-row) as u32)
                             } else {
@@ -266,51 +245,38 @@ impl<T: IncludeAdaptor> Script<T> {
                             if is_delete {
                                 updates.push(Record::Delete { collection_id, row });
                             } else {
-                                let activity = crate::attr_parse_or_static(
-                                    &mut self.worker,
-                                    &attributes,
-                                    b"activity",
-                                );
-                                let activity = match &*activity {
-                                    b"inactive" => Activity::Inactive,
-                                    b"0" => Activity::Inactive,
-                                    _ => Activity::Active,
-                                };
-                                let term_begin = crate::attr_parse_or_static_string(
-                                    &mut self.worker,
-                                    &attributes,
-                                    b"term_begin",
-                                );
-                                let term_begin = if term_begin != "" {
-                                    if let Some(t) = chrono::Local
-                                        .datetime_from_str(&term_begin, "%Y-%m-%d %H:%M:%S")
-                                        .map_or(None, |v| Some(v.timestamp()))
-                                    {
-                                        Term::Overwrite(t as u64)
-                                    } else {
-                                        Term::Default
+                                let mut activity = Activity::Active;
+                                if let Some(Some(str)) = token_attributes.get(b"activity".as_ref())
+                                {
+                                    if str == "inactive" || str == "0" {
+                                        activity = Activity::Inactive;
                                     }
-                                } else {
-                                    Term::Default
-                                };
-                                let term_end = crate::attr_parse_or_static_string(
-                                    &mut self.worker,
-                                    &attributes,
-                                    b"term_end",
-                                );
-                                let term_end = if term_end != "" {
-                                    if let Some(t) = chrono::Local
-                                        .datetime_from_str(&term_end, "%Y-%m-%d %H:%M:%S")
-                                        .map_or(None, |v| Some(v.timestamp()))
-                                    {
-                                        Term::Overwrite(t as u64)
-                                    } else {
-                                        Term::Default
+                                }
+                                let mut term_begin = Term::Default;
+                                if let Some(Some(str)) =
+                                    token_attributes.get(b"term_begin".as_ref())
+                                {
+                                    if str != "" {
+                                        if let Some(t) = chrono::Local
+                                            .datetime_from_str(str, "%Y-%m-%d %H:%M:%S")
+                                            .map_or(None, |v| Some(v.timestamp()))
+                                        {
+                                            term_begin = Term::Overwrite(t as u64)
+                                        }
                                     }
-                                } else {
-                                    Term::Default
-                                };
-
+                                }
+                                let mut term_end = Term::Default;
+                                if let Some(Some(str)) = token_attributes.get(b"term_end".as_ref())
+                                {
+                                    if str != "" {
+                                        if let Some(t) = chrono::Local
+                                            .datetime_from_str(str, "%Y-%m-%d %H:%M:%S")
+                                            .map_or(None, |v| Some(v.timestamp()))
+                                        {
+                                            term_end = Term::Overwrite(t as u64)
+                                        }
+                                    }
+                                }
                                 let mut f = Vec::new();
                                 for (key, value) in fields {
                                     f.push(KeyValue::new(key, value.as_bytes()))
@@ -326,6 +292,12 @@ impl<T: IncludeAdaptor> Script<T> {
                                         pends,
                                     });
                                 } else {
+                                    let mut inherit_depend_if_empty = false;
+                                    if let Some(Some(str)) =
+                                        token_attributes.get(b"inherit_depend_if_empty".as_ref())
+                                    {
+                                        inherit_depend_if_empty = str == "true";
+                                    }
                                     updates.push(Record::Update {
                                         collection_id,
                                         row,
@@ -333,13 +305,7 @@ impl<T: IncludeAdaptor> Script<T> {
                                         term_begin,
                                         term_end,
                                         fields: f,
-                                        depends: if crate::attr_parse_or_static_string(
-                                            &mut self.worker,
-                                            &attributes,
-                                            b"inherit_depend_if_empty",
-                                        ) == "true"
-                                            && depends.len() == 0
-                                        {
+                                        depends: if inherit_depend_if_empty && depends.len() == 0 {
                                             Depends::Default
                                         } else {
                                             Depends::Overwrite(depends)
