@@ -2,22 +2,21 @@ use deno_runtime::deno_napi::v8::{self, HandleScope, PropertyAttribute};
 use semilattice_database_session::{Condition, Order, OrderKey, Session, SessionDatabase};
 use std::{collections::HashMap, ffi::c_void};
 
-use crate::IncludeAdaptor;
+use crate::{
+    deno::{get_wddb, push_stack},
+    IncludeAdaptor,
+};
 
-use super::get_wddb;
-use super::stack;
-use super::AttributeMap;
-use super::Script;
+use super::{AttributeMap, Parser};
 
-impl<T: IncludeAdaptor> Script<T> {
+impl<T: IncludeAdaptor> Parser<T> {
     pub(super) fn result(
         &mut self,
         attributes: &AttributeMap,
         search_map: &HashMap<String, (i32, Vec<Condition>)>,
     ) {
-        let scope = &mut self.worker.js_runtime.handle_scope();
-        let context = scope.get_current_context();
-        let scope = &mut v8::ContextScope::new(scope, context);
+        let scope = &mut self.deno.js_runtime.handle_scope();
+
         let obj = v8::Object::new(scope);
 
         if let (Some(Some(search)), Some(Some(var))) = (
@@ -216,7 +215,7 @@ impl<T: IncludeAdaptor> Script<T> {
             }
         }
 
-        stack::push(context, scope, obj);
+        push_stack(scope, obj);
     }
 }
 

@@ -1,3 +1,11 @@
+mod deno;
+mod include;
+mod parser;
+mod xml_util;
+
+pub use include::{IncludeAdaptor, IncludeLocal};
+pub use semilattice_database_session::anyhow;
+
 use std::{
     io,
     path::{Path, PathBuf},
@@ -5,17 +13,9 @@ use std::{
 };
 
 use anyhow::Result;
-use deno_runtime::{deno_core::v8, deno_napi::v8::NewStringType};
-pub use semilattice_database_session::anyhow;
 use semilattice_database_session::SessionDatabase;
 
-mod script;
-use script::Script;
-
-mod xml_util;
-
-mod include;
-pub use include::{IncludeAdaptor, IncludeLocal};
+use parser::Parser;
 
 pub struct WildDocResult {
     body: Vec<u8>,
@@ -50,11 +50,11 @@ impl<T: IncludeAdaptor> WildDoc<T> {
     }
 
     pub fn run(&mut self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {
-        Script::new(
+        Parser::new(
             self.database.clone(),
             self.default_include_adaptor.clone(),
             self.cache_dir.clone(),
-        )
+        )?
         .parse_xml(input_json, xml)
     }
     pub fn run_specify_include_adaptor<I: IncludeAdaptor>(
@@ -63,24 +63,12 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         input_json: &[u8],
         include_adaptor: I,
     ) -> Result<WildDocResult> {
-        Script::new(
+        Parser::new(
             self.database.clone(),
             Arc::new(Mutex::new(include_adaptor)),
             self.cache_dir.clone(),
-        )
+        )?
         .parse_xml(input_json, xml)
-    }
-}
-
-fn eval_result_string(scope: &mut v8::HandleScope, value: &[u8]) -> String {
-    if let Some(v8_value) = v8::String::new_from_one_byte(scope, value, NewStringType::Normal)
-        .and_then(|code| v8::Script::compile(scope, code, None))
-        .and_then(|v| v.run(scope))
-        .and_then(|v| v.to_string(scope))
-    {
-        v8_value.to_rust_string_lossy(scope)
-    } else {
-        "".to_string()
     }
 }
 

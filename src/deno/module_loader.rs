@@ -1,3 +1,12 @@
+use std::{
+    fs::{File, OpenOptions},
+    io::{BufWriter, Read, Write},
+    path::PathBuf,
+    pin::Pin,
+    rc::Rc,
+    str,
+};
+
 use deno_ast;
 use deno_core::{
     error::AnyError, futures::future::FutureExt, ModuleLoader, ModuleSource, ModuleSpecifier,
@@ -16,14 +25,6 @@ use deno_runtime::{
     },
 };
 use ring::digest::{Context, SHA256};
-use std::{
-    fs::{File, OpenOptions},
-    io::{BufWriter, Read, Write},
-    path::PathBuf,
-    pin::Pin,
-    rc::Rc,
-    str,
-};
 
 pub struct WdModuleLoader {
     module_cache_dir: PathBuf,
