@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.73.2"
+version = "0.73.3"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -19,7 +19,7 @@ maybe_xml = "0.3"
 chrono = "0.4"
 serde_json = "1.0"
 ring = "0.16"
-deno_runtime = "0.115.0"
-deno_ast = { version = "0.26.0", features = ["transpiling"] }
+deno_runtime = "0.116.0"
+deno_ast = { version = "0.27.0", features = ["transpiling"] }
 
 semilattice-database-session = { version = "0.1", path = "../semilattice-database-session" }
