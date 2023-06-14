@@ -26,16 +26,18 @@ impl<T: IncludeAdaptor> Parser<T> {
             attributes.get(b"name".as_ref()),
             attributes.get(b"collection".as_ref()),
         ) {
+            let name = name.to_str();
+            let collection_name = collection_name.to_str();
             if name != "" && collection_name != "" {
                 if let Some(collection_id) = self
                     .database
                     .clone()
                     .read()
                     .unwrap()
-                    .collection_id(collection_name)
+                    .collection_id(collection_name.as_ref())
                 {
                     let (last_xml, condition) = self.make_conditions(attributes, xml);
-                    search_map.insert(name.to_owned(), (collection_id, condition));
+                    search_map.insert(name.into_owned(), (collection_id, condition));
                     return last_xml;
                 }
             }
@@ -50,6 +52,7 @@ impl<T: IncludeAdaptor> Parser<T> {
         let (last_xml, mut conditions) = self.condition_loop(xml);
 
         if let Some(Some(activity)) = attributes.get(b"activity".as_ref()) {
+            let activity = activity.to_str();
             if activity == "inactive" {
                 conditions.push(Condition::Activity(Activity::Inactive));
             } else if activity == "active" {
@@ -57,6 +60,7 @@ impl<T: IncludeAdaptor> Parser<T> {
             }
         }
         if let Some(Some(term)) = attributes.get(b"term".as_ref()) {
+            let term = term.to_str();
             if term != "all" {
                 let term: Vec<&str> = term.split('@').collect();
                 if term.len() == 2 {
@@ -181,6 +185,8 @@ impl<T: IncludeAdaptor> Parser<T> {
             attributes.get(b"row".as_ref()),
             attributes.get(b"collection".as_ref()),
         ) {
+            let row = row.to_str();
+            let collection_name = collection_name.to_str();
             if row != "" && collection_name != "" {
                 if let (Ok(row), Some(collection_id)) = (
                     row.parse::<i64>(),
@@ -192,9 +198,9 @@ impl<T: IncludeAdaptor> Parser<T> {
                 ) {
                     return Some(Condition::Depend(Depend::new(
                         if let Some(Some(akey)) = attributes.get(b"key".as_ref()) {
-                            akey
+                            akey.to_str()
                         } else {
-                            ""
+                            "".into()
                         },
                         if row < 0 {
                             CollectionRow::new(-collection_id, (-row) as u32)
@@ -212,8 +218,9 @@ impl<T: IncludeAdaptor> Parser<T> {
             attributes.get(b"method".as_ref()),
             attributes.get(b"value".as_ref()),
         ) {
+            let value = value.to_str();
             if value != "" {
-                match method.as_str() {
+                match method.to_str().as_ref() {
                     "in" => {
                         let mut v = Vec::<isize>::new();
                         for s in value.split(',') {
@@ -255,6 +262,7 @@ impl<T: IncludeAdaptor> Parser<T> {
 
     fn condition_uuid<'a>(&mut self, attributes: &AttributeMap) -> Option<Condition> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
+            let value = value.to_str();
             if value != "" {
                 let mut v = Vec::<u128>::new();
                 for s in value.split(',') {
@@ -276,6 +284,9 @@ impl<T: IncludeAdaptor> Parser<T> {
             attributes.get(b"method".as_ref()),
             attributes.get(b"value".as_ref()),
         ) {
+            let name = name.to_str();
+            let method = method.to_str();
+            let value = value.to_str();
             if name != "" && method != "" && value != "" {
                 let method_pair: Vec<&str> = method.split('!').collect();
                 let len = method_pair.len();

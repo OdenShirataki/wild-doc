@@ -37,8 +37,8 @@ let mut wd=WildDoc::new(
 let update_xml=br#"<wd:session name="hoge">
 <wd:update commit="1">
     <collection name="person">
-        <field name="name"><wd:print wd:value="wd.input.name" /></field>
-        <field name="country"><wd:print wd:value="wd.input.from" /></field>
+        <field name="name"><wd:print value:var="input.name" /></field>
+        <field name="country"><wd:print value:var="input.from" /></field>
     </collection>
 </wd:update>
 </wd:session>"#;
@@ -61,11 +61,11 @@ let r=wd.run(br#"
     </wd:search>
     <wd:result var="q" search="p" sort="field.name ASC,serial">
         <div>
-            find <wd:print wd:value="wd.v('q').length" /> persons.
+            find <wd:print value:var="q.len" /> persons.
         </div>
         <ul>
-            <wd:for var="r" index="i" in="wd.v('q')"><li>
-                <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
+            <wd:for var="person" in:var="q.rows"><li>
+                <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
             </li></wd:for>
         </ul>
     </wd:result>
@@ -81,11 +81,11 @@ let r=wd.run(br#"
     </wd:search>
     <wd:result var="q" search="p">
         <div>
-            find <wd:print wd:value="wd.v('q').length" /> persons from the US.
+            find <wd:print value:var="q.len" /> persons from the US.
         </div>
         <ul>
-            <wd:for var="r" index="i" in="wd.v('q')"><li>
-                <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
+            <wd:for var="person" in:var="q.rows"><li>
+                <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
             </li></wd:for>
         </ul>
     </wd:result>
@@ -94,7 +94,7 @@ println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //use javascript
 let r=wd.run(br#"
-    <?typescript
+    <?script
         const ymd=function(){
             const now=new Date();
             return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
@@ -107,18 +107,18 @@ let r=wd.run(br#"
         wd.result_options['test']="OK";
     ?>
     <wd:search name="p" collection="person">
-        <field name="country" method="match" wd:value="wd.general.uk" />
+        <field name="country" method="match" value:script="wd.general.uk" />
     </wd:search>
     <wd:result var="q" search="p">
         <div>
-            <wd:print wd:value="wd.general.ymd()" />
+            <wd:print value:script="wd.general.ymd()" />
         </div>
         <div>
-            find <wd:print wd:value="wd.v('q').length" /> persons from the <wd:print wd:value="wd.general.uk" />.
+            find <wd:print value:script="q.len" /> persons from the <wd:print value:script="wd.general.uk" />.
         </div>
         <ul>
-            <wd:for var="r" index="i" in="wd.v('q')"><li>
-                <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
+            <wd:for var="person" in:var="q.rows"><li>
+                <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="personn.field.country" />
             </li></wd:for>
         </ul>
     </wd:result>
@@ -130,11 +130,11 @@ wd.run(br#"<wd:session name="hoge">
     <wd:update commit="1">
         <wd:search name="person" collection="person"></wd:search>
         <wd:result var="q" search="person">
-            <wd:for var="r" index="i" in="wd.v('q')">
-                hoge:<wd:print wd:value="wd.v('r').row" />
-                <collection name="person" wd:row="wd.v('r').row">
-                    <field name="name">Renamed <wd:print wd:value="wd.v('r').field('name')" /></field>
-                    <field name="country"><wd:print wd:value="wd.v('r').field('country')" /></field>
+            <wd:for var="r" in:var="q.rows">
+                hoge:<wd:print value:var="r.row" />
+                <collection name="person" row:var="r.row">
+                    <field name="name">Renamed <wd:print value:var="r.field.name" /></field>
+                    <field name="country"><wd:print value:var="r.field.country" /></field>
                 </collection>
             </wd:for>
         </wd:result>
@@ -144,11 +144,11 @@ let r=wd.run(br#"
     <wd:search name="p" collection="person"></wd:search>
     <wd:result var="q" search="p">
         <div>
-            find <wd:print wd:value="wd.v('q').length" /> persons.
+            find <wd:print value:var="q.len" /> persons.
         </div>
         <ul>
-            <wd:for var="r" index="i" in="wd.v('q')"><li>
-                <wd:print wd:value="wd.v('r').row" /> : <wd:print wd:value="wd.v('r').field('name')" /> : <wd:print wd:value="wd.v('r').field('country')" />
+            <wd:for var="r" in:var="q.rows"><li>
+                <wd:print value:var="r.row" /> : <wd:print value:var="r.field.name" /> : <wd:print value:var="r.field.country" />
             </li></wd:for>
         </ul>
     </wd:result>
@@ -157,7 +157,7 @@ println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //use WebAPI
 let r=wd.run(br#"
-    <?typescript
+    <?script
         import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
         console.log(uuidv4());
 
@@ -172,16 +172,16 @@ let r=wd.run(br#"
         wd.result_options.test="TEST";
         wd.result_options.test2=crypto.randomUUID();
     ?>
-    a:<wd:print wd:value="wd.general.a" />
-    v:<wd:print wd:value="wd.v('a')" />
-    input:<wd:print wd:value="wd.input.name" />
-    <?typescript
+    a:<wd:print value:script="wd.general.a" />
+    v:<wd:print value:var="a" />
+    input:<wd:print value:var="input.name" />
+    <?script
         wd.stack.pop();
         wd.general.a="OK2";
         wd.general.b=1>2;
     ?>
-    a:<wd:print wd:value="wd.general.a" />
-    v:<wd:print wd:value="wd.general.b" />
+    a:<wd:print value:script="wd.general.a" />
+    v:<wd:print value:script="wd.general.b" />
 "#,br#"{
     "name":"Ken"
     ,"from":"US"
@@ -197,7 +197,7 @@ println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
         <title>HTML include test</title>
     </head>
     <body>
-        <wd:include wd:src="wd.v('body_path')" />
+        <wd:include src:var="body_path" />
     </body>
 </html>
 ```
@@ -208,9 +208,9 @@ BODY
 
 ### rust
 ```rust
-let r=wd.run(br#"<wd:stack var="body_path:'body.xml'">
+let r=wd.run(br#"<wd:def body_path="body.xml">
     <wd:include src="layout.xml" />
-<wd:stack>"#,b"");
+<wd:def>"#,b"");
     println!("{}",r);
 ```
 

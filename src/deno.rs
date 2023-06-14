@@ -8,7 +8,7 @@ use std::{
 };
 
 use deno_runtime::{
-    deno_core::{self, serde_v8, ModuleSpecifier},
+    deno_core::{self, serde_json, serde_v8, ModuleSpecifier},
     deno_napi::v8::{self, HandleScope, NewStringType, PropertyAttribute},
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
@@ -17,7 +17,7 @@ use semilattice_database_session::SessionDatabase;
 
 use self::module_loader::WdModuleLoader;
 
-use crate::{anyhow::Result, IncludeAdaptor};
+use crate::{anyhow::Result, parser::VarsStack, IncludeAdaptor};
 
 pub struct Deno {
     worker: MainWorker,
@@ -39,6 +39,7 @@ impl Deno {
         database: &RwLock<SessionDatabase>,
         include_adaptor: &Mutex<T>,
         module_cache_dir: PathBuf,
+        stack: &RwLock<VarsStack>,
     ) -> Result<Self> {
         let mut worker = MainWorker::bootstrap_from_options(
             deno_core::resolve_url("wd://main").unwrap(),
@@ -53,15 +54,7 @@ impl Deno {
             deno_core::FastString::from_static(
                 r#"wd={
     general:{}
-    ,stack:[]
     ,result_options:{}
-    ,v:key=>{
-        for(let i=wd.stack.length-1;i>=0;i--){
-            if(wd.stack[i][key]!==void 0){
-                return wd.stack[i][key];
-            }
-        }
-    }
 };"#,
             ),
         )?;
@@ -94,12 +87,46 @@ impl Deno {
                     }
                 },
             );
+
+            let func_v = v8::Function::new(
+                scope,
+                |scope: &mut v8::HandleScope,
+                 args: v8::FunctionCallbackArguments,
+                 mut retval: v8::ReturnValue| {
+                    if let Some(stack) = v8::String::new(scope, "wd.stack")
+                        .and_then(|code| v8::Script::compile(scope, code, None))
+                        .and_then(|v| v.run(scope))
+                    {
+                        let stack = unsafe {
+                            &*(v8::Local::<v8::External>::cast(stack).value()
+                                as *const RwLock<VarsStack>)
+                        };
+                        let key = args
+                            .get(0)
+                            .to_string(scope)
+                            .unwrap()
+                            .to_rust_string_lossy(scope);
+                        for stack in stack.read().unwrap().iter().rev() {
+                            if let Some(v) = stack.get(key.as_bytes()) {
+                                if let Ok(r) = serde_v8::to_v8(scope, v.value.clone()) {
+                                    retval.set(r.into());
+                                }
+                                break;
+                            }
+                        }
+                    }
+                },
+            );
+
             if let (
                 Some(wd),
                 Some(v8str_include_adaptor),
                 Some(v8str_script),
                 Some(v8str_get_contents),
                 Some(v8func_get_contents),
+                Some(v8str_stack),
+                Some(v8str_v),
+                Some(v8func_v),
             ) = (
                 v8::String::new(scope, "wd")
                     .and_then(|code| v8::Script::compile(scope, code, None))
@@ -109,6 +136,9 @@ impl Deno {
                 v8::String::new(scope, "database"),
                 v8::String::new(scope, "get_contents"),
                 func_get_contents,
+                v8::String::new(scope, "stack"),
+                v8::String::new(scope, "v"),
+                func_v,
             ) {
                 let v8ext_include_adaptor =
                     v8::External::new(scope, include_adaptor as *const Mutex<T> as *mut c_void);
@@ -116,6 +146,15 @@ impl Deno {
                     scope,
                     v8str_include_adaptor.into(),
                     v8ext_include_adaptor.into(),
+                    PropertyAttribute::READ_ONLY,
+                );
+
+                let v8ext_stack =
+                    v8::External::new(scope, stack as *const RwLock<VarsStack> as *mut c_void);
+                wd.define_own_property(
+                    scope,
+                    v8str_stack.into(),
+                    v8ext_stack.into(),
                     PropertyAttribute::READ_ONLY,
                 );
 
@@ -136,24 +175,15 @@ impl Deno {
                     v8func_get_contents.into(),
                     PropertyAttribute::READ_ONLY,
                 );
+                wd.define_own_property(
+                    scope,
+                    v8str_v.into(),
+                    v8func_v.into(),
+                    PropertyAttribute::READ_ONLY,
+                );
             }
         }
         Ok(Self { worker })
-    }
-    pub fn input(&mut self, input_json: &[u8]) -> Result<()> {
-        self.execute_script(
-            "init",
-            (r#"wd.input="#.to_owned()
-                + (if input_json.len() > 0 {
-                    std::str::from_utf8(input_json)?
-                } else {
-                    "{}"
-                })
-                + ";")
-                .into(),
-        )?;
-
-        Ok(())
     }
 
     pub fn evaluate_module(&mut self, file_name: &str, src: &[u8]) -> Result<()> {
@@ -169,6 +199,15 @@ impl Deno {
             MainWorker::evaluate_module(&mut self.worker, mod_id).await?;
             self.run_event_loop(false).await
         })
+    }
+
+    pub fn eval_json_value(&mut self, code: &[u8]) -> Option<serde_json::Value> {
+        let scope = &mut self.js_runtime.handle_scope();
+        v8::String::new_from_one_byte(scope, code, NewStringType::Normal)
+            .and_then(|code| v8::Script::compile(scope, code, None))
+            .and_then(|v| v.run(scope))
+            .and_then(|v| serde_v8::from_v8(scope, v).ok())
+            .and_then(|v| serde_json::from_value(v).ok())
     }
 
     pub fn eval_json_string(&mut self, object_name: &[u8]) -> String {
@@ -199,19 +238,6 @@ pub fn eval_result_string(scope: &mut v8::HandleScope, code: &[u8]) -> String {
         v8_value.to_rust_string_lossy(scope)
     } else {
         "".to_string()
-    }
-}
-
-pub fn get_wddb<'s>(scope: &mut v8::HandleScope<'s>) -> Option<&'s RwLock<SessionDatabase>> {
-    if let Some(database) = v8::String::new(scope, "wd.database")
-        .and_then(|code| v8::Script::compile(scope, code, None))
-        .and_then(|v| v.run(scope))
-    {
-        Some(unsafe {
-            &*(v8::Local::<v8::External>::cast(database).value() as *const RwLock<SessionDatabase>)
-        })
-    } else {
-        None
     }
 }
 

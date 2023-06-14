@@ -40,14 +40,14 @@ impl<T: IncludeAdaptor> Parser<T> {
                 .read()
                 .unwrap()
                 .update(session, updates)?;
-
             let mut commit_rows = vec![];
             if let Some(Some(commit)) = attributes.get(b"commit".as_ref()) {
-                if commit == "1" {
+                if commit.to_str() == "1" {
                     commit_rows = self.database.write().unwrap().commit(session)?;
                 }
             }
             if let Some(Some(src)) = attributes.get(b"result_callback".as_ref()) {
+                let src = src.to_str();
                 if src.len() > 0 {
                     if let (Ok(json_commit_rows), Ok(json_session_rows)) = (
                         serde_json::to_string(&commit_rows),
@@ -60,7 +60,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                                 + ",session_rows:"
                                 + json_session_rows.as_str()
                                 + "};"
-                                + src.as_str()
+                                + src.as_ref()
                                 + "}")
                                 .into(),
                         );
@@ -82,12 +82,12 @@ impl<T: IncludeAdaptor> Parser<T> {
             attributes.get(b"row".as_ref()),
         ) {
             if let (Ok(row), Some(collection_id)) = (
-                row.parse::<i64>(),
+                row.to_str().parse::<i64>(),
                 self.database
                     .clone()
                     .read()
                     .unwrap()
-                    .collection_id(&collection),
+                    .collection_id(&collection.to_str()),
             ) {
                 if row == 0 {
                     return Err(DependError);
@@ -110,7 +110,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                         }
                     }
                     depends.push((
-                        key.to_owned(),
+                        key.to_str().into_owned(),
                         if in_session {
                             CollectionRow::new(-collection_id, (-row) as u32)
                         } else {
@@ -136,7 +136,6 @@ impl<T: IncludeAdaptor> Parser<T> {
                     let token_collection = token::borrowed::StartTag::from(token_bytes);
                     if token_collection.name().as_bytes() == b"collection" {
                         let token_attributes = self.parse_attibutes(token_collection.attributes());
-
                         if let Some(Some(collection_name)) = token_attributes.get(b"name".as_ref())
                         {
                             let collection_id = self
@@ -144,8 +143,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                                 .clone()
                                 .write()
                                 .unwrap()
-                                .collection_id_or_create(collection_name)
-                                .unwrap();
+                                .collection_id_or_create(collection_name.to_str().as_ref())?;
 
                             let mut pends = Vec::new();
                             let mut depends = Vec::new();
@@ -170,7 +168,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                                                     attributes.get(b"name".as_ref())
                                                 {
                                                     fields.insert(
-                                                        field_name.clone(),
+                                                        field_name.to_str().into_owned(),
                                                         std::str::from_utf8(inner_xml)?
                                                             .replace("&gt;", ">")
                                                             .replace("&lt;", "<")
@@ -189,7 +187,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                                                 if let Some(Some(key)) =
                                                     attributes.get(b"key".as_ref())
                                                 {
-                                                    pends.push(Pend::new(key, pends_tmp));
+                                                    pends.push(Pend::new(key.to_str(), pends_tmp));
                                                 }
                                             }
                                             _ => {}
@@ -210,12 +208,20 @@ impl<T: IncludeAdaptor> Parser<T> {
                                             _ => {}
                                         }
                                     }
-                                    State::ScannedEndTag(_) => {
+                                    State::ScannedEndTag(pos) => {
+                                        let token_bytes = &xml[..pos];
+                                        xml = &xml[pos..];
+                                        if token::borrowed::EndTag::from(token_bytes)
+                                            .name()
+                                            .as_bytes()
+                                            == b"collection"
+                                        {
+                                            break;
+                                        }
                                         deps -= 1;
                                         if deps < 0 {
                                             return Err(anyhow!("invalid XML"));
                                         }
-                                        break;
                                     }
                                     State::ScannedCharacters(pos)
                                     | State::ScannedCdata(pos)
@@ -224,18 +230,20 @@ impl<T: IncludeAdaptor> Parser<T> {
                                     | State::ScannedProcessingInstruction(pos) => {
                                         xml = &xml[pos..];
                                     }
-                                    _ => {}
+                                    _ => {
+                                        return Err(anyhow!("invalid XML"));
+                                    }
                                 }
                             }
                             let mut row: i64 = 0;
                             if let Some(Some(str_row)) = token_attributes.get(b"row".as_ref()) {
-                                if let Ok(parsed) = str_row.parse::<i64>() {
+                                if let Ok(parsed) = str_row.to_str().parse::<i64>() {
                                     row = parsed;
                                 }
                             }
                             let mut is_delete = false;
                             if let Some(Some(str)) = token_attributes.get(b"delete".as_ref()) {
-                                is_delete = str == "1";
+                                is_delete = str.to_str() == "1";
                             }
                             let (collection_id, row) = if row < 0 {
                                 (-collection_id, (-row) as u32)
@@ -248,6 +256,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                                 let mut activity = Activity::Active;
                                 if let Some(Some(str)) = token_attributes.get(b"activity".as_ref())
                                 {
+                                    let str = str.to_str();
                                     if str == "inactive" || str == "0" {
                                         activity = Activity::Inactive;
                                     }
@@ -256,9 +265,10 @@ impl<T: IncludeAdaptor> Parser<T> {
                                 if let Some(Some(str)) =
                                     token_attributes.get(b"term_begin".as_ref())
                                 {
+                                    let str = str.to_str();
                                     if str != "" {
                                         if let Some(t) = chrono::Local
-                                            .datetime_from_str(str, "%Y-%m-%d %H:%M:%S")
+                                            .datetime_from_str(str.as_ref(), "%Y-%m-%d %H:%M:%S")
                                             .map_or(None, |v| Some(v.timestamp()))
                                         {
                                             term_begin = Term::Overwrite(t as u64)
@@ -268,9 +278,10 @@ impl<T: IncludeAdaptor> Parser<T> {
                                 let mut term_end = Term::Default;
                                 if let Some(Some(str)) = token_attributes.get(b"term_end".as_ref())
                                 {
+                                    let str = str.to_str();
                                     if str != "" {
                                         if let Some(t) = chrono::Local
-                                            .datetime_from_str(str, "%Y-%m-%d %H:%M:%S")
+                                            .datetime_from_str(str.as_ref(), "%Y-%m-%d %H:%M:%S")
                                             .map_or(None, |v| Some(v.timestamp()))
                                         {
                                             term_end = Term::Overwrite(t as u64)
@@ -296,7 +307,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                                     if let Some(Some(str)) =
                                         token_attributes.get(b"inherit_depend_if_empty".as_ref())
                                     {
-                                        inherit_depend_if_empty = str == "true";
+                                        inherit_depend_if_empty = str.to_str() == "true";
                                     }
                                     updates.push(Record::Update {
                                         collection_id,

@@ -1,420 +1,239 @@
-use deno_runtime::deno_napi::v8::{self, HandleScope, PropertyAttribute};
-use semilattice_database_session::{Condition, Order, OrderKey, Session, SessionDatabase};
-use std::{collections::HashMap, ffi::c_void};
-
-use crate::{
-    deno::{get_wddb, push_stack},
-    IncludeAdaptor,
+use deno_runtime::deno_core::serde_json;
+use semilattice_database_session::{
+    anyhow, Activity, CollectionRow, Condition, Order, OrderKey, Uuid,
 };
+use std::{collections::HashMap, rc::Rc};
 
-use super::{AttributeMap, Parser};
+use crate::IncludeAdaptor;
+
+use super::{AttributeMap, Parser, WildDocValue};
 
 impl<T: IncludeAdaptor> Parser<T> {
     pub(super) fn result(
         &mut self,
         attributes: &AttributeMap,
         search_map: &HashMap<String, (i32, Vec<Condition>)>,
-    ) {
-        let scope = &mut self.deno.js_runtime.handle_scope();
-
-        let obj = v8::Object::new(scope);
-
+    ) -> anyhow::Result<()> {
+        let mut json: HashMap<Vec<u8>, Rc<WildDocValue>> = HashMap::new();
         if let (Some(Some(search)), Some(Some(var))) = (
             attributes.get(b"search".as_ref()),
             attributes.get(b"var".as_ref()),
         ) {
-            let orders = make_order(if let Some(Some(sort)) = attributes.get(b"sort".as_ref()) {
-                sort
-            } else {
-                ""
-            });
+            let search = search.to_str();
+            let var = var.to_str();
             if search != "" && var != "" {
-                if let Some(v8str_var) = v8::String::new(scope, &var) {
-                    let return_obj = v8::Array::new(scope, 0);
-                    if let (
-                        Some(v8str_field),
-                        Some(v8str_depends),
-                        Some((collection_id, conditions)),
-                    ) = (
-                        v8::String::new(scope, "field"),
-                        v8::String::new(scope, "depends"),
-                        search_map.get(search),
-                    ) {
-                        let collection_id = *collection_id;
-                        let mut session_maybe_has_collection = None;
-                        for i in (0..self.sessions.len()).rev() {
-                            if let Some(_) = self.sessions[i].0.temporary_collection(collection_id)
-                            {
-                                session_maybe_has_collection = Some(i);
-                                break;
-                            }
+                let mut json_inner = serde_json::Map::new();
+                if let Some((collection_id, conditions)) = search_map.get(search.as_ref()) {
+                    let collection_id = *collection_id;
+                    json_inner.insert("collection_id".to_owned(), serde_json::json!(collection_id));
+                    let orders = make_order(
+                        if let Some(Some(sort)) = attributes.get(b"sort".as_ref()) {
+                            sort.to_str()
+                        } else {
+                            "".into()
                         }
+                        .as_ref(),
+                    );
 
-                        if let Some(collection) = self
-                            .database
-                            .clone()
-                            .read()
-                            .unwrap()
-                            .collection(collection_id)
-                        {
-                            if let Some(session_index) = session_maybe_has_collection {
-                                let session = &mut self.sessions[session_index].0;
-                                let addr = session as *mut Session as *mut c_void;
-                                let v8ext_session = v8::External::new(scope, addr);
-                                if let (
-                                    Some(v8func_field),
-                                    Some(v8func_depends),
-                                    Some(v8str_session),
-                                    Some(temporary_collection),
-                                ) = (
-                                    v8::Function::new(scope, session_field),
-                                    v8::Function::new(scope, session_depends),
-                                    v8::String::new(scope, "session"),
-                                    session.temporary_collection(collection_id),
-                                ) {
-                                    let mut i = 0;
-                                    let search = session.search(collection_id, conditions);
-                                    for row in self
-                                        .database
-                                        .clone()
-                                        .read()
-                                        .unwrap()
-                                        .result_session(search, orders)
-                                        .unwrap()
-                                    {
-                                        let (activity, term_begin, term_end) = if let Some(tr) =
-                                            temporary_collection.get(&row)
-                                        {
-                                            (tr.activity() as i32, tr.term_begin(), tr.term_end())
-                                        } else {
-                                            let row = row as u32;
-                                            (
-                                                collection.activity(row) as i32,
-                                                collection.term_begin(row),
-                                                collection.term_begin(row),
-                                            )
-                                        };
-
-                                        let obj = set_values(
-                                            scope,
-                                            collection_id,
-                                            collection.name(),
-                                            row,
-                                            activity,
-                                            term_begin,
-                                            term_end,
-                                        );
-
-                                        set_serial(
-                                            scope,
-                                            obj,
-                                            if row > 0 {
-                                                collection.serial(row as u32)
-                                            } else {
-                                                0
-                                            },
-                                        );
-
-                                        obj.define_own_property(
-                                            scope,
-                                            v8str_session.into(),
-                                            v8ext_session.into(),
-                                            PropertyAttribute::READ_ONLY,
-                                        );
-
-                                        obj.define_own_property(
-                                            scope,
-                                            v8str_field.into(),
-                                            v8func_field.into(),
-                                            PropertyAttribute::READ_ONLY,
-                                        );
-                                        obj.define_own_property(
-                                            scope,
-                                            v8str_depends.into(),
-                                            v8func_depends.into(),
-                                            PropertyAttribute::READ_ONLY,
-                                        );
-
-                                        if row > 0 {
-                                            set_last_update(
-                                                scope,
-                                                obj,
-                                                collection.last_updated(row as u32),
-                                            );
-                                            set_uuid(
-                                                scope,
-                                                obj,
-                                                &collection.uuid_string(row as u32),
-                                            );
-                                        } else {
-                                            if let Some(tr) = temporary_collection.get(&row) {
-                                                set_uuid(scope, obj, &tr.uuid_string());
-                                            }
-                                        }
-                                        return_obj.set_index(scope, i, obj.into());
-                                        i += 1;
-                                    }
-                                }
-                            } else {
-                                if let (Some(v8func_field), Some(v8func_depends)) = (
-                                    v8::Function::new(scope, field),
-                                    v8::Function::new(scope, depends),
-                                ) {
-                                    let mut search =
-                                        self.database.read().unwrap().search(collection);
-                                    for c in conditions {
-                                        search = search.search(c.clone());
-                                    }
-
-                                    let rows = self
-                                        .database
-                                        .clone()
-                                        .read()
-                                        .unwrap()
-                                        .result(search, &orders)
-                                        .unwrap();
-                                    let mut i = 0;
-                                    for row in rows {
-                                        let obj = set_values(
-                                            scope,
-                                            collection_id as i32,
-                                            collection.name(),
-                                            row as i64,
-                                            collection.activity(row) as i32,
-                                            collection.term_begin(row),
-                                            collection.term_end(row),
-                                        );
-
-                                        set_serial(scope, obj, collection.serial(row));
-
-                                        set_last_update(scope, obj, collection.last_updated(row));
-                                        set_uuid(scope, obj, &collection.uuid_string(row));
-
-                                        obj.define_own_property(
-                                            scope,
-                                            v8str_field.into(),
-                                            v8func_field.into(),
-                                            PropertyAttribute::READ_ONLY,
-                                        );
-                                        obj.define_own_property(
-                                            scope,
-                                            v8str_depends.into(),
-                                            v8func_depends.into(),
-                                            PropertyAttribute::READ_ONLY,
-                                        );
-
-                                        return_obj.set_index(scope, i, obj.into());
-                                        i += 1;
-                                    }
-                                }
-                            }
+                    let mut session_maybe_has_collection = None;
+                    for i in (0..self.sessions.len()).rev() {
+                        if let Some(_) = self.sessions[i].0.temporary_collection(collection_id) {
+                            session_maybe_has_collection = Some(&self.sessions[i].0);
+                            break;
                         }
                     }
-                    obj.set(scope, v8str_var.into(), return_obj.into());
-                }
-            }
-        }
+                    let json_rows = if let Some(collection) = self
+                        .database
+                        .clone()
+                        .read()
+                        .unwrap()
+                        .collection(collection_id)
+                    {
+                        if let Some(session) = session_maybe_has_collection {
+                            self.database
+                                .clone()
+                                .read()
+                                .unwrap()
+                                .result_session(session.search(collection_id, conditions), orders)?
+                                .iter()
+                                .map(|row| {
+                                    let mut json_row = serde_json::Map::new();
+                                    if let Some(temporary_collection) =
+                                        session.temporary_collection(collection_id)
+                                    {
+                                        if let Some(entity) = temporary_collection.get(row) {
+                                            json_row
+                                                .insert("row".to_owned(), serde_json::json!(row));
+                                            json_row.insert(
+                                                "uuid".to_owned(),
+                                                serde_json::json!(
+                                                    Uuid::from_u128(entity.uuid()).to_string()
+                                                ),
+                                            );
+                                            json_row.insert(
+                                                "activity".to_owned(),
+                                                serde_json::json!(
+                                                    entity.activity() == Activity::Active
+                                                ),
+                                            );
+                                            json_row.insert(
+                                                "term_begin".to_owned(),
+                                                serde_json::json!(entity.term_begin()),
+                                            );
+                                            json_row.insert(
+                                                "term_begin".to_owned(),
+                                                serde_json::json!(entity.term_end()),
+                                            );
 
-        push_stack(scope, obj);
-    }
-}
+                                            let mut json_depends = serde_json::Map::new();
+                                            for d in entity.depends() {
+                                                let mut json_depend = serde_json::Map::new();
+                                                json_depend.insert(
+                                                    "collection_id".to_owned(),
+                                                    serde_json::json!(d.collection_id()),
+                                                );
+                                                json_depend.insert(
+                                                    "row".to_owned(),
+                                                    serde_json::json!(d.row()),
+                                                );
 
-fn get_collection_id<'s>(
-    scope: &mut v8::HandleScope<'s>,
-    this: v8::Local<v8::Object>,
-) -> Option<i32> {
-    if let Some(val) = v8::String::new(scope, "collection_id")
-        .and_then(|s| this.get(scope, s.into()))
-        .and_then(|s| s.to_int32(scope))
-    {
-        Some(val.value())
-    } else {
-        None
-    }
-}
+                                                json_depends.insert(
+                                                    d.key().to_string(),
+                                                    serde_json::Value::Object(json_depend),
+                                                );
+                                            }
+                                            json_row.insert(
+                                                "depends".to_owned(),
+                                                serde_json::Value::Object(json_depends),
+                                            );
 
-fn get_row<'s>(scope: &mut v8::HandleScope<'s>, this: v8::Local<v8::Object>) -> Option<i64> {
-    if let Some(val) = v8::String::new(scope, "row")
-        .and_then(|s| this.get(scope, s.into()))
-        .and_then(|s| s.to_big_int(scope))
-    {
-        Some(val.i64_value().0)
-    } else {
-        None
-    }
-}
+                                            let mut json_field = serde_json::Map::new();
+                                            for (field_name, value) in entity.fields() {
+                                                if let Ok(value) = std::str::from_utf8(value) {
+                                                    json_field.insert(
+                                                        field_name.as_str().to_owned(),
+                                                        serde_json::json!(value),
+                                                    );
+                                                }
+                                            }
+                                            json_row.insert(
+                                                "field".to_owned(),
+                                                serde_json::Value::Object(json_field),
+                                            );
+                                        }
+                                    }
+                                    serde_json::Value::Object(json_row)
+                                })
+                                .collect::<Vec<serde_json::Value>>()
+                        } else {
+                            let mut search = self.database.read().unwrap().search(collection);
+                            for c in conditions {
+                                search = search.search(c.clone());
+                            }
+                            self.database
+                                .clone()
+                                .read()
+                                .unwrap()
+                                .result(search, &orders)?
+                                .iter()
+                                .map(|row| {
+                                    let row = *row;
+                                    let mut json_row = serde_json::Map::new();
+                                    json_row.insert("row".to_owned(), serde_json::json!(row));
+                                    json_row.insert(
+                                        "uuid".to_owned(),
+                                        serde_json::json!(
+                                            Uuid::from_u128(collection.uuid(row)).to_string()
+                                        ),
+                                    );
+                                    json_row.insert(
+                                        "activity".to_owned(),
+                                        serde_json::json!(
+                                            collection.activity(row) == Activity::Active
+                                        ),
+                                    );
+                                    json_row.insert(
+                                        "term_begin".to_owned(),
+                                        serde_json::json!(collection.term_begin(row)),
+                                    );
+                                    json_row.insert(
+                                        "term_end".to_owned(),
+                                        serde_json::json!(collection.term_end(row)),
+                                    );
 
-fn get_session<'s>(
-    scope: &mut v8::HandleScope<'s>,
-    this: v8::Local<v8::Object>,
-) -> Option<&'s mut Session> {
-    if let Some(val) = v8::String::new(scope, "session").and_then(|s| this.get(scope, s.into())) {
-        let session = unsafe { v8::Local::<v8::External>::cast(val) }.value() as *mut Session;
-        Some(unsafe { &mut *session })
-    } else {
-        None
-    }
-}
+                                    let mut json_depends = serde_json::Map::new();
+                                    for d in self
+                                        .database
+                                        .read()
+                                        .unwrap()
+                                        .relation()
+                                        .depends(None, &CollectionRow::new(collection_id, row))
+                                    {
+                                        let mut json_depend = serde_json::Map::new();
 
-fn depends(
-    scope: &mut v8::HandleScope,
-    args: v8::FunctionCallbackArguments,
-    mut rv: v8::ReturnValue,
-) {
-    let this = args.this();
-    if let (Some(db), Some(collection_id), Some(row)) = (
-        get_wddb(scope),
-        get_collection_id(scope, this),
-        get_row(scope, this),
-    ) {
-        if let Ok(db) = db.read() {
-            let key = if args.length() > 0 {
-                args.get(0).to_string(scope)
-            } else {
-                None
-            };
-            let array = depends_array(scope, &db, key, collection_id, row, None);
-            rv.set(array.into());
-        }
-    }
-}
+                                        let collection_id = d.collection_id();
 
-fn session_depends(
-    scope: &mut v8::HandleScope,
-    args: v8::FunctionCallbackArguments,
-    mut rv: v8::ReturnValue,
-) {
-    let this = args.this();
-    if let (Some(db), Some(collection_id), Some(row), Some(session)) = (
-        get_wddb(scope),
-        get_collection_id(scope, this),
-        get_row(scope, this),
-        get_session(scope, this),
-    ) {
-        if let Ok(db) = db.read() {
-            let key = if args.length() > 0 {
-                args.get(0).to_string(scope)
-            } else {
-                None
-            };
-            let array = depends_array(scope, &db, key, collection_id, row, Some(&session));
-            rv.set(array.into());
-        }
-    }
-}
+                                        if let Some(collection) =
+                                            self.database.read().unwrap().collection(collection_id)
+                                        {
+                                            json_depend.insert(
+                                                "collection_id".to_owned(),
+                                                serde_json::json!(collection_id),
+                                            );
+                                            json_depend.insert(
+                                                "collection_name".to_owned(),
+                                                serde_json::json!(collection.name()),
+                                            );
+                                            json_depend.insert(
+                                                "row".to_owned(),
+                                                serde_json::json!(d.row()),
+                                            );
+                                            json_depends.insert(
+                                                d.key().to_string(),
+                                                serde_json::Value::Object(json_depend),
+                                            );
+                                        }
+                                    }
+                                    json_row.insert(
+                                        "depends".to_owned(),
+                                        serde_json::Value::Object(json_depends),
+                                    );
 
-fn depends_array<'a>(
-    scope: &mut v8::HandleScope<'a>,
-    db: &SessionDatabase,
-    key: Option<v8::Local<'a, v8::String>>,
-    collection_id: i32, //u32?
-    row: i64,
-    session: Option<&Session>,
-) -> v8::Local<'a, v8::Array> {
-    let (collection_id, row) = if row < 0 {
-        (-collection_id, -row)
-    } else {
-        (collection_id, row)
-    };
-    let depends = if let Some(key_name) = key {
-        let key_name = key_name.to_rust_string_lossy(scope);
-        db.depends_with_session(Some(&key_name), collection_id, row as u32, session)
-    } else {
-        db.depends_with_session(None, collection_id, row as u32, session)
-    };
+                                    let mut json_field = serde_json::Map::new();
+                                    for field_name in &collection.field_names() {
+                                        if let Ok(value) = std::str::from_utf8(
+                                            collection.field_bytes(row, field_name),
+                                        ) {
+                                            json_field.insert(
+                                                field_name.as_str().to_owned(),
+                                                serde_json::json!(value),
+                                            );
+                                        }
+                                    }
+                                    json_row.insert(
+                                        "field".to_owned(),
+                                        serde_json::Value::Object(json_field),
+                                    );
+                                    serde_json::Value::Object(json_row)
+                                })
+                                .collect::<Vec<serde_json::Value>>()
+                        }
+                    } else {
+                        Vec::<serde_json::Value>::new()
+                    };
+                    let len = json_rows.len();
+                    json_inner.insert("rows".to_owned(), serde_json::Value::Array(json_rows));
+                    json_inner.insert("len".to_owned(), serde_json::json!(len));
 
-    let array = v8::Array::new(scope, depends.len() as i32);
-    if let (Some(v8str_key), Some(v8str_collection), Some(v8str_row)) = (
-        v8::String::new(scope, "key"),
-        v8::String::new(scope, "collection"),
-        v8::String::new(scope, "row"),
-    ) {
-        let mut index: u32 = 0;
-        for d in depends {
-            if let (Some(key), Some(collection)) = (
-                v8::String::new(scope, d.key()),
-                db.collection(d.collection_id()),
-            ) {
-                if let Some(collection_name) = v8::String::new(scope, collection.name()) {
-                    let depend = v8::Object::new(scope);
-                    depend.define_own_property(
-                        scope,
-                        v8str_key.into(),
-                        key.into(),
-                        PropertyAttribute::READ_ONLY,
+                    json.insert(
+                        var.as_bytes().to_vec(),
+                        Rc::new(WildDocValue::new(serde_json::Value::Object(json_inner))),
                     );
-                    depend.define_own_property(
-                        scope,
-                        v8str_collection.into(),
-                        collection_name.into(),
-                        PropertyAttribute::READ_ONLY,
-                    );
-                    let row = v8::BigInt::new_from_i64(scope, d.row() as i64); //TODO u32 integer
-                    depend.define_own_property(
-                        scope,
-                        v8str_row.into(),
-                        row.into(),
-                        PropertyAttribute::READ_ONLY,
-                    );
-
-                    array.set_index(scope, index, depend.into());
-                    index += 1;
                 }
             }
         }
-    }
-
-    array
-}
-
-fn field(
-    scope: &mut v8::HandleScope,
-    args: v8::FunctionCallbackArguments,
-    mut rv: v8::ReturnValue,
-) {
-    let this = args.this();
-
-    if let (Some(db), Some(collection_id), Some(row)) = (
-        get_wddb(scope),
-        get_collection_id(scope, this),
-        get_row(scope, this),
-    ) {
-        if let Some(field_name) = args.get(0).to_string(scope) {
-            let field_name = field_name.to_rust_string_lossy(scope);
-            if let Some(data) = db.read().unwrap().collection(collection_id) {
-                if let Some(str) = v8::String::new(
-                    scope,
-                    std::str::from_utf8(data.field_bytes(row as u32, &field_name)).unwrap(),
-                ) {
-                    rv.set(str.into());
-                }
-            }
-        }
-    }
-}
-
-fn session_field(
-    scope: &mut v8::HandleScope,
-    args: v8::FunctionCallbackArguments,
-    mut rv: v8::ReturnValue,
-) {
-    let this = args.this();
-
-    if let (Some(db), Some(collection_id), Some(row), Some(session)) = (
-        get_wddb(scope),
-        get_collection_id(scope, this),
-        get_row(scope, this),
-        get_session(scope, this),
-    ) {
-        if let Some(field_name) = args.get(0).to_string(scope) {
-            let field_name = field_name.to_rust_string_lossy(scope);
-            if let Some(data) = db.read().unwrap().collection(collection_id) {
-                let bytes = session.collection_field_bytes(&data, row, &field_name);
-                if let Some(str) = v8::String::new(scope, std::str::from_utf8(&bytes).unwrap()) {
-                    rv.set(str.into());
-                }
-            }
-        }
+        self.stack.write().unwrap().push(json);
+        Ok(())
     }
 }
 
@@ -452,115 +271,4 @@ fn make_order(sort: &str) -> Vec<Order> {
         }
     }
     orders
-}
-
-fn set_values<'s>(
-    scope: &mut HandleScope<'s>,
-    collection_id: i32,
-    collection_name: &str,
-    row: i64,
-    activity: i32,
-    term_begin: u64,
-    term_end: u64,
-) -> v8::Local<'s, v8::Object> {
-    let obj = v8::Object::new(scope);
-
-    if let Some(key) = v8::String::new(scope, "row") {
-        let row = v8::BigInt::new_from_i64(scope, row);
-        obj.define_own_property(scope, key.into(), row.into(), PropertyAttribute::READ_ONLY);
-    }
-    if let (Some(collection_name), Some(key)) = (
-        v8::String::new(scope, collection_name),
-        v8::String::new(scope, "collection"),
-    ) {
-        obj.define_own_property(
-            scope,
-            key.into(),
-            collection_name.into(),
-            PropertyAttribute::READ_ONLY,
-        );
-    }
-    if let Some(key) = v8::String::new(scope, "collection_id") {
-        let collection_id = v8::Integer::new(scope, collection_id as i32);
-        obj.define_own_property(
-            scope,
-            key.into(),
-            collection_id.into(),
-            PropertyAttribute::READ_ONLY,
-        );
-    }
-    if let Some(key) = v8::String::new(scope, "activity") {
-        let activity = v8::Integer::new(scope, activity);
-        obj.define_own_property(
-            scope,
-            key.into(),
-            activity.into(),
-            PropertyAttribute::READ_ONLY,
-        );
-    }
-    if let (Some(term_begin), Some(key)) = (
-        v8::Date::new(scope, (term_begin as f64) * 1000.0),
-        v8::String::new(scope, "term_begin"),
-    ) {
-        obj.define_own_property(
-            scope,
-            key.into(),
-            term_begin.into(),
-            PropertyAttribute::READ_ONLY,
-        );
-    }
-    if term_end > 0 {
-        if let (Some(term_end), Some(key)) = (
-            v8::Date::new(scope, (term_end as f64) * 1000.0),
-            v8::String::new(scope, "term_end"),
-        ) {
-            obj.define_own_property(
-                scope,
-                key.into(),
-                term_end.into(),
-                PropertyAttribute::READ_ONLY,
-            );
-        }
-    }
-
-    obj
-}
-
-fn set_serial<'s>(scope: &mut HandleScope<'s>, object: v8::Local<'s, v8::Object>, serial: u32) {
-    if let Some(v8str_serial) = v8::String::new(scope, "serial") {
-        let serial = v8::Integer::new_from_unsigned(scope, serial);
-        object.define_own_property(
-            scope,
-            v8str_serial.into(),
-            serial.into(),
-            PropertyAttribute::READ_ONLY,
-        );
-    }
-}
-fn set_last_update<'s>(
-    scope: &mut HandleScope<'s>,
-    object: v8::Local<'s, v8::Object>,
-    last_update: u64,
-) {
-    if let Some(v8str_last_update) = v8::String::new(scope, "last_update") {
-        if let Some(last_update) = v8::Date::new(scope, (last_update as f64) * 1000.0) {
-            object.define_own_property(
-                scope,
-                v8str_last_update.into(),
-                last_update.into(),
-                PropertyAttribute::READ_ONLY,
-            );
-        }
-    }
-}
-fn set_uuid<'s>(scope: &mut HandleScope<'s>, object: v8::Local<'s, v8::Object>, uuid: &str) {
-    if let Some(v8str_uuid) = v8::String::new(scope, "uuid") {
-        let uuid = v8::String::new(scope, uuid).unwrap();
-        object.define_own_property(
-            scope,
-            v8str_uuid.into(),
-            uuid.into(),
-            PropertyAttribute::READ_ONLY,
-        );
-    }
 }
