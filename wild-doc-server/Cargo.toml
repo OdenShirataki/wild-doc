@@ -1,13 +1,13 @@
 [package]
 name = "wild-doc-server"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
 
 description = "This is still in development."
 
-repository = "https://github.com/OdenShirataki/wild-doc-server"
+repository = "https://github.com/OdenShirataki/wild-doc"
 
 keywords = ["database","javascript","v8","xml","html"]
 categories = ["database-implementations","network-programming","template-engine"]
