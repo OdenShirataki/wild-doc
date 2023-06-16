@@ -17,7 +17,7 @@ use maybe_xml::{
     scanner::{Scanner, State},
     token::{
         self,
-        prop::{Attribute, Attributes, TagName},
+        prop::{Attributes, TagName},
     },
 };
 use semilattice_database_session::{Activity, CollectionRow, Session, SessionDatabase, Uuid};
@@ -132,58 +132,53 @@ impl<T: IncludeAdaptor> Parser<T> {
         }
         None
     }
-    fn parse_attibute_value(&self, attribute: &Attribute) -> Option<Rc<WildDocValue>> {
+    fn attibute_var(&self, attribute_value: &[u8]) -> Option<Rc<WildDocValue>> {
         let mut value = None;
-        if let Some(attribute_value) = attribute.value() {
-            let mut splited = attribute_value.as_bytes().split(|c| *c == b'.');
-            if let Some(root) = splited.next() {
-                if let Some(root) = self.search_stack(root) {
-                    let mut next_value = &root.value;
-                    while {
-                        if let Some(next) = splited.next() {
-                            match next_value {
-                                serde_json::Value::Object(map) => {
-                                    let mut ret = false;
-                                    if let Some(v) =
-                                        map.get(unsafe { std::str::from_utf8_unchecked(next) })
-                                    {
-                                        next_value = v;
-                                        ret = true;
-                                    }
-                                    ret
+
+        let mut splited = attribute_value.split(|c| *c == b'.');
+        if let Some(root) = splited.next() {
+            if let Some(root) = self.search_stack(root) {
+                let mut next_value = &root.value;
+                while {
+                    if let Some(next) = splited.next() {
+                        match next_value {
+                            serde_json::Value::Object(map) => {
+                                let mut ret = false;
+                                if let Some(v) =
+                                    map.get(unsafe { std::str::from_utf8_unchecked(next) })
+                                {
+                                    next_value = v;
+                                    ret = true;
                                 }
-                                serde_json::Value::Array(map) => {
-                                    let mut ret = false;
-                                    if let Ok(index) = std::str::from_utf8(next) {
-                                        if let Ok(index) = index.parse::<usize>() {
-                                            if let Some(v) = map.get(index) {
-                                                next_value = v;
-                                                ret = true;
-                                            }
+                                ret
+                            }
+                            serde_json::Value::Array(map) => {
+                                let mut ret = false;
+                                if let Ok(index) = std::str::from_utf8(next) {
+                                    if let Ok(index) = index.parse::<usize>() {
+                                        if let Some(v) = map.get(index) {
+                                            next_value = v;
+                                            ret = true;
                                         }
                                     }
-                                    ret
                                 }
-                                _ => false,
+                                ret
                             }
-                        } else {
-                            value = Some(Rc::new(WildDocValue::new(next_value.clone())));
-                            false
+                            _ => false,
                         }
-                    } {}
-                }
+                    } else {
+                        value = Some(Rc::new(WildDocValue::new(next_value.clone())));
+                        false
+                    }
+                } {}
             }
         }
         value
     }
-    fn attribute_value_script(&mut self, attribute: &Attribute) -> Option<Rc<WildDocValue>> {
-        if let Some(value) = attribute.value() {
-            let source = "(".to_owned() + crate::quot_unescape(value.as_bytes()).as_str() + ")";
-            if let Some(v) = self.deno.eval_json_value(source.as_ref()) {
-                Some(Rc::new(WildDocValue::new(v)))
-            } else {
-                None
-            }
+    fn attribute_script(&mut self, value: &[u8]) -> Option<Rc<WildDocValue>> {
+        let source = "(".to_owned() + crate::quot_unescape(value).as_str() + ")";
+        if let Some(v) = self.deno.eval_json_value(source.as_ref()) {
+            Some(Rc::new(WildDocValue::new(v)))
         } else {
             None
         }
@@ -194,40 +189,50 @@ impl<T: IncludeAdaptor> Parser<T> {
         r.append(&mut val.to_vec());
         r.push(b'"');
     }
+
+    fn attibute_var_or_script<'a>(
+        &'a mut self,
+        name: &'a [u8],
+        value: &[u8],
+    ) -> (&[u8], Option<Rc<WildDocValue>>) {
+        if name.ends_with(b":var") {
+            (
+                &name[..name.len() - b":var".len()],
+                self.attibute_var(value),
+            )
+        } else if name.ends_with(b":script") {
+            (
+                &name[..name.len() - b":script".len()],
+                self.attribute_script(value),
+            )
+        } else {
+            (name, None)
+        }
+    }
     fn output_attrbutes(&mut self, r: &mut Vec<u8>, attributes: Attributes) {
         for attribute in attributes {
             r.push(b' ');
+
             let name = attribute.name();
             let name_bytes = name.as_bytes();
-            if name_bytes.ends_with(b":var") {
-                if let Some(prefix) = name.namespace_prefix() {
-                    r.append(&mut prefix.as_bytes().to_vec());
-                    if let Some(value) = self.parse_attibute_value(&attribute) {
+
+            let prefix = attribute.name().namespace_prefix();
+            if let (Some(prefix), Some(value)) = (prefix, attribute.value()) {
+                if let (_, Some(value)) =
+                    self.attibute_var_or_script(attribute.name().as_bytes(), value.as_bytes())
+                {
+                    if name_bytes.starts_with(b"wd-attr:replace") {
+                        r.append(&mut value.to_str().as_bytes().to_vec());
+                    } else {
+                        r.append(&mut prefix.as_bytes().to_vec());
                         Self::output_attrbute_value(r, &mut value.to_str().as_bytes());
                     }
-                }
-            } else if name_bytes.ends_with(b":script") {
-                if let Some(prefix) = name.namespace_prefix() {
-                    r.append(&mut prefix.as_bytes().to_vec());
-                    if let Some(value) = self.attribute_value_script(&attribute) {
-                        Self::output_attrbute_value(r, &mut value.to_str().as_bytes());
-                    }
-                }
-            } else if name_bytes == b"wd-attr:replace" {
-                if name.local().as_bytes() == b"replace" {
-                    if let Some(value) = attribute.value() {
-                        r.append(
-                            &mut self
-                                .deno
-                                .eval_string(crate::quot_unescape(value.as_bytes()).as_ref())
-                                .as_bytes()
-                                .to_vec(),
-                        );
-                    }
+                } else {
+                    r.append(&mut attribute.to_vec());
                 }
             } else {
                 r.append(&mut attribute.to_vec());
-            }
+            };
         }
     }
 
@@ -235,26 +240,13 @@ impl<T: IncludeAdaptor> Parser<T> {
         let mut r: AttributeMap = HashMap::new();
         if let Some(attributes) = attributes {
             for attribute in attributes.iter() {
-                let name = attribute.name();
-                let name_bytes = name.as_bytes();
-                if name_bytes.ends_with(b":var") {
-                    if let Some(prefix) = name.namespace_prefix() {
-                        r.insert(
-                            prefix.as_bytes().to_vec(),
-                            self.parse_attibute_value(&attribute),
-                        );
-                    }
-                } else if name_bytes.ends_with(b":script") {
-                    if let Some(prefix) = name.namespace_prefix() {
-                        r.insert(
-                            prefix.as_bytes().to_vec(),
-                            self.attribute_value_script(&attribute),
-                        );
-                    }
-                } else {
-                    r.insert(
-                        name.to_vec(),
-                        if let Some(ref value) = attribute.value() {
+                if let Some(value) = attribute.value() {
+                    if let (prefix, Some(value)) =
+                        self.attibute_var_or_script(attribute.name().as_bytes(), value.as_bytes())
+                    {
+                        r.insert(prefix.to_vec(), Some(value));
+                    } else {
+                        r.insert(attribute.name().to_vec(), {
                             let value = crate::quot_unescape(value.as_bytes());
                             if let Ok(json_value) = serde_json::from_str(value.as_str()) {
                                 Some(Rc::new(WildDocValue::new(json_value)))
@@ -263,10 +255,10 @@ impl<T: IncludeAdaptor> Parser<T> {
                                     serde_json::json!(value.as_str()),
                                 )))
                             }
-                        } else {
-                            None
-                        },
-                    );
+                        });
+                    }
+                } else {
+                    r.insert(attribute.name().to_vec(), None);
                 }
             }
         }
@@ -770,16 +762,13 @@ impl<T: IncludeAdaptor> Parser<T> {
         let mut name = "".to_string();
         for (key, value) in attributes {
             if let Some(value) = value {
-                if key == b"wd-tag:name" {
-                    //TODO :varなのかscriptなのか
-                    name = self.deno.eval_string(value.to_str().as_bytes());
-                } else if key == b"wd-attr:replace" {
-                    let attr = self
-                        .deno
-                        .eval_string(crate::quot_unescape(value.to_str().as_bytes()).as_bytes());
+                if key.starts_with(b"wd-tag:name") {
+                    name = value.to_str().to_string();
+                } else if key.starts_with(b"wd-attr:replace") {
+                    let attr = crate::quot_unescape(value.to_str().as_bytes());
                     if attr.len() > 0 {
                         html_attr.push(b' ');
-                        html_attr.append(&mut attr.into_bytes());
+                        html_attr.append(&mut attr.as_bytes().to_vec());
                     }
                 } else {
                     html_attr.push(b' ');
