@@ -681,7 +681,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                     None
                 };
                 if let Ok(mut session) =
-                    Session::new(&self.database.read().unwrap(), session_name, expire)
+                    self.database.read().unwrap().session(&session_name, expire)
                 {
                     if let Some(Some(cursor)) = attributes.get(b"cursor".as_ref()) {
                         let cursor = cursor.to_str();
