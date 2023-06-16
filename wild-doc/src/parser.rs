@@ -7,7 +7,6 @@ use std::{
     borrow::Cow,
     collections::HashMap,
     io,
-    path::PathBuf,
     rc::Rc,
     sync::{Arc, Mutex, RwLock},
 };
@@ -22,7 +21,7 @@ use maybe_xml::{
 };
 use semilattice_database_session::{Activity, CollectionRow, Session, SessionDatabase, Uuid};
 
-use crate::{anyhow::Result, deno::Deno, xml_util, IncludeAdaptor};
+use crate::{anyhow::Result, script::Script, xml_util, IncludeAdaptor};
 
 #[derive(Debug)]
 pub struct WildDocValue {
@@ -47,7 +46,7 @@ pub struct Parser<T: IncludeAdaptor> {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<(Session, bool)>,
     stack: Arc<RwLock<VarsStack>>,
-    deno: Deno,
+    script: Box<dyn Script>,
     include_adaptor: Arc<Mutex<T>>,
     include_stack: Vec<String>,
 }
@@ -55,11 +54,11 @@ impl<T: IncludeAdaptor> Parser<T> {
     pub fn new(
         database: Arc<RwLock<SessionDatabase>>,
         include_adaptor: Arc<Mutex<T>>,
-        module_cache_dir: PathBuf,
+        script: Box<dyn Script>,
+        stack: Arc<RwLock<VarsStack>>,
     ) -> Result<Self> {
-        let stack = Arc::new(RwLock::new(vec![]));
         Ok(Self {
-            deno: Deno::new(&database, &include_adaptor, module_cache_dir, &stack)?,
+            script,
             sessions: vec![],
             stack,
             database,
@@ -83,7 +82,7 @@ impl<T: IncludeAdaptor> Parser<T> {
         self.stack.write().unwrap().push(json);
         let result_body = self.parse(xml)?;
         self.stack.write().unwrap().pop();
-        let result_options = self.deno.eval_json_value(b"wd.result_options");
+        let result_options = self.script.eval(b"wd.result_options");
         Ok(super::WildDocResult {
             body: result_body,
             options_json: result_options,
@@ -177,7 +176,7 @@ impl<T: IncludeAdaptor> Parser<T> {
     }
     fn attribute_script(&mut self, value: &[u8]) -> Option<Rc<WildDocValue>> {
         let source = "(".to_owned() + crate::quot_unescape(value).as_str() + ")";
-        if let Some(v) = self.deno.eval_json_value(source.as_ref()) {
+        if let Some(v) = self.script.eval(source.as_ref()) {
             Some(Rc::new(WildDocValue::new(v)))
         } else {
             None
@@ -280,7 +279,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                     match token.target().to_str()? {
                         "typescript" | "script" => {
                             if let Some(i) = token.instructions() {
-                                if let Err(e) = self.deno.evaluate_module(
+                                if let Err(e) = self.script.evaluate_module(
                                     if let Some(last) = self.include_stack.last() {
                                         last
                                     } else {
@@ -433,14 +432,12 @@ impl<T: IncludeAdaptor> Parser<T> {
                         false
                     } {
                         match name.local().as_bytes() {
-                            b"def" | b"result" => {
+                            b"def"
+                            | b"result"
+                            | b"collections"
+                            | b"sessions"
+                            | b"session_sequence_cursor" => {
                                 self.stack.write().unwrap().pop();
-                            }
-                            b"collections" | b"sessions" | b"session_sequence_cursor" => {
-                                let _ = self.deno.execute_script(
-                                    "stack.pop",
-                                    "wd.stack.pop();".to_owned().into(),
-                                );
                             }
                             b"session" => {
                                 if let Some((ref mut session, clear_on_close)) = self.sessions.pop()

@@ -53,8 +53,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                         serde_json::to_string(&commit_rows),
                         serde_json::to_string(&session_rows),
                     ) {
-                        let _ = self.deno.execute_script(
-                            "commit",
+                        let _ = self.script.eval(
                             ("{const update_result={commit_rows:".to_owned()
                                 + json_commit_rows.as_str()
                                 + ",session_rows:"
@@ -62,7 +61,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                                 + "};"
                                 + src.as_ref()
                                 + "}")
-                                .into(),
+                                .as_bytes(),
                         );
                     }
                 }

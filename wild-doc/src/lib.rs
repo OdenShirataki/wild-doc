@@ -1,8 +1,10 @@
 mod deno;
 mod include;
 mod parser;
+mod script;
 mod xml_util;
 
+use deno::Deno;
 use deno_runtime::deno_core::serde_json;
 pub use include::{IncludeAdaptor, IncludeLocal};
 pub use semilattice_database_session::anyhow;
@@ -51,10 +53,17 @@ impl<T: IncludeAdaptor> WildDoc<T> {
     }
 
     pub fn run(&mut self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {
+        let stack = Arc::new(RwLock::new(vec![]));
         Parser::new(
             self.database.clone(),
             self.default_include_adaptor.clone(),
-            self.cache_dir.clone(),
+            Box::new(Deno::new(
+                &self.database,
+                &self.default_include_adaptor,
+                self.cache_dir.clone(),
+                &stack,
+            )?),
+            stack,
         )?
         .parse_xml(input_json, xml)
     }
@@ -64,12 +73,16 @@ impl<T: IncludeAdaptor> WildDoc<T> {
         input_json: &[u8],
         include_adaptor: I,
     ) -> Result<WildDocResult> {
-        Parser::new(
-            self.database.clone(),
-            Arc::new(Mutex::new(include_adaptor)),
+        let stack = Arc::new(RwLock::new(vec![]));
+        let include_adaptor = Arc::new(Mutex::new(include_adaptor));
+        let script = Box::new(Deno::new(
+            &self.database,
+            include_adaptor.as_ref(),
             self.cache_dir.clone(),
-        )?
-        .parse_xml(input_json, xml)
+            &stack,
+        )?);
+        Parser::new(self.database.clone(), include_adaptor, script, stack)?
+            .parse_xml(input_json, xml)
     }
 }
 

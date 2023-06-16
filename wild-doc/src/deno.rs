@@ -17,7 +17,7 @@ use semilattice_database_session::SessionDatabase;
 
 use self::module_loader::WdModuleLoader;
 
-use crate::{anyhow::Result, parser::VarsStack, IncludeAdaptor};
+use crate::{anyhow::Result, parser::VarsStack, script::Script, IncludeAdaptor};
 
 pub struct Deno {
     worker: MainWorker,
@@ -32,6 +32,30 @@ impl Deref for Deno {
 impl DerefMut for Deno {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.worker
+    }
+}
+impl Script for Deno {
+    fn evaluate_module(&mut self, file_name: &str, src: &[u8]) -> Result<()> {
+        deno_runtime::tokio_util::create_basic_runtime().block_on(async {
+            let script_name = "wd://script".to_owned() + file_name;
+            let mod_id = self
+                .js_runtime
+                .load_side_module(
+                    &ModuleSpecifier::parse(&script_name)?,
+                    Some(String::from_utf8(src.to_vec())?.into()),
+                )
+                .await?;
+            MainWorker::evaluate_module(&mut self.worker, mod_id).await?;
+            self.run_event_loop(false).await
+        })
+    }
+    fn eval(&mut self, code: &[u8]) -> Option<serde_json::Value> {
+        let scope = &mut self.js_runtime.handle_scope();
+        v8::String::new_from_one_byte(scope, code, NewStringType::Normal)
+            .and_then(|code| v8::Script::compile(scope, code, None))
+            .and_then(|v| v.run(scope))
+            .and_then(|v| serde_v8::from_v8(scope, v).ok())
+            .and_then(|v| serde_json::from_value(v).ok())
     }
 }
 impl Deno {
@@ -184,29 +208,5 @@ impl Deno {
             }
         }
         Ok(Self { worker })
-    }
-
-    pub fn evaluate_module(&mut self, file_name: &str, src: &[u8]) -> Result<()> {
-        deno_runtime::tokio_util::create_basic_runtime().block_on(async {
-            let script_name = "wd://script".to_owned() + file_name;
-            let mod_id = self
-                .js_runtime
-                .load_side_module(
-                    &ModuleSpecifier::parse(&script_name)?,
-                    Some(String::from_utf8(src.to_vec())?.into()),
-                )
-                .await?;
-            MainWorker::evaluate_module(&mut self.worker, mod_id).await?;
-            self.run_event_loop(false).await
-        })
-    }
-
-    pub fn eval_json_value(&mut self, code: &[u8]) -> Option<serde_json::Value> {
-        let scope = &mut self.js_runtime.handle_scope();
-        v8::String::new_from_one_byte(scope, code, NewStringType::Normal)
-            .and_then(|code| v8::Script::compile(scope, code, None))
-            .and_then(|v| v.run(scope))
-            .and_then(|v| serde_v8::from_v8(scope, v).ok())
-            .and_then(|v| serde_json::from_value(v).ok())
     }
 }
