@@ -3,6 +3,6 @@
         <title>HTML include test</title>
     </head>
     <body>
-        <wd:include wd:src="wd.v('body_path')" />
+        <wd:include src:var="body_path" />
     </body>
 </html>
