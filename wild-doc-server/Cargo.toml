@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-server"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -18,4 +18,4 @@ license = "MIT/Apache-2.0"
 toml = "0.7"
 serde = "1.0"
 serde_derive = "1.0"
-wild-doc = { version = "0.74" , path = "../wild-doc" }
+wild-doc = { version = "0.75" , path = "../wild-doc" }

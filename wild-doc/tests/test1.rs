@@ -178,7 +178,7 @@ fn test1() {
         </wd:result>
     "#,b"").unwrap();
     println!(
-        "{} : {}",
+        "{} : {:#?}",
         std::str::from_utf8(r.body()).unwrap(),
         r.options_json()
     );
@@ -244,7 +244,7 @@ fn test1() {
         )
         .unwrap();
     println!(
-        "{} : {}",
+        "{} : {:#?}",
         std::str::from_utf8(r.body()).unwrap(),
         r.options_json()
     );

@@ -12,10 +12,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use deno_runtime::deno_core::{
-    self, serde_json,
-    v8::{self, PropertyAttribute},
-};
+use deno_runtime::deno_core::serde_json;
 use maybe_xml::{
     scanner::{Scanner, State},
     token::{
@@ -25,11 +22,7 @@ use maybe_xml::{
 };
 use semilattice_database_session::{Activity, CollectionRow, Session, SessionDatabase, Uuid};
 
-use crate::{
-    anyhow::Result,
-    deno::{self, push_stack, Deno},
-    xml_util, IncludeAdaptor,
-};
+use crate::{anyhow::Result, deno::Deno, xml_util, IncludeAdaptor};
 
 #[derive(Debug)]
 pub struct WildDocValue {
@@ -90,7 +83,7 @@ impl<T: IncludeAdaptor> Parser<T> {
         self.stack.write().unwrap().push(json);
         let result_body = self.parse(xml)?;
         self.stack.write().unwrap().pop();
-        let result_options = self.deno.eval_json_string(b"wd.result_options");
+        let result_options = self.deno.eval_json_value(b"wd.result_options");
         Ok(super::WildDocResult {
             body: result_body,
             options_json: result_options,
@@ -637,27 +630,19 @@ impl<T: IncludeAdaptor> Parser<T> {
         self.stack.write().unwrap().push(json);
     }
     fn collections(&mut self, attributes: &AttributeMap) {
-        let scope = &mut self.deno.js_runtime.handle_scope();
-
-        let obj = v8::Object::new(scope);
+        let mut json: HashMap<Vec<u8>, Rc<WildDocValue>> = HashMap::new();
 
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
             let var = var.to_str();
             if var != "" {
-                if let (Ok(array), Some(v8str_var)) = (
-                    deno_core::serde_v8::to_v8(scope, self.database.read().unwrap().collections()),
-                    v8::String::new(scope, &var),
-                ) {
-                    obj.define_own_property(
-                        scope,
-                        v8str_var.into(),
-                        array.into(),
-                        PropertyAttribute::READ_ONLY,
-                    );
-                }
+                let collections = self.database.read().unwrap().collections();
+                json.insert(
+                    var.to_string().as_bytes().to_vec(),
+                    Rc::new(WildDocValue::new(serde_json::json!(collections))),
+                );
             }
         }
-        push_stack(scope, obj);
+        self.stack.write().unwrap().push(json);
     }
     fn session(&mut self, attributes: &AttributeMap) -> io::Result<()> {
         if let Some(Some(session_name)) = attributes.get(b"name".as_ref()) {
@@ -708,29 +693,20 @@ impl<T: IncludeAdaptor> Parser<T> {
         Ok(())
     }
     fn sessions(&mut self, attributes: &AttributeMap) {
-        let scope = &mut self.deno.js_runtime.handle_scope();
-
-        let obj = v8::Object::new(scope);
+        let mut json: HashMap<Vec<u8>, Rc<WildDocValue>> = HashMap::new();
 
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
             let var = var.to_str();
             if var != "" {
-                if let (Ok(sessions), Some(v8str_var)) = (
-                    self.database.read().unwrap().sessions(),
-                    v8::String::new(scope, &var),
-                ) {
-                    if let Ok(array) = deno_core::serde_v8::to_v8(scope, sessions) {
-                        obj.define_own_property(
-                            scope,
-                            v8str_var.into(),
-                            array.into(),
-                            PropertyAttribute::READ_ONLY,
-                        );
-                    }
+                if let Ok(sessions) = self.database.read().unwrap().sessions() {
+                    json.insert(
+                        var.to_string().as_bytes().to_vec(),
+                        Rc::new(WildDocValue::new(serde_json::json!(sessions))),
+                    );
                 }
             }
         }
-        push_stack(scope, obj);
+        self.stack.write().unwrap().push(json);
     }
     fn session_sequence(&mut self, attributes: &AttributeMap) -> io::Result<()> {
         let mut str_max = if let Some(Some(s)) = attributes.get(b"max".as_ref()) {
@@ -739,7 +715,7 @@ impl<T: IncludeAdaptor> Parser<T> {
             "".into()
         };
         if str_max == "" {
-            str_max = "wd:session_sequence_max".into();
+            str_max = "session_sequence_max".into();
         }
 
         let mut str_current = if let Some(Some(s)) = attributes.get(b"current".as_ref()) {
@@ -748,37 +724,25 @@ impl<T: IncludeAdaptor> Parser<T> {
             "".into()
         };
         if str_current == "" {
-            str_current = "wd:session_sequence_current".into();
+            str_current = "session_sequence_current".into();
         }
 
-        let scope = &mut self.deno.js_runtime.handle_scope();
-
-        let obj = v8::Object::new(scope);
+        let mut json: HashMap<Vec<u8>, Rc<WildDocValue>> = HashMap::new();
         if let Some((session, _)) = self.sessions.last() {
             if let Some(cursor) = session.sequence_cursor() {
-                if let (Some(v8str_max), Some(v8str_current)) = (
-                    v8::String::new(scope, &str_max),
-                    v8::String::new(scope, &str_current),
-                ) {
-                    let max = v8::Integer::new(scope, cursor.max as i32);
-                    let current = v8::Integer::new(scope, cursor.current as i32);
-                    obj.define_own_property(
-                        scope,
-                        v8str_max.into(),
-                        max.into(),
-                        PropertyAttribute::READ_ONLY,
-                    );
-                    obj.define_own_property(
-                        scope,
-                        v8str_current.into(),
-                        current.into(),
-                        PropertyAttribute::READ_ONLY,
-                    );
-                }
+                json.insert(
+                    str_max.as_bytes().to_vec(),
+                    Rc::new(WildDocValue::new(serde_json::json!(cursor.max))),
+                );
+
+                json.insert(
+                    str_current.as_bytes().to_vec(),
+                    Rc::new(WildDocValue::new(serde_json::json!(cursor.current))),
+                );
             }
         }
+        self.stack.write().unwrap().push(json);
 
-        push_stack(scope, obj);
         Ok(())
     }
     fn session_gc(&mut self, attributes: &AttributeMap) -> io::Result<()> {
@@ -802,19 +766,17 @@ impl<T: IncludeAdaptor> Parser<T> {
     }
 
     fn custom_tag(&mut self, attributes: &AttributeMap) -> (String, Vec<u8>) {
-        let scope = &mut self.deno.js_runtime.handle_scope();
         let mut html_attr = vec![];
         let mut name = "".to_string();
         for (key, value) in attributes {
             if let Some(value) = value {
                 if key == b"wd-tag:name" {
                     //TODO :varなのかscriptなのか
-                    name = deno::eval_result_string(scope, value.to_str().as_bytes());
+                    name = self.deno.eval_string(value.to_str().as_bytes());
                 } else if key == b"wd-attr:replace" {
-                    let attr = deno::eval_result_string(
-                        scope,
-                        crate::quot_unescape(value.to_str().as_bytes()).as_bytes(),
-                    );
+                    let attr = self
+                        .deno
+                        .eval_string(crate::quot_unescape(value.to_str().as_bytes()).as_bytes());
                     if attr.len() > 0 {
                         html_attr.push(b' ');
                         html_attr.append(&mut attr.into_bytes());

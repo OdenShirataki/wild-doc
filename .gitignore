@@ -1,5 +1,6 @@
 /target/
 Cargo.lock
 .vscode
+/wild-doc/wd-test*
 /wd-test*
 /wd-server-test*

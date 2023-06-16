@@ -9,7 +9,7 @@ use std::{
 
 use deno_runtime::{
     deno_core::{self, serde_json, serde_v8, ModuleSpecifier},
-    deno_napi::v8::{self, HandleScope, NewStringType, PropertyAttribute},
+    deno_napi::v8::{self, NewStringType, PropertyAttribute},
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
 };
@@ -210,53 +210,16 @@ impl Deno {
             .and_then(|v| serde_json::from_value(v).ok())
     }
 
-    pub fn eval_json_string(&mut self, object_name: &[u8]) -> String {
-        let scope = &mut self.js_runtime.handle_scope();
-        if let Some(json) = v8::String::new_from_one_byte(scope, object_name, NewStringType::Normal)
-            .and_then(|code| v8::Script::compile(scope, code, None))
-            .and_then(|v| v.run(scope))
-            .and_then(|v| v8::json::stringify(scope, v))
-        {
-            json.to_rust_string_lossy(scope)
-        } else {
-            String::new()
-        }
-    }
-
     pub fn eval_string(&mut self, code: &[u8]) -> String {
         let scope = &mut self.js_runtime.handle_scope();
-        eval_result_string(scope, code)
-    }
-}
-
-pub fn eval_result_string(scope: &mut v8::HandleScope, code: &[u8]) -> String {
-    if let Some(v8_value) = v8::String::new_from_one_byte(scope, code, NewStringType::Normal)
-        .and_then(|code| v8::Script::compile(scope, code, None))
-        .and_then(|v| v.run(scope))
-        .and_then(|v| v.to_string(scope))
-    {
-        v8_value.to_rust_string_lossy(scope)
-    } else {
-        "".to_string()
-    }
-}
-
-pub fn push_stack(scope: &mut HandleScope, obj: v8::Local<v8::Object>) {
-    let context = scope.get_current_context();
-    let scope = &mut v8::ContextScope::new(scope, context);
-    if let (Some(v8str_wd), Some(v8str_stack)) = (
-        v8::String::new(scope, "wd"),
-        v8::String::new(scope, "stack"),
-    ) {
-        let global = context.global(scope);
-        if let Some(wd) = global.get(scope, v8str_wd.into()) {
-            if let Ok(wd) = v8::Local::<v8::Object>::try_from(wd) {
-                if let Some(stack) = wd.get(scope, v8str_stack.into()) {
-                    if let Ok(stack) = v8::Local::<v8::Array>::try_from(stack) {
-                        stack.set_index(scope, stack.length(), obj.into());
-                    }
-                }
-            }
+        if let Some(v8_value) = v8::String::new_from_one_byte(scope, code, NewStringType::Normal)
+            .and_then(|code| v8::Script::compile(scope, code, None))
+            .and_then(|v| v.run(scope))
+            .and_then(|v| v.to_string(scope))
+        {
+            v8_value.to_rust_string_lossy(scope)
+        } else {
+            "".to_string()
         }
     }
 }

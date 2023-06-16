@@ -3,6 +3,7 @@ mod include;
 mod parser;
 mod xml_util;
 
+use deno_runtime::deno_core::serde_json;
 pub use include::{IncludeAdaptor, IncludeLocal};
 pub use semilattice_database_session::anyhow;
 
@@ -19,13 +20,13 @@ use parser::Parser;
 
 pub struct WildDocResult {
     body: Vec<u8>,
-    options_json: String,
+    options_json: Option<serde_json::Value>,
 }
 impl WildDocResult {
     pub fn body(&self) -> &[u8] {
         &self.body
     }
-    pub fn options_json(&self) -> &str {
+    pub fn options_json(&self) -> &Option<serde_json::Value> {
         &self.options_json
     }
 }
