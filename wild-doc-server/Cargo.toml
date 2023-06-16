@@ -5,7 +5,7 @@ edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
 
-description = ""
+description = "wild-doc server"
 
 repository = "https://github.com/OdenShirataki/wild-doc"
 
