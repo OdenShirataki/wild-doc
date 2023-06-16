@@ -1,0 +1,24 @@
+[package]
+name = "wild-doc"
+version = "0.74.1"
+edition = "2021"
+
+authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
+
+description = "You can read and write data using XML and output various structured documents.You can also program using javascript/TypeScript.It's Deno compatible."
+
+repository = "https://github.com/OdenShirataki/wild-doc"
+
+license = "MIT/Apache-2.0"
+
+keywords = ["database","javascript","TypeScript","xml","html"]
+categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
+
+[dependencies]
+maybe_xml = "0.3"
+chrono = "0.4"
+ring = "0.16"
+deno_runtime = "0.116.0"
+deno_ast = { version = "0.27.0", features = ["transpiling"] }
+
+semilattice-database-session = { version = "0.2", path = "../../semilattice-database-session" }
