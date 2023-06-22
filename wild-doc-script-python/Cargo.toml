@@ -1,0 +1,25 @@
+[package]
+name = "wild-doc-script-python"
+version = "0.0.1"
+edition = "2021"
+
+authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
+
+description = "python for wild-doc (unofficial)"
+
+repository = "https://github.com/OdenShirataki/wild-doc"
+
+license = "MIT/Apache-2.0"
+
+keywords = ["database","xml","html","Python"]
+categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
+
+[dependencies]
+anyhow = "1.0"
+serde_json = "1.0"
+
+wild-doc-script = { version = "0.0", path = "../wild-doc-script" }
+
+[dependencies.pyo3]
+version = "0.19.0"
+features = ["auto-initialize"]

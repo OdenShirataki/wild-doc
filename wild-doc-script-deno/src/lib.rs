@@ -3,21 +3,20 @@ pub mod module_loader;
 use std::{
     ffi::c_void,
     ops::{Deref, DerefMut},
-    path::PathBuf,
     sync::{Mutex, RwLock},
 };
 
+use anyhow::Result;
 use deno_runtime::{
     deno_core::{self, serde_json, serde_v8, ModuleSpecifier},
     deno_napi::v8::{self, NewStringType, PropertyAttribute},
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
 };
-use semilattice_database_session::SessionDatabase;
+
+use wild_doc_script::{IncludeAdaptor, VarsStack, WildDocScript, WildDocState};
 
 use self::module_loader::WdModuleLoader;
-
-use crate::{anyhow::Result, parser::VarsStack, script::Script, IncludeAdaptor};
 
 pub struct Deno {
     worker: MainWorker,
@@ -34,42 +33,13 @@ impl DerefMut for Deno {
         &mut self.worker
     }
 }
-impl Script for Deno {
-    fn evaluate_module(&mut self, file_name: &str, src: &[u8]) -> Result<()> {
-        deno_runtime::tokio_util::create_basic_runtime().block_on(async {
-            let script_name = "wd://script".to_owned() + file_name;
-            let mod_id = self
-                .js_runtime
-                .load_side_module(
-                    &ModuleSpecifier::parse(&script_name)?,
-                    Some(String::from_utf8(src.to_vec())?.into()),
-                )
-                .await?;
-            MainWorker::evaluate_module(&mut self.worker, mod_id).await?;
-            self.run_event_loop(false).await
-        })
-    }
-    fn eval(&mut self, code: &[u8]) -> Option<serde_json::Value> {
-        let scope = &mut self.js_runtime.handle_scope();
-        v8::String::new_from_one_byte(scope, code, NewStringType::Normal)
-            .and_then(|code| v8::Script::compile(scope, code, None))
-            .and_then(|v| v.run(scope))
-            .and_then(|v| serde_v8::from_v8(scope, v).ok())
-            .and_then(|v| serde_json::from_value(v).ok())
-    }
-}
-impl Deno {
-    pub fn new<T: IncludeAdaptor>(
-        database: &RwLock<SessionDatabase>,
-        include_adaptor: &Mutex<T>,
-        module_cache_dir: PathBuf,
-        stack: &RwLock<VarsStack>,
-    ) -> Result<Self> {
+impl WildDocScript for Deno {
+    fn new(state: WildDocState) -> Result<Self> {
         let mut worker = MainWorker::bootstrap_from_options(
             deno_core::resolve_url("wd://main").unwrap(),
             PermissionsContainer::allow_all(),
             WorkerOptions {
-                module_loader: WdModuleLoader::new(module_cache_dir),
+                module_loader: WdModuleLoader::new(state.cache_dir().to_owned()),
                 ..Default::default()
             },
         );
@@ -101,9 +71,11 @@ impl Deno {
                             .to_rust_string_lossy(scope);
                         let include_adaptor = unsafe {
                             &mut *(v8::Local::<v8::External>::cast(include_adaptor).value()
-                                as *mut Mutex<T>)
+                                as *mut Mutex<Box<dyn IncludeAdaptor + Send>>)
                         };
-                        if let Some(contents) = include_adaptor.lock().unwrap().include(filename) {
+                        if let Some(contents) =
+                            include_adaptor.lock().unwrap().include(filename.into())
+                        {
                             if let Ok(r) = serde_v8::to_v8(scope, contents) {
                                 retval.set(r.into());
                             }
@@ -132,7 +104,7 @@ impl Deno {
                             .to_rust_string_lossy(scope);
                         for stack in stack.read().unwrap().iter().rev() {
                             if let Some(v) = stack.get(key.as_bytes()) {
-                                if let Ok(r) = serde_v8::to_v8(scope, v.value.clone()) {
+                                if let Ok(r) = serde_v8::to_v8(scope, v.value().clone()) {
                                     retval.set(r.into());
                                 }
                                 break;
@@ -145,7 +117,6 @@ impl Deno {
             if let (
                 Some(wd),
                 Some(v8str_include_adaptor),
-                Some(v8str_script),
                 Some(v8str_get_contents),
                 Some(v8func_get_contents),
                 Some(v8str_stack),
@@ -157,15 +128,17 @@ impl Deno {
                     .and_then(|v| v.run(scope))
                     .and_then(|v| v8::Local::<v8::Object>::try_from(v).ok()),
                 v8::String::new(scope, "include_adaptor"),
-                v8::String::new(scope, "database"),
                 v8::String::new(scope, "get_contents"),
                 func_get_contents,
                 v8::String::new(scope, "stack"),
                 v8::String::new(scope, "v"),
                 func_v,
             ) {
-                let v8ext_include_adaptor =
-                    v8::External::new(scope, include_adaptor as *const Mutex<T> as *mut c_void);
+                let v8ext_include_adaptor = v8::External::new(
+                    scope,
+                    state.include_adaptor() as *const Mutex<Box<dyn IncludeAdaptor + Send>>
+                        as *mut c_void,
+                );
                 wd.define_own_property(
                     scope,
                     v8str_include_adaptor.into(),
@@ -173,23 +146,14 @@ impl Deno {
                     PropertyAttribute::READ_ONLY,
                 );
 
-                let v8ext_stack =
-                    v8::External::new(scope, stack as *const RwLock<VarsStack> as *mut c_void);
+                let v8ext_stack = v8::External::new(
+                    scope,
+                    state.stack().as_ref() as *const RwLock<VarsStack> as *mut c_void,
+                );
                 wd.define_own_property(
                     scope,
                     v8str_stack.into(),
                     v8ext_stack.into(),
-                    PropertyAttribute::READ_ONLY,
-                );
-
-                let v8ext_script = v8::External::new(
-                    scope,
-                    database as *const RwLock<SessionDatabase> as *mut c_void,
-                );
-                wd.define_own_property(
-                    scope,
-                    v8str_script.into(),
-                    v8ext_script.into(),
                     PropertyAttribute::READ_ONLY,
                 );
 
@@ -208,5 +172,29 @@ impl Deno {
             }
         }
         Ok(Self { worker })
+    }
+    fn evaluate_module(&mut self, file_name: &str, src: &[u8]) -> Result<()> {
+        deno_runtime::tokio_util::create_basic_runtime().block_on(async {
+            let script_name = "wd://script".to_owned() + file_name;
+            let mod_id = self
+                .js_runtime
+                .load_side_module(
+                    &ModuleSpecifier::parse(&script_name)?,
+                    Some(String::from_utf8(src.to_vec())?.into()),
+                )
+                .await?;
+            MainWorker::evaluate_module(&mut self.worker, mod_id).await?;
+            self.run_event_loop(false).await
+        })
+    }
+    fn eval(&mut self, code: &[u8]) -> Result<Option<serde_json::Value>> {
+        let scope = &mut self.js_runtime.handle_scope();
+        Ok(
+            v8::String::new_from_one_byte(scope, code, NewStringType::Normal)
+                .and_then(|code| v8::Script::compile(scope, code, None))
+                .and_then(|v| v.run(scope))
+                .and_then(|v| serde_v8::from_v8(scope, v).ok())
+                .and_then(|v| serde_json::from_value(v).ok()),
+        )
     }
 }

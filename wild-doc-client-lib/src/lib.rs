@@ -184,7 +184,7 @@ mod tests {
             </wd:result>
         "#);
         client.exec(r#"
-            <?script
+            <?js
                 const ymd=function(){
                     const now=new Date();
                     return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
@@ -196,7 +196,7 @@ mod tests {
             </wd:search>
             <wd:result var="q" search="p">
                 <div>
-                    <wd:print value:script="ymd()" />
+                    <wd:print value:js="ymd()" />
                 </div>
                 <div>
                     find <wd:print value:var="q.len" /> persons from the <wd:print value="uk" />.

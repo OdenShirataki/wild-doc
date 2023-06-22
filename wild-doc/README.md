@@ -94,7 +94,7 @@ println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //use javascript
 let r=wd.run(br#"
-    <?script
+    <?js
         const ymd=function(){
             const now=new Date();
             return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
@@ -107,14 +107,14 @@ let r=wd.run(br#"
         wd.result_options['test']="OK";
     ?>
     <wd:search name="p" collection="person">
-        <field name="country" method="match" value:script="wd.general.uk" />
+        <field name="country" method="match" value:js="wd.general.uk" />
     </wd:search>
     <wd:result var="q" search="p">
         <div>
-            <wd:print value:script="wd.general.ymd()" />
+            <wd:print value:js="wd.general.ymd()" />
         </div>
         <div>
-            find <wd:print value:script="q.len" /> persons from the <wd:print value:script="wd.general.uk" />.
+            find <wd:print value:js="q.len" /> persons from the <wd:print value:js="wd.general.uk" />.
         </div>
         <ul>
             <wd:for var="person" in:var="q.rows"><li>
@@ -157,7 +157,7 @@ println!("{}",std::str::from_utf8(r.body()).unwrap());
 
 //use WebAPI
 let r=wd.run(br#"
-    <?script
+    <?js
         import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
         console.log(uuidv4());
 
@@ -172,16 +172,16 @@ let r=wd.run(br#"
         wd.result_options.test="TEST";
         wd.result_options.test2=crypto.randomUUID();
     ?>
-    a:<wd:print value:script="wd.general.a" />
+    a:<wd:print value:js="wd.general.a" />
     v:<wd:print value:var="a" />
     input:<wd:print value:var="input.name" />
-    <?script
+    <?js
         wd.stack.pop();
         wd.general.a="OK2";
         wd.general.b=1>2;
     ?>
-    a:<wd:print value:script="wd.general.a" />
-    v:<wd:print value:script="wd.general.b" />
+    a:<wd:print value:js="wd.general.a" />
+    v:<wd:print value:js="wd.general.b" />
 "#,br#"{
     "name":"Ken"
     ,"from":"US"
@@ -224,4 +224,11 @@ let r=wd.run(br#"<wd:def body_path="body.xml">
         BODY
     </body>
 </html>
+```
+
+## Use python
+
+Specify features in Cargo.toml.
+```toml
+wild-doc = { version = "0.76" , path = "../wild-doc" ,features=[ "js","py" ] }
 ```

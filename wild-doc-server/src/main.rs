@@ -14,10 +14,10 @@ use include::{IncludeEmpty, IncludeRemote};
 
 #[derive(Deserialize)]
 struct Config {
-    wilddoc: Option<ConfigWildDoc>,
+    server: Option<ConfigServer>,
 }
 #[derive(Deserialize)]
-struct ConfigWildDoc {
+struct ConfigServer {
     path: Option<String>,
     bind_addr: Option<String>,
     port: Option<String>,
@@ -25,12 +25,12 @@ struct ConfigWildDoc {
 }
 
 fn main() {
-    if let Ok(mut f) = std::fs::File::open("wild-doc.toml") {
+    if let Ok(mut f) = std::fs::File::open("wild-doc-server.toml") {
         let mut toml = String::new();
         if let Ok(_) = f.read_to_string(&mut toml) {
             let config: Result<Config, toml::de::Error> = toml::from_str(&toml);
             if let Ok(config) = config {
-                if let Some(config) = config.wilddoc {
+                if let Some(config) = config.server {
                     if let (Some(dir), Some(bind_addr), Some(port)) =
                         (config.path, config.bind_addr, config.port)
                     {
@@ -64,8 +64,11 @@ fn main() {
                                                         std::fs::create_dir_all(dir).unwrap();
                                                     }
                                                     Arc::new(Mutex::new(
-                                                        WildDoc::new(dir, IncludeEmpty::new())
-                                                            .unwrap(),
+                                                        WildDoc::new(
+                                                            dir,
+                                                            Box::new(IncludeEmpty::new()),
+                                                        )
+                                                        .unwrap(),
                                                     ))
                                                 });
                                             let wd = Arc::clone(&wd);
@@ -88,7 +91,7 @@ fn main() {
     }
 }
 
-fn handler(mut stream: TcpStream, wd: Arc<Mutex<WildDoc<IncludeEmpty>>>) -> Result<()> {
+fn handler(mut stream: TcpStream, wd: Arc<Mutex<WildDoc>>) -> Result<()> {
     stream.write_all(&[0])?;
 
     let mut writer = stream.try_clone().unwrap();
@@ -111,7 +114,7 @@ fn handler(mut stream: TcpStream, wd: Arc<Mutex<WildDoc<IncludeEmpty>>>) -> Resu
         let ret = wd.clone().lock().unwrap().run_specify_include_adaptor(
             &xml,
             &input_json,
-            IncludeRemote::new(stream.try_clone().unwrap()),
+            Box::new(IncludeRemote::new(stream.try_clone().unwrap())),
         );
         match ret {
             Ok(r) => {

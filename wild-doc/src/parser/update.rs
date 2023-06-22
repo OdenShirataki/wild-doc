@@ -1,5 +1,4 @@
 use chrono::TimeZone;
-use deno_runtime::deno_core::serde_json;
 use maybe_xml::{
     scanner::{Scanner, State},
     token,
@@ -11,7 +10,7 @@ use std::{collections::HashMap, error, fmt};
 
 use crate::{
     anyhow::{anyhow, Result},
-    xml_util, IncludeAdaptor,
+    xml_util,
 };
 
 use super::{AttributeMap, Parser};
@@ -29,7 +28,7 @@ impl error::Error for DependError {
     }
 }
 
-impl<T: IncludeAdaptor> Parser<T> {
+impl Parser {
     pub fn update(&mut self, xml: &[u8], attributes: &AttributeMap) -> Result<()> {
         let inner_xml = self.parse(xml)?;
         let updates = self.make_update_struct(inner_xml.as_slice())?;
@@ -53,16 +52,18 @@ impl<T: IncludeAdaptor> Parser<T> {
                         serde_json::to_string(&commit_rows),
                         serde_json::to_string(&session_rows),
                     ) {
-                        let _ = self.script.eval(
-                            ("{const update_result={commit_rows:".to_owned()
-                                + json_commit_rows.as_str()
-                                + ",session_rows:"
-                                + json_session_rows.as_str()
-                                + "};"
-                                + src.as_ref()
-                                + "}")
-                                .as_bytes(),
-                        );
+                        if let Some(script) = self.scripts.get("script") {
+                            let _ = script.lock().unwrap().eval(
+                                ("{const update_result={commit_rows:".to_owned()
+                                    + json_commit_rows.as_str()
+                                    + ",session_rows:"
+                                    + json_session_rows.as_str()
+                                    + "};"
+                                    + src.as_ref()
+                                    + "}")
+                                    .as_bytes(),
+                            );
+                        }
                     }
                 }
             }

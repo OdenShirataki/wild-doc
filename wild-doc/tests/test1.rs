@@ -9,7 +9,7 @@ fn test1() {
     }
     std::fs::create_dir_all(dir).unwrap();
 
-    let mut wd = WildDoc::new(dir, IncludeLocal::new("./include/")).unwrap();
+    let mut wd = WildDoc::new(dir, Box::new(IncludeLocal::new("./include/"))).unwrap();
 
     let update_xml = br#"<wd:session name="account"><wd:update commit="1">
     <collection name="account">
@@ -19,11 +19,11 @@ fn test1() {
 </wd:update></wd:session>"#;
     wd.run(update_xml, b"").unwrap();
 
-    let r=wd.run(br#"<?script
+    let r=wd.run(br#"<?js
     wd.general.test={a:1,b:2,c:3};
     console.log(wd.general.test);
 ?><wd:for
-    var="aa" key="key" in:script="(()=>{return {a:1,b:2,c:3};})()"
+    var="aa" key="key" in:js="(()=>{return {a:1,b:2,c:3};})()"
 ><wd:print value:var="key" /> : <wd:print value:var="aa" />
 </wd:for><wd:session name="logintest">
     <wd:update commit="0">
@@ -146,7 +146,7 @@ fn test1() {
 
     //use javascript
     let r=wd.run(br#"
-        <?script
+        <?js
             const ymd=function(){
                 const now=new Date();
                 return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
@@ -161,14 +161,14 @@ fn test1() {
             console.log("hoge",hoge);
         ?>
         <wd:search name="p" collection="person">
-            <field name="country" method="match" value:script="wd.general.uk" />
+            <field name="country" method="match" value:js="wd.general.uk" />
         </wd:search>
         <wd:result var="p" search="p">
             <div>
-                <wd:print value:script="wd.general.ymd()" />
+                <wd:print value:js="wd.general.ymd()" />
             </div>
             <div>
-                find <wd:print value:var="p.len" /> persons from the <wd:print value:script="wd.general.uk" />.
+                find <wd:print value:var="p.len" /> persons from the <wd:print value:js="wd.general.uk" />.
             </div>
             <ul>
                 <wd:for var="person" in:var="p.rows"><li>
@@ -219,7 +219,7 @@ fn test1() {
     let r = wd
         .run(
             br#"
-        <?script
+        <?js
             import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
             console.log(uuidv4());
 
@@ -228,14 +228,14 @@ fn test1() {
             wd.result_options.test="TEST";
             wd.result_options.test2=crypto.randomUUID();
         ?>
-        a:<wd:print value:script="wd.general.a" />
-        input:<wd:print value:script="wd.input.name" />
-        <?script
+        a:<wd:print value:js="wd.general.a" />
+        input:<wd:print value:js="wd.input.name" />
+        <?js
             wd.general.a="OK2";
             wd.general.b=1>2;
         ?>
-        a:<wd:print value:script="wd.general.a" />
-        v:<wd:print value:script="wd.general.b" />
+        a:<wd:print value:js="wd.general.a" />
+        v:<wd:print value:js="wd.general.b" />
     "#,
             br#"{
         "name":"Ken"

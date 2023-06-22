@@ -9,9 +9,9 @@ fn test_stack() {
     }
     std::fs::create_dir_all(dir).unwrap();
 
-    let mut wd = WildDoc::new(dir, IncludeLocal::new("./include/")).unwrap();
+    let mut wd = WildDoc::new(dir, Box::new(IncludeLocal::new("./include/"))).unwrap();
 
-    let xml = br#"<?script
+    let xml = br#"<?js
         wd.general.script_var=[1,2,3,4];
     ?><wd:def
         hoge="1"
@@ -24,7 +24,7 @@ fn test_stack() {
         <wd:for var="i" in:var="hoge6">
             for:<wd:print value:var="i" />
         </for>
-        <wd:for var="i" in:script="wd.general.script_var">
+        <wd:for var="i" in:js="wd.general.script_var">
             script_for:<wd:print value:var="i" />
         </for>
         <wd:print value:var="hoge" />

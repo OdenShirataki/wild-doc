@@ -2,11 +2,12 @@ use std::{
     collections::HashMap,
     io::{BufReader, Read, Write},
     net::TcpStream,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::Arc,
 };
 
-use wild_doc::IncludeAdaptor;
+use wild_doc_script::IncludeAdaptor;
+//use wild_doc::IncludeAdaptor;
 
 pub struct IncludeEmpty {}
 impl IncludeEmpty {
@@ -15,7 +16,7 @@ impl IncludeEmpty {
     }
 }
 impl IncludeAdaptor for IncludeEmpty {
-    fn include<P: AsRef<Path>>(&mut self, _: P) -> Option<Arc<Vec<u8>>> {
+    fn include(&mut self, _: PathBuf) -> Option<Arc<Vec<u8>>> {
         None
     }
 }
@@ -33,9 +34,8 @@ impl IncludeRemote {
     }
 }
 impl IncludeAdaptor for IncludeRemote {
-    fn include<P: AsRef<Path>>(&mut self, path: P) -> Option<Arc<Vec<u8>>> {
-        let path = path.as_ref();
-        if !self.cache.contains_key(path) {
+    fn include(&mut self, path: PathBuf) -> Option<Arc<Vec<u8>>> {
+        if !self.cache.contains_key(&path) {
             if let Some(path_str) = path.to_str() {
                 if path_str.len() > 0 {
                     self.stream
@@ -66,6 +66,6 @@ impl IncludeAdaptor for IncludeRemote {
                 }
             }
         }
-        self.cache.get(path).map(|v| v.clone())
+        self.cache.get(&path).map(|v| v.clone())
     }
 }

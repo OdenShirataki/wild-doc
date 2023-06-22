@@ -4,14 +4,11 @@ mod search;
 mod update;
 
 use std::{
-    borrow::Cow,
     collections::HashMap,
     io,
-    rc::Rc,
     sync::{Arc, Mutex, RwLock},
 };
 
-use deno_runtime::deno_core::serde_json;
 use maybe_xml::{
     scanner::{Scanner, State},
     token::{
@@ -20,58 +17,39 @@ use maybe_xml::{
     },
 };
 use semilattice_database_session::{Activity, CollectionRow, Session, SessionDatabase, Uuid};
+use wild_doc_script::{WildDocScript, WildDocState, WildDocValue};
 
-use crate::{anyhow::Result, script::Script, xml_util, IncludeAdaptor};
+use crate::{anyhow::Result, xml_util};
 
-#[derive(Debug)]
-pub struct WildDocValue {
-    pub(crate) value: serde_json::Value,
-}
-impl WildDocValue {
-    pub fn new(value: serde_json::Value) -> Self {
-        Self { value }
-    }
-    pub fn to_str<'a>(&'a self) -> Cow<'a, str> {
-        if let Some(s) = self.value.as_str() {
-            Cow::Borrowed(s)
-        } else {
-            Cow::Owned(self.value.to_string())
-        }
-    }
-}
-type AttributeMap = HashMap<Vec<u8>, Option<Rc<WildDocValue>>>;
-pub type VarsStack = Vec<HashMap<Vec<u8>, Rc<WildDocValue>>>;
+type AttributeMap = HashMap<Vec<u8>, Option<Arc<WildDocValue>>>;
 
-pub struct Parser<T: IncludeAdaptor> {
+pub struct Parser {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<(Session, bool)>,
-    stack: Arc<RwLock<VarsStack>>,
-    script: Box<dyn Script>,
-    include_adaptor: Arc<Mutex<T>>,
+    scripts: HashMap<String, Arc<Mutex<dyn WildDocScript>>>,
+    state: WildDocState,
     include_stack: Vec<String>,
 }
-impl<T: IncludeAdaptor> Parser<T> {
+impl Parser {
     pub fn new(
         database: Arc<RwLock<SessionDatabase>>,
-        include_adaptor: Arc<Mutex<T>>,
-        script: Box<dyn Script>,
-        stack: Arc<RwLock<VarsStack>>,
+        scripts: HashMap<String, Arc<Mutex<dyn WildDocScript>>>,
+        state: WildDocState,
     ) -> Result<Self> {
         Ok(Self {
-            script,
+            scripts,
             sessions: vec![],
-            stack,
             database,
-            include_adaptor,
+            state,
             include_stack: vec![],
         })
     }
 
     pub fn parse_xml(&mut self, input_json: &[u8], xml: &[u8]) -> Result<super::WildDocResult> {
-        let mut json: HashMap<Vec<u8>, Rc<WildDocValue>> = HashMap::new();
+        let mut json: HashMap<Vec<u8>, Arc<WildDocValue>> = HashMap::new();
         json.insert(
             b"input".to_vec(),
-            Rc::new(WildDocValue::new(
+            Arc::new(WildDocValue::new(
                 if let Ok(json) = serde_json::from_slice(input_json) {
                     json
                 } else {
@@ -79,10 +57,14 @@ impl<T: IncludeAdaptor> Parser<T> {
                 },
             )),
         );
-        self.stack.write().unwrap().push(json);
+        self.state.stack().write().unwrap().push(json);
         let result_body = self.parse(xml)?;
-        self.stack.write().unwrap().pop();
-        let result_options = self.script.eval(b"wd.result_options");
+        self.state.stack().write().unwrap().pop();
+        let result_options = if let Some(script) = self.scripts.get("script") {
+            script.lock().unwrap().eval(b"wd.result_options")?
+        } else {
+            None
+        };
         Ok(super::WildDocResult {
             body: result_body,
             options_json: result_options,
@@ -123,21 +105,21 @@ impl<T: IncludeAdaptor> Parser<T> {
             false
         }
     }
-    fn search_stack(&self, key: &[u8]) -> Option<Rc<WildDocValue>> {
-        for stack in self.stack.read().unwrap().iter().rev() {
+    fn search_stack(&self, key: &[u8]) -> Option<Arc<WildDocValue>> {
+        for stack in self.state.stack().read().unwrap().iter().rev() {
             if let Some(v) = stack.get(key) {
                 return Some(v.clone());
             }
         }
         None
     }
-    fn attibute_var(&self, attribute_value: &[u8]) -> Option<Rc<WildDocValue>> {
+    fn attibute_var(&self, attribute_value: &[u8]) -> Option<Arc<WildDocValue>> {
         let mut value = None;
 
         let mut splited = attribute_value.split(|c| *c == b'.');
         if let Some(root) = splited.next() {
             if let Some(root) = self.search_stack(root) {
-                let mut next_value = &root.value;
+                let mut next_value = root.value();
                 while {
                     if let Some(next) = splited.next() {
                         match next_value {
@@ -166,7 +148,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                             _ => false,
                         }
                     } else {
-                        value = Some(Rc::new(WildDocValue::new(next_value.clone())));
+                        value = Some(Arc::new(WildDocValue::new(next_value.clone())));
                         false
                     }
                 } {}
@@ -174,10 +156,14 @@ impl<T: IncludeAdaptor> Parser<T> {
         }
         value
     }
-    fn attribute_script(&mut self, value: &[u8]) -> Option<Rc<WildDocValue>> {
+    fn attribute_script<'a>(&mut self, script: &str, value: &[u8]) -> Option<Arc<WildDocValue>> {
         let source = "(".to_owned() + crate::quot_unescape(value).as_str() + ")";
-        if let Some(v) = self.script.eval(source.as_ref()) {
-            Some(Rc::new(WildDocValue::new(v)))
+        if let Some(script) = self.scripts.get(script) {
+            if let Ok(Some(v)) = script.lock().unwrap().eval(source.as_ref()) {
+                Some(Arc::new(WildDocValue::new(v)))
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -193,18 +179,21 @@ impl<T: IncludeAdaptor> Parser<T> {
         &'a mut self,
         name: &'a [u8],
         value: &[u8],
-    ) -> (&[u8], Option<Rc<WildDocValue>>) {
+    ) -> (&[u8], Option<Arc<WildDocValue>>) {
         if name.ends_with(b":var") {
             (
                 &name[..name.len() - b":var".len()],
                 self.attibute_var(value),
             )
-        } else if name.ends_with(b":script") {
-            (
-                &name[..name.len() - b":script".len()],
-                self.attribute_script(value),
-            )
         } else {
+            for key in self.scripts.keys() {
+                if name.ends_with((":".to_owned() + key.as_str()).as_bytes()) {
+                    return (
+                        &name[..name.len() - (key.len() + 1)],
+                        self.attribute_script(key.to_owned().as_str(), value),
+                    );
+                }
+            }
             (name, None)
         }
     }
@@ -248,11 +237,11 @@ impl<T: IncludeAdaptor> Parser<T> {
                         r.insert(attribute.name().to_vec(), {
                             let value = crate::quot_unescape(value.as_bytes());
                             if let Ok(json_value) = serde_json::from_str(value.as_str()) {
-                                Some(Rc::new(WildDocValue::new(json_value)))
+                                Some(Arc::new(WildDocValue::new(json_value)))
                             } else {
-                                Some(Rc::new(WildDocValue::new(
-                                    serde_json::json!(value.as_str()),
-                                )))
+                                Some(Arc::new(WildDocValue::new(serde_json::json!(
+                                    value.as_str()
+                                ))))
                             }
                         });
                     }
@@ -276,24 +265,22 @@ impl<T: IncludeAdaptor> Parser<T> {
                 State::ScannedProcessingInstruction(pos) => {
                     let token_bytes = &xml[..pos];
                     let token = token::borrowed::ProcessingInstruction::from(token_bytes);
-                    match token.target().to_str()? {
-                        "typescript" | "script" => {
-                            if let Some(i) = token.instructions() {
-                                if let Err(e) = self.script.evaluate_module(
-                                    if let Some(last) = self.include_stack.last() {
-                                        last
-                                    } else {
-                                        ""
-                                    },
-                                    i.as_bytes(),
-                                ) {
-                                    return Err(e);
-                                }
+                    let target = token.target();
+                    if let Some(script) = self.scripts.get(target.to_str()?) {
+                        if let Some(i) = token.instructions() {
+                            if let Err(e) = script.lock().unwrap().evaluate_module(
+                                if let Some(last) = self.include_stack.last() {
+                                    last
+                                } else {
+                                    ""
+                                },
+                                i.as_bytes(),
+                            ) {
+                                return Err(e);
                             }
                         }
-                        _ => {
-                            r.append(&mut token_bytes.to_vec());
-                        }
+                    } else {
+                        r.append(&mut token_bytes.to_vec());
                     }
                     xml = &xml[pos..];
                 }
@@ -437,7 +424,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                             | b"collections"
                             | b"sessions"
                             | b"session_sequence_cursor" => {
-                                self.stack.write().unwrap().pop();
+                                self.state.stack().write().unwrap().pop();
                             }
                             b"session" => {
                                 if let Some((ref mut session, clear_on_close)) = self.sessions.pop()
@@ -484,16 +471,16 @@ impl<T: IncludeAdaptor> Parser<T> {
     }
 
     fn def(&mut self, attributes: &AttributeMap) {
-        let mut json: HashMap<Vec<u8>, Rc<WildDocValue>> = HashMap::new();
+        let mut json: HashMap<Vec<u8>, Arc<WildDocValue>> = HashMap::new();
         for (key, v) in attributes {
             if let Some(v) = v {
                 json.insert(key.to_vec(), v.clone());
             }
         }
-        self.stack.write().unwrap().push(json);
+        self.state.stack().write().unwrap().push(json);
     }
     fn row(&mut self, attributes: &AttributeMap) {
-        let mut json: HashMap<Vec<u8>, Rc<WildDocValue>> = HashMap::new();
+        let mut json: HashMap<Vec<u8>, Arc<WildDocValue>> = HashMap::new();
 
         if let (Some(Some(collection_id)), Some(Some(row)), Some(Some(var))) = (
             attributes.get(b"collection_id".as_ref()),
@@ -503,7 +490,7 @@ impl<T: IncludeAdaptor> Parser<T> {
             let var = var.to_str();
             if var != "" {
                 let mut json_inner = serde_json::Map::new();
-                if let Some(collection_id) = collection_id.value.as_i64() {
+                if let Some(collection_id) = collection_id.value().as_i64() {
                     let collection_id = collection_id as i32;
                     let mut session_maybe_has_collection = None;
                     for i in (0..self.sessions.len()).rev() {
@@ -514,7 +501,7 @@ impl<T: IncludeAdaptor> Parser<T> {
                             break;
                         }
                     }
-                    if let Some(row) = row.value.as_i64() {
+                    if let Some(row) = row.value().as_i64() {
                         let mut json_field = serde_json::Map::new();
                         if let Some(temporary_collection) = session_maybe_has_collection {
                             if let Some(entity) = temporary_collection.get(&row) {
@@ -612,14 +599,14 @@ impl<T: IncludeAdaptor> Parser<T> {
                 }
                 json.insert(
                     var.as_bytes().to_vec(),
-                    Rc::new(WildDocValue::new(serde_json::Value::Object(json_inner))),
+                    Arc::new(WildDocValue::new(serde_json::Value::Object(json_inner))),
                 );
             }
         }
-        self.stack.write().unwrap().push(json);
+        self.state.stack().write().unwrap().push(json);
     }
     fn collections(&mut self, attributes: &AttributeMap) {
-        let mut json: HashMap<Vec<u8>, Rc<WildDocValue>> = HashMap::new();
+        let mut json = HashMap::new();
 
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
             let var = var.to_str();
@@ -627,11 +614,11 @@ impl<T: IncludeAdaptor> Parser<T> {
                 let collections = self.database.read().unwrap().collections();
                 json.insert(
                     var.to_string().as_bytes().to_vec(),
-                    Rc::new(WildDocValue::new(serde_json::json!(collections))),
+                    Arc::new(WildDocValue::new(serde_json::json!(collections))),
                 );
             }
         }
-        self.stack.write().unwrap().push(json);
+        self.state.stack().write().unwrap().push(json);
     }
     fn session(&mut self, attributes: &AttributeMap) -> io::Result<()> {
         if let Some(Some(session_name)) = attributes.get(b"name".as_ref()) {
@@ -682,7 +669,7 @@ impl<T: IncludeAdaptor> Parser<T> {
         Ok(())
     }
     fn sessions(&mut self, attributes: &AttributeMap) {
-        let mut json: HashMap<Vec<u8>, Rc<WildDocValue>> = HashMap::new();
+        let mut json = HashMap::new();
 
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
             let var = var.to_str();
@@ -690,12 +677,12 @@ impl<T: IncludeAdaptor> Parser<T> {
                 if let Ok(sessions) = self.database.read().unwrap().sessions() {
                     json.insert(
                         var.to_string().as_bytes().to_vec(),
-                        Rc::new(WildDocValue::new(serde_json::json!(sessions))),
+                        Arc::new(WildDocValue::new(serde_json::json!(sessions))),
                     );
                 }
             }
         }
-        self.stack.write().unwrap().push(json);
+        self.state.stack().write().unwrap().push(json);
     }
     fn session_sequence(&mut self, attributes: &AttributeMap) -> io::Result<()> {
         let mut str_max = if let Some(Some(s)) = attributes.get(b"max".as_ref()) {
@@ -716,21 +703,21 @@ impl<T: IncludeAdaptor> Parser<T> {
             str_current = "session_sequence_current".into();
         }
 
-        let mut json: HashMap<Vec<u8>, Rc<WildDocValue>> = HashMap::new();
+        let mut json = HashMap::new();
         if let Some((session, _)) = self.sessions.last() {
             if let Some(cursor) = session.sequence_cursor() {
                 json.insert(
                     str_max.as_bytes().to_vec(),
-                    Rc::new(WildDocValue::new(serde_json::json!(cursor.max))),
+                    Arc::new(WildDocValue::new(serde_json::json!(cursor.max))),
                 );
 
                 json.insert(
                     str_current.as_bytes().to_vec(),
-                    Rc::new(WildDocValue::new(serde_json::json!(cursor.current))),
+                    Arc::new(WildDocValue::new(serde_json::json!(cursor.current))),
                 );
             }
         }
-        self.stack.write().unwrap().push(json);
+        self.state.stack().write().unwrap().push(json);
 
         Ok(())
     }

@@ -4,5 +4,7 @@ members = [
     "wild-doc",
     "wild-doc-server",
     "wild-doc-client-lib",
-    "wild-doc-webserver"
+    "wild-doc-webserver",
+    "wild-doc-script",
+    "wild-doc-script-deno"
 ]

@@ -1,0 +1,24 @@
+[package]
+name = "wild-doc-script-deno"
+version = "0.0.1"
+edition = "2021"
+
+authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
+
+description = "deno for wild-doc (unofficial)"
+
+repository = "https://github.com/OdenShirataki/wild-doc"
+
+license = "MIT/Apache-2.0"
+
+keywords = ["database","xml","html","javascript","TypeScript"]
+categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
+
+[dependencies]
+anyhow = "1.0"
+serde_json = "1.0"
+ring = "0.16"
+deno_runtime = "0.116.0"
+deno_ast = { version = "0.27.0", features = ["transpiling"] }
+
+wild-doc-script = { version = "0.0", path = "../wild-doc-script" }

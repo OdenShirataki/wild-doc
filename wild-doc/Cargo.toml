@@ -1,11 +1,11 @@
 [package]
 name = "wild-doc"
-version = "0.76.1"
+version = "0.77.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
 
-description = "You can read and write data using XML and output various structured documents.You can also program using javascript/TypeScript.It's Deno compatible."
+description = "You can read and write data using XML and output various structured documents.You can also program using javascript/TypeScript.It's Deno compatible.And you can optionally use python."
 
 repository = "https://github.com/OdenShirataki/wild-doc"
 
@@ -14,11 +14,30 @@ license = "MIT/Apache-2.0"
 keywords = ["database","javascript","TypeScript","xml","html"]
 categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
 
+[features]
+default = [ "js" ]
+js = [ "wild-doc-script-deno" ]
+py = [ "wild-doc-script-python" ]
+
 [dependencies]
+toml = "0.7"
+serde = "1.0"
+serde_derive = "1.0"
 maybe_xml = "0.3"
 chrono = "0.4"
-ring = "0.16"
-deno_runtime = "0.116.0"
-deno_ast = { version = "0.27.0", features = ["transpiling"] }
+serde_json = "1.0"
+libloading = "*"
 
 semilattice-database-session = { version = "0.2", path = "../../semilattice-database/semilattice-database-session" }
+
+wild-doc-script = { version = "0.0", path = "../wild-doc-script" }
+
+[dependencies.wild-doc-script-deno]
+version = "0.0"
+path = "../wild-doc-script-deno"
+optional = true
+
+[dependencies.wild-doc-script-python]
+version = "0.0"
+path = "../wild-doc-script-python"
+optional = true

@@ -5,9 +5,8 @@ use std::{
     sync::Arc,
 };
 
-pub trait IncludeAdaptor {
-    fn include<P: AsRef<Path>>(&mut self, path: P) -> Option<Arc<Vec<u8>>>;
-}
+use wild_doc_script::IncludeAdaptor;
+
 pub struct IncludeLocal {
     dir: PathBuf,
     cache: HashMap<PathBuf, Arc<Vec<u8>>>,
@@ -21,9 +20,8 @@ impl IncludeLocal {
     }
 }
 impl IncludeAdaptor for IncludeLocal {
-    fn include<P: AsRef<Path>>(&mut self, path: P) -> Option<Arc<Vec<u8>>> {
-        let path = path.as_ref();
-        if !self.cache.contains_key(path) {
+    fn include(&mut self, path: PathBuf) -> Option<Arc<Vec<u8>>> {
+        if !self.cache.contains_key(&path) {
             let mut file_path = self.dir.clone();
             file_path.push(&path);
             if let Ok(mut f) = std::fs::File::open(file_path) {
@@ -33,6 +31,6 @@ impl IncludeAdaptor for IncludeLocal {
                 }
             }
         }
-        self.cache.get(path).map(|v| v.clone())
+        self.cache.get(&path).map(|v| v.clone())
     }
 }

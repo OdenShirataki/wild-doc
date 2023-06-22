@@ -1,20 +1,17 @@
-use deno_runtime::deno_core::serde_json;
 use semilattice_database_session::{
     anyhow, Activity, CollectionRow, Condition, Order, OrderKey, Uuid,
 };
-use std::{collections::HashMap, rc::Rc};
-
-use crate::IncludeAdaptor;
+use std::{collections::HashMap, sync::Arc};
 
 use super::{AttributeMap, Parser, WildDocValue};
 
-impl<T: IncludeAdaptor> Parser<T> {
+impl Parser {
     pub(super) fn result(
         &mut self,
         attributes: &AttributeMap,
         search_map: &HashMap<String, (i32, Vec<Condition>)>,
     ) -> anyhow::Result<()> {
-        let mut json: HashMap<Vec<u8>, Rc<WildDocValue>> = HashMap::new();
+        let mut json = HashMap::new();
         if let (Some(Some(search)), Some(Some(var))) = (
             attributes.get(b"search".as_ref()),
             attributes.get(b"var".as_ref()),
@@ -227,12 +224,12 @@ impl<T: IncludeAdaptor> Parser<T> {
 
                     json.insert(
                         var.as_bytes().to_vec(),
-                        Rc::new(WildDocValue::new(serde_json::Value::Object(json_inner))),
+                        Arc::new(WildDocValue::new(serde_json::Value::Object(json_inner))),
                     );
                 }
             }
         }
-        self.stack.write().unwrap().push(json);
+        self.state.stack().write().unwrap().push(json);
         Ok(())
     }
 }
