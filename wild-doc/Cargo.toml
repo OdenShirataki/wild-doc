@@ -26,7 +26,6 @@ serde_derive = "1.0"
 maybe_xml = "0.3"
 chrono = "0.4"
 serde_json = "1.0"
-libloading = "*"
 
 semilattice-database-session = { version = "0.2", path = "../../semilattice-database/semilattice-database-session" }
 
