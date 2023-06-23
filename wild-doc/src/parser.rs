@@ -9,6 +9,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
+use deno_runtime::deno_core::serde_json;
 use maybe_xml::{
     scanner::{Scanner, State},
     token::{
@@ -60,7 +61,7 @@ impl Parser {
         self.state.stack().write().unwrap().push(json);
         let result_body = self.parse(xml)?;
         self.state.stack().write().unwrap().pop();
-        let result_options = if let Some(script) = self.scripts.get("script") {
+        let result_options = if let Some(script) = self.scripts.get("js") {
             script.lock().unwrap().eval(b"wd.result_options")?
         } else {
             None
@@ -168,7 +169,7 @@ impl Parser {
             None
         }
     }
-    fn output_attrbute_value(r: &mut Vec<u8>, val: &[u8]) {
+    fn output_attribute_value(r: &mut Vec<u8>, val: &[u8]) {
         r.push(b'=');
         r.push(b'"');
         r.append(&mut val.to_vec());
@@ -197,26 +198,25 @@ impl Parser {
             (name, None)
         }
     }
-    fn output_attrbutes(&mut self, r: &mut Vec<u8>, attributes: Attributes) {
+    fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes) {
         for attribute in attributes {
-            r.push(b' ');
-
             let name = attribute.name();
-            let name_bytes = name.as_bytes();
-
-            let prefix = attribute.name().namespace_prefix();
-            if let (Some(prefix), Some(value)) = (prefix, attribute.value()) {
-                if let (_, Some(value)) =
-                    self.attibute_var_or_script(attribute.name().as_bytes(), value.as_bytes())
-                {
-                    if name_bytes.starts_with(b"wd-attr:replace") {
+            if let Some(value) = attribute.value() {
+                let (new_name, new_value) =
+                    self.attibute_var_or_script(name.as_bytes(), value.as_bytes());
+                if new_name == b"wd-attr:replace" {
+                    if let Some(value) = new_value {
+                        r.push(b' ');
                         r.append(&mut value.to_str().as_bytes().to_vec());
-                    } else {
-                        r.append(&mut prefix.as_bytes().to_vec());
-                        Self::output_attrbute_value(r, &mut value.to_str().as_bytes());
                     }
                 } else {
-                    r.append(&mut attribute.to_vec());
+                    r.push(b' ');
+                    r.append(&mut new_name.to_vec());
+                    if let Some(value) = new_value {
+                        Self::output_attribute_value(r, value.to_str().as_bytes());
+                    } else {
+                        Self::output_attribute_value(r, value.as_bytes());
+                    }
                 }
             } else {
                 r.append(&mut attribute.to_vec());
@@ -369,7 +369,7 @@ impl Parser {
                         r.push(b'<');
                         r.append(&mut name.to_vec());
                         if let Some(attributes) = attributes {
-                            self.output_attrbutes(&mut r, attributes)
+                            self.output_attributes(&mut r, attributes)
                         }
                         r.push(b'>');
                     }
@@ -400,7 +400,7 @@ impl Parser {
                             r.push(b'<');
                             r.append(&mut name.to_vec());
                             if let Some(attributes) = token.attributes() {
-                                self.output_attrbutes(&mut r, attributes)
+                                self.output_attributes(&mut r, attributes)
                             }
                             r.push(b' ');
                             r.push(b'/');

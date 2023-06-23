@@ -1,3 +1,4 @@
+use deno_runtime::deno_core::serde_json;
 use semilattice_database_session::{
     anyhow, Activity, CollectionRow, Condition, Order, OrderKey, Uuid,
 };

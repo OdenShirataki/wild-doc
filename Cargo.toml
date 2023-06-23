@@ -6,6 +6,5 @@ members = [
     "wild-doc-client-lib",
     "wild-doc-webserver",
     "wild-doc-script",
-    "wild-doc-script-deno",
     "wild-doc-script-python"
 ]
