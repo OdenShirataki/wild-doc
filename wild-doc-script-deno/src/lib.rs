@@ -6,9 +6,8 @@ use std::{
     sync::{Mutex, RwLock},
 };
 
-use anyhow::Result;
 use deno_runtime::{
-    deno_core::{self, serde_json, serde_v8, ModuleSpecifier},
+    deno_core::{self, anyhow::Result, serde_json, serde_v8, ModuleSpecifier},
     deno_napi::v8::{self, NewStringType, PropertyAttribute},
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
