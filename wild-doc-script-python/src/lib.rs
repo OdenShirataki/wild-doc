@@ -5,12 +5,12 @@ use std::{
 
 use pyo3::{
     pyfunction,
-    types::{IntoPyDict, PyCapsule, PyDict, PyModule},
+    types::{PyCapsule, PyDict, PyModule},
     wrap_pyfunction, PyObject, PyResult, Python,
 };
 use wild_doc_script::{VarsStack, WildDocScript, WildDocState};
 
-use wild_doc_script::{serde_json,anyhow::Result};
+use wild_doc_script::{anyhow::Result, serde_json};
 
 pub struct WdPy {}
 impl WildDocScript for WdPy {
@@ -33,18 +33,18 @@ impl WildDocScript for WdPy {
         });
         Ok(WdPy {})
     }
-    fn evaluate_module(&mut self, _: &str, src: &[u8]) -> Result<()> {
-        self.eval(src)?;
+    fn evaluate_module(&mut self, _: &str, code: &[u8]) -> Result<()> {
+        let code = std::str::from_utf8(code)?;
+        Python::with_gil(|py| -> PyResult<()> { py.run(code, None, None) })?;
         Ok(())
     }
 
     fn eval(&mut self, code: &[u8]) -> Result<Option<serde_json::Value>> {
-        let obj = Python::with_gil(|py| -> PyResult<PyObject> {
-            let locals = [("os", py.import("os")?)].into_py_dict(py);
-            let code = std::str::from_utf8(code)?;
-            py.eval(code, None, Some(&locals))?.extract()
-        })?;
-        Ok(Some(obj.to_string().into()))
+        let code = std::str::from_utf8(code)?;
+        let obj =
+            Python::with_gil(|py| -> PyResult<PyObject> { py.eval(code, None, None)?.extract() });
+        let return_string = obj.unwrap().to_string();
+        Ok(Some(return_string.into()))
     }
 }
 
