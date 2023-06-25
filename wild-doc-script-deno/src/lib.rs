@@ -15,7 +15,7 @@ use deno_runtime::{
 
 use wild_doc_script::{IncludeAdaptor, VarsStack, WildDocScript, WildDocState};
 
-use self::module_loader::WdModuleLoader;
+use module_loader::WdModuleLoader;
 
 pub struct Deno {
     worker: MainWorker,
