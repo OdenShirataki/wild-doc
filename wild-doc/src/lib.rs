@@ -12,17 +12,18 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use wild_doc_script::{IncludeAdaptor, VarsStack, WildDocScript, WildDocState};
-
-#[cfg(feature = "py")]
-use wild_doc_script_python::WdPy;
-
 use anyhow::Result;
 use semilattice_database_session::SessionDatabase;
 
 use parser::Parser;
 
+use wild_doc_script::{IncludeAdaptor, VarsStack, WildDocScript, WildDocState};
+
+#[cfg(feature = "js")]
 use wild_doc_script_deno::Deno;
+
+#[cfg(feature = "py")]
+use wild_doc_script_python::WdPy;
 
 pub struct WildDocResult {
     body: Vec<u8>,
