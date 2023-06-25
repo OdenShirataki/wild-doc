@@ -85,6 +85,22 @@ impl Parser {
                     },
                 );
             }
+            b"print_escape_html" => {
+                return Ok(
+                    if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
+                        Some(
+                            value
+                                .to_str()
+                                .replace("&", "&amp;")
+                                .replace("<", "&lt;")
+                                .replace(">", "&gt;")
+                                .into_bytes(),
+                        )
+                    } else {
+                        None
+                    },
+                );
+            }
             b"include" => {
                 return Ok(Some(self.get_include_content(attributes)?));
             }
