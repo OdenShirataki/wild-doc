@@ -16,22 +16,24 @@ categories = ["database","database-implementations","text-processing","web-progr
 
 [features]
 default = [ ]
+js = [ "wild-doc-script-deno" ]
 py = [ "wild-doc-script-python" ]
 
 [dependencies]
-toml = "0.7"
-serde = "1.0"
-serde_derive = "1.0"
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
 maybe_xml = "0.3"
 chrono = "0.4"
-
-ring = "0.16"
-deno_runtime = "0.116.0"
-deno_ast = { version = "0.27.1", features = ["transpiling"] }
 
 semilattice-database-session = { version = "0.2", path = "../../semilattice-database/semilattice-database-session" }
 
 wild-doc-script = { version = "0.0", path = "../wild-doc-script" }
+
+[dependencies.wild-doc-script-deno]
+version = "0.0"
+path = "../wild-doc-script-deno"
+optional = true
 
 [dependencies.wild-doc-script-python]
 version = "0.0"

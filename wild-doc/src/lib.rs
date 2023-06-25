@@ -1,9 +1,7 @@
-mod deno;
 mod include;
 mod parser;
 mod xml_util;
 
-use deno_runtime::deno_core::serde_json;
 pub use include::IncludeLocal;
 pub use semilattice_database_session::anyhow;
 
@@ -24,7 +22,7 @@ use semilattice_database_session::SessionDatabase;
 
 use parser::Parser;
 
-use deno::Deno;
+use wild_doc_script_deno::Deno;
 
 pub struct WildDocResult {
     body: Vec<u8>,
@@ -70,6 +68,7 @@ impl WildDoc {
         let state = WildDocState::new(stack.clone(), self.cache_dir.clone(), include_adaptor);
         let mut scripts: HashMap<String, Arc<Mutex<dyn WildDocScript>>> = HashMap::new();
 
+        #[cfg(feature = "js")]
         scripts.insert(
             "js".to_owned(),
             Arc::new(Mutex::new(Deno::new(state.clone())?)),

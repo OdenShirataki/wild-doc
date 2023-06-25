@@ -1,6 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
 
-use deno_runtime::deno_core::serde_json;
 use maybe_xml::{
     scanner::{Scanner, State},
     token,
