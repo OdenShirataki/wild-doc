@@ -96,7 +96,7 @@ impl WildDoc {
         )?
         .parse_xml(input_json, xml)
     }
-    pub fn run_specify_include_adaptor(
+    pub fn run_with_include_adaptor(
         &mut self,
         xml: &[u8],
         input_json: &[u8],

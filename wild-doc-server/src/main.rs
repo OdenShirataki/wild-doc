@@ -113,7 +113,7 @@ fn handler(mut stream: TcpStream, wd: Arc<Mutex<WildDoc>>) -> Result<()> {
         }
         xml.remove(xml.len() - 1);
 
-        let ret = wd.clone().lock().unwrap().run_specify_include_adaptor(
+        let ret = wd.clone().lock().unwrap().run_with_include_adaptor(
             &xml,
             &input_json,
             Box::new(IncludeRemote::new(stream.try_clone().unwrap())),
