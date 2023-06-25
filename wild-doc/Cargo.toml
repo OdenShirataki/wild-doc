@@ -15,7 +15,7 @@ keywords = ["database","javascript","TypeScript","xml","html"]
 categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
 
 [features]
-default = [ ]
+default = [ "js" ]
 js = [ "wild-doc-script-deno" ]
 py = [ "wild-doc-script-python" ]
 
