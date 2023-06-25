@@ -10,7 +10,7 @@ use pyo3::{
 };
 use wild_doc_script::{VarsStack, WildDocScript, WildDocState};
 
-use anyhow::Result;
+use wild_doc_script::{serde_json,anyhow::Result};
 
 pub struct WdPy {}
 impl WildDocScript for WdPy {
