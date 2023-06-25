@@ -1,15 +1,17 @@
-use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
-use std::thread;
+mod include;
 
-#[macro_use]
-extern crate serde_derive;
+use std::{
+    collections::HashMap,
+    io::{BufRead, BufReader, Read, Write},
+    net::{TcpListener, TcpStream},
+    sync::{Arc, Mutex},
+    thread,
+};
+
+use serde::Deserialize;
 
 use wild_doc::{anyhow::Result, WildDoc};
 
-mod include;
 use include::{IncludeEmpty, IncludeRemote};
 
 #[derive(Deserialize)]

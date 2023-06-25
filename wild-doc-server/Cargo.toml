@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-server"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -15,9 +15,8 @@ categories = ["database-implementations","network-programming","template-engine"
 license = "MIT/Apache-2.0"
 
 [dependencies]
-toml = "0.7"
-serde = "1.0"
-serde_derive = "1.0"
-wild-doc = { version = "0.77" , path = "../wild-doc" ,features=[ "py" ] }
+toml.workspace = true
+serde.workspace = true
+wild-doc = { version = "0.77" , path = "../wild-doc" ,features=[ "js","py" ] }
 
 wild-doc-script = { version = "0.0", path = "../wild-doc-script" }
