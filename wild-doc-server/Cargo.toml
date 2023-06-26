@@ -17,6 +17,6 @@ license = "MIT/Apache-2.0"
 [dependencies]
 toml.workspace = true
 serde.workspace = true
-wild-doc = { version = "0.78" , path = "../wild-doc" ,features=[ "js","py" ] }
+wild-doc = { version = "0.79" , path = "../wild-doc" ,features=[ "js","py" ] }
 
 wild-doc-script = { version = "0.0", path = "../wild-doc-script" }

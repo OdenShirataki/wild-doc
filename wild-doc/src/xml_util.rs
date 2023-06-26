@@ -28,3 +28,14 @@ pub(crate) fn inner<'a>(xml: &'a [u8]) -> (&[u8], usize) {
     }
     (&xml[..0], 0)
 }
+
+pub(crate) fn quot_unescape(value: &[u8]) -> String {
+    let str = unsafe { std::str::from_utf8_unchecked(value) };
+    str.replace("&#039;", "'").replace("&quot;", "\"")
+}
+
+pub(crate) fn escape_html(s: &str) -> String {
+    s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+}

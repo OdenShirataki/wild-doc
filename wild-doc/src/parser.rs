@@ -88,14 +88,7 @@ impl Parser {
             b"print_escape_html" => {
                 return Ok(
                     if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
-                        Some(
-                            value
-                                .to_str()
-                                .replace("&", "&amp;")
-                                .replace("<", "&lt;")
-                                .replace(">", "&gt;")
-                                .into_bytes(),
-                        )
+                        Some(xml_util::escape_html(&value.to_str()).into_bytes())
                     } else {
                         None
                     },
@@ -173,7 +166,7 @@ impl Parser {
         value
     }
     fn attribute_script<'a>(&mut self, script: &str, value: &[u8]) -> Option<Arc<WildDocValue>> {
-        let source = "(".to_owned() + crate::quot_unescape(value).as_str() + ")";
+        let source = "(".to_owned() + xml_util::quot_unescape(value).as_str() + ")";
         if let Some(script) = self.scripts.get(script) {
             if let Ok(Some(v)) = script.lock().unwrap().eval(source.as_ref()) {
                 Some(Arc::new(WildDocValue::new(v)))
@@ -228,7 +221,10 @@ impl Parser {
                     r.push(b' ');
                     r.append(&mut new_name.to_vec());
                     if let Some(value) = new_value {
-                        Self::output_attribute_value(r, value.to_str().as_bytes());
+                        Self::output_attribute_value(
+                            r,
+                            xml_util::escape_html(&value.to_str()).as_bytes(),
+                        );
                     } else {
                         Self::output_attribute_value(r, value.as_bytes());
                     }
@@ -250,7 +246,7 @@ impl Parser {
                         r.insert(prefix.to_vec(), Some(value));
                     } else {
                         r.insert(attribute.name().to_vec(), {
-                            let value = crate::quot_unescape(value.as_bytes());
+                            let value = xml_util::quot_unescape(value.as_bytes());
                             if let Ok(json_value) = serde_json::from_str(value.as_str()) {
                                 Some(Arc::new(WildDocValue::new(json_value)))
                             } else {
@@ -764,7 +760,7 @@ impl Parser {
                 if key.starts_with(b"wd-tag:name") {
                     name = value.to_str().to_string();
                 } else if key.starts_with(b"wd-attr:replace") {
-                    let attr = crate::quot_unescape(value.to_str().as_bytes());
+                    let attr = xml_util::quot_unescape(value.to_str().as_bytes());
                     if attr.len() > 0 {
                         html_attr.push(b' ');
                         html_attr.append(&mut attr.as_bytes().to_vec());

@@ -118,7 +118,4 @@ impl WildDoc {
     }
 }
 
-pub(crate) fn quot_unescape(value: &[u8]) -> String {
-    let str = unsafe { std::str::from_utf8_unchecked(value) };
-    str.replace("&#039;", "'").replace("&quot;", "\"")
-}
+
