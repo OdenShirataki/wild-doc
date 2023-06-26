@@ -236,34 +236,9 @@ wild-doc = { version = "x" , path = "../wild-doc" ,features=[ "js","py" ] }
 ### code
 ```rust
 //use WebAPI
-let r=wd.run(br#"
-    <?py
-import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
-        console.log(uuidv4());
-
-        wd.general.a="OK";
-        wd.stack.push({
-            hoge:{
-                hoge:"A"
-            }
-            ,a:1
-        });
-        console.log(crypto.randomUUID());
-        wd.result_options.test="TEST";
-        wd.result_options.test2=crypto.randomUUID();
-    ?>
-    <wd:print value:py="wd.general.a" />
-    v:<wd:print value:var="a" />
-    input:<wd:print value:var="input.name" />
-    <?js
-        wd.stack.pop();
-        wd.general.a="OK2";
-        wd.general.b=1>2;
-    ?>
-    a:<wd:print value:js="wd.general.a" />
-    v:<wd:print value:js="wd.general.b" />
-"#,br#"{
-    "name":"Ken"
-    ,"from":"US"
-}"#).unwrap();
+let r=wd.run(br#"<?py
+hoge=100
+def get_200():
+    return 200
+?><wd:print value:py="get_200()" />"#,b"").unwrap();
 ```
