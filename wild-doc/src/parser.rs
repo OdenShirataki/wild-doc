@@ -97,7 +97,7 @@ impl Parser {
         }
         None
     }
-    fn attibute_var(&self, attribute_value: &[u8]) -> Option<Arc<WildDocValue>> {
+    fn attibute_var(&self, attribute_value: &[u8]) -> Option<WildDocValue> {
         let mut value = None;
 
         let mut splited = attribute_value.split(|c| *c == b'.');
@@ -132,7 +132,7 @@ impl Parser {
                             _ => false,
                         }
                     } else {
-                        value = Some(Arc::new(WildDocValue::new(next_value.clone())));
+                        value = Some(WildDocValue::new(next_value.clone()));
                         false
                     }
                 } {}
@@ -140,11 +140,11 @@ impl Parser {
         }
         value
     }
-    fn attribute_script<'a>(&mut self, script: &str, value: &[u8]) -> Option<Arc<WildDocValue>> {
+    fn attribute_script<'a>(&mut self, script: &str, value: &[u8]) -> Option<WildDocValue> {
         let source = "(".to_owned() + xml_util::quot_unescape(value).as_str() + ")";
         if let Some(script) = self.scripts.get(script) {
             if let Ok(Some(v)) = script.lock().unwrap().eval(source.as_ref()) {
-                Some(Arc::new(WildDocValue::new(v)))
+                Some(WildDocValue::new(v))
             } else {
                 None
             }
@@ -163,7 +163,7 @@ impl Parser {
         &'a mut self,
         name: &'a [u8],
         value: &[u8],
-    ) -> (&[u8], Option<Arc<WildDocValue>>) {
+    ) -> (&[u8], Option<WildDocValue>) {
         if name.ends_with(b":var") {
             (
                 &name[..name.len() - b":var".len()],
@@ -218,7 +218,7 @@ impl Parser {
                     if let (prefix, Some(value)) =
                         self.attibute_var_or_script(attribute.name().as_bytes(), value.as_bytes())
                     {
-                        r.insert(prefix.to_vec(), Some(value));
+                        r.insert(prefix.to_vec(), Some(Arc::new(value)));
                     } else {
                         r.insert(attribute.name().to_vec(), {
                             let value = xml_util::quot_unescape(value.as_bytes());
@@ -457,7 +457,7 @@ impl Parser {
     }
 
     fn def(&mut self, attributes: &AttributeMap) {
-        let mut json: HashMap<Vec<u8>, Arc<WildDocValue>> = HashMap::new();
+        let mut json = HashMap::new();
         for (key, v) in attributes {
             if let Some(v) = v {
                 json.insert(key.to_vec(), v.clone());
@@ -466,7 +466,7 @@ impl Parser {
         self.state.stack().write().unwrap().push(json);
     }
     fn row(&mut self, attributes: &AttributeMap) {
-        let mut json: HashMap<Vec<u8>, Arc<WildDocValue>> = HashMap::new();
+        let mut json = HashMap::new();
 
         if let (Some(Some(collection_id)), Some(Some(row)), Some(Some(var))) = (
             attributes.get(b"collection_id".as_ref()),

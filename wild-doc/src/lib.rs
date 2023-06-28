@@ -86,7 +86,7 @@ impl WildDoc {
         input_json: &[u8],
         include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
     ) -> Result<WildDocResult> {
-        let mut json: HashMap<Vec<u8>, Arc<WildDocValue>> = HashMap::new();
+        let mut json = HashMap::new();
         json.insert(
             b"input".to_vec(),
             Arc::new(WildDocValue::new(

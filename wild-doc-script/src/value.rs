@@ -15,7 +15,7 @@ impl WildDocValue {
     pub fn new(value: serde_json::Value) -> Self {
         Self { value }
     }
-    pub fn value(&self)->&serde_json::Value{
+    pub fn value(&self) -> &serde_json::Value {
         &self.value
     }
     pub fn to_str<'a>(&'a self) -> Cow<'a, str> {
@@ -26,4 +26,5 @@ impl WildDocValue {
         }
     }
 }
-pub type VarsStack = Vec<HashMap<Vec<u8>, Arc<WildDocValue>>>;
+pub type Vars = HashMap<Vec<u8>, Arc<WildDocValue>>;
+pub type VarsStack = Vec<Vars>;
