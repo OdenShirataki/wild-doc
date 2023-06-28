@@ -26,14 +26,14 @@ type AttributeMap = HashMap<Vec<u8>, Option<Arc<WildDocValue>>>;
 pub struct Parser {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<(Session, bool)>,
-    scripts: HashMap<String, Arc<Mutex<dyn WildDocScript>>>,
+    scripts: Arc<HashMap<String, Arc<Mutex<dyn WildDocScript>>>>,
     state: WildDocState,
     include_stack: Vec<String>,
 }
 impl Parser {
     pub fn new(
         database: Arc<RwLock<SessionDatabase>>,
-        scripts: HashMap<String, Arc<Mutex<dyn WildDocScript>>>,
+        scripts: Arc<HashMap<String, Arc<Mutex<dyn WildDocScript>>>>,
         state: WildDocState,
     ) -> Result<Self> {
         Ok(Self {
@@ -45,31 +45,6 @@ impl Parser {
         })
     }
 
-    pub fn parse_xml(&mut self, input_json: &[u8], xml: &[u8]) -> Result<super::WildDocResult> {
-        let mut json: HashMap<Vec<u8>, Arc<WildDocValue>> = HashMap::new();
-        json.insert(
-            b"input".to_vec(),
-            Arc::new(WildDocValue::new(
-                if let Ok(json) = serde_json::from_slice(input_json) {
-                    json
-                } else {
-                    serde_json::json!([])
-                },
-            )),
-        );
-        self.state.stack().write().unwrap().push(json);
-        let result_body = self.parse(xml)?;
-        self.state.stack().write().unwrap().pop();
-        let result_options = if let Some(script) = self.scripts.get("js") {
-            script.lock().unwrap().eval(b"wd.result_options")?
-        } else {
-            None
-        };
-        Ok(super::WildDocResult {
-            body: result_body,
-            options_json: result_options,
-        })
-    }
     fn parse_wd_start_or_empty_tag(
         &mut self,
         name: &[u8],

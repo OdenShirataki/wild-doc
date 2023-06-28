@@ -17,7 +17,7 @@ use semilattice_database_session::SessionDatabase;
 
 use parser::Parser;
 
-use wild_doc_script::{IncludeAdaptor, VarsStack, WildDocScript, WildDocState};
+use wild_doc_script::{IncludeAdaptor, WildDocScript, WildDocState, WildDocValue};
 
 #[cfg(feature = "js")]
 use wild_doc_script_deno::Deno;
@@ -63,10 +63,8 @@ impl WildDoc {
 
     fn setup_scripts(
         &mut self,
-        include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
-        stack: Arc<RwLock<VarsStack>>,
+        state: WildDocState,
     ) -> Result<HashMap<String, Arc<Mutex<dyn WildDocScript>>>> {
-        let state = WildDocState::new(stack.clone(), self.cache_dir.clone(), include_adaptor);
         let mut scripts: HashMap<String, Arc<Mutex<dyn WildDocScript>>> = HashMap::new();
 
         #[cfg(feature = "js")]
@@ -82,19 +80,40 @@ impl WildDoc {
         );
         Ok(scripts)
     }
+    fn run_inner(
+        &mut self,
+        xml: &[u8],
+        input_json: &[u8],
+        include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
+    ) -> Result<WildDocResult> {
+        let mut json: HashMap<Vec<u8>, Arc<WildDocValue>> = HashMap::new();
+        json.insert(
+            b"input".to_vec(),
+            Arc::new(WildDocValue::new(
+                if let Ok(json) = serde_json::from_slice(input_json) {
+                    json
+                } else {
+                    serde_json::json!([])
+                },
+            )),
+        );
+        let stack = Arc::new(RwLock::new(vec![json]));
+
+        let state = WildDocState::new(stack.clone(), self.cache_dir.clone(), include_adaptor);
+        let scripts = Arc::new(self.setup_scripts(state.clone())?);
+
+        let body = Parser::new(self.database.clone(), scripts.clone(), state)?.parse(xml)?;
+
+        let options_json = if let Some(script) = scripts.get("js") {
+            script.lock().unwrap().eval(b"wd.result_options")?
+        } else {
+            None
+        };
+
+        Ok(WildDocResult { body, options_json })
+    }
     pub fn run(&mut self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {
-        let stack = Arc::new(RwLock::new(vec![]));
-        let scripts = self.setup_scripts(self.default_include_adaptor.clone(), stack.clone())?;
-        Parser::new(
-            self.database.clone(),
-            scripts,
-            WildDocState::new(
-                stack.clone(),
-                self.cache_dir.clone(),
-                self.default_include_adaptor.clone(),
-            ),
-        )?
-        .parse_xml(input_json, xml)
+        self.run_inner(xml, input_json, self.default_include_adaptor.clone())
     }
     pub fn run_with_include_adaptor(
         &mut self,
@@ -102,20 +121,6 @@ impl WildDoc {
         input_json: &[u8],
         include_adaptor: Box<dyn IncludeAdaptor + Send>,
     ) -> Result<WildDocResult> {
-        let stack = Arc::new(RwLock::new(vec![]));
-        let include_adaptor = Arc::new(Mutex::new(include_adaptor));
-        let state = WildDocState::new(
-            stack.clone(),
-            self.cache_dir.clone(),
-            include_adaptor.clone(),
-        );
-        Parser::new(
-            self.database.clone(),
-            self.setup_scripts(include_adaptor, stack.clone())?,
-            state,
-        )?
-        .parse_xml(input_json, xml)
+        self.run_inner(xml, input_json, Arc::new(Mutex::new(include_adaptor)))
     }
 }
-
-
