@@ -89,26 +89,28 @@ impl WildDoc {
         let mut json = HashMap::new();
         json.insert(
             b"input".to_vec(),
-            Arc::new(WildDocValue::new(
+            Arc::new(RwLock::new(WildDocValue::new(
                 if let Ok(json) = serde_json::from_slice(input_json) {
                     json
                 } else {
-                    serde_json::json!([])
+                    serde_json::json!({})
                 },
-            )),
+            ))),
         );
+        let global = Arc::new(RwLock::new(WildDocValue::new(serde_json::json!({}))));
+        json.insert(b"global".to_vec(), global.clone());
         let stack = Arc::new(RwLock::new(vec![json]));
 
         let state = WildDocState::new(stack.clone(), self.cache_dir.clone(), include_adaptor);
         let scripts = Arc::new(self.setup_scripts(state.clone())?);
 
         let body = Parser::new(self.database.clone(), scripts.clone(), state)?.parse(xml)?;
-
-        let options_json = if let Some(script) = scripts.get("js") {
-            script.lock().unwrap().eval(b"wd.result_options")?
-        } else {
-            None
-        };
+        let options_json =
+            if let Some(result_options) = global.read().unwrap().value().get("result_options") {
+                Some(result_options.clone())
+            } else {
+                None
+            };
 
         Ok(WildDocResult { body, options_json })
     }

@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 use maybe_xml::{
     scanner::{Scanner, State},
@@ -122,12 +125,14 @@ impl Parser {
                             let mut vars = HashMap::new();
                             vars.insert(
                                 var.as_bytes().to_vec(),
-                                Arc::new(WildDocValue::new(value.clone())),
+                                Arc::new(RwLock::new(WildDocValue::new(value.clone()))),
                             );
                             if let Some(Some(key_name)) = attributes.get(b"key".as_ref()) {
                                 vars.insert(
                                     key_name.to_str().as_bytes().to_vec(),
-                                    Arc::new(WildDocValue::new(serde_json::json!(key))),
+                                    Arc::new(RwLock::new(WildDocValue::new(serde_json::json!(
+                                        key
+                                    )))),
                                 );
                             }
                             self.state.stack().write().unwrap().push(vars);
@@ -141,12 +146,14 @@ impl Parser {
                             let mut vars = HashMap::new();
                             vars.insert(
                                 var.as_bytes().to_vec(),
-                                Arc::new(WildDocValue::new(value.clone())),
+                                Arc::new(RwLock::new(WildDocValue::new(value.clone()))),
                             );
                             if let Some(Some(key_name)) = attributes.get(b"key".as_ref()) {
                                 vars.insert(
                                     key_name.to_str().as_bytes().to_vec(),
-                                    Arc::new(WildDocValue::new(serde_json::json!(key))),
+                                    Arc::new(RwLock::new(WildDocValue::new(serde_json::json!(
+                                        key
+                                    )))),
                                 );
                             }
                             self.state.stack().write().unwrap().push(vars);

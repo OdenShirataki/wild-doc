@@ -1,6 +1,11 @@
-use std::{borrow::Cow, collections::HashMap, ops::Deref, sync::Arc};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+    sync::{Arc, RwLock},
+};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WildDocValue {
     value: serde_json::Value,
 }
@@ -9,6 +14,11 @@ impl Deref for WildDocValue {
 
     fn deref(&self) -> &Self::Target {
         &self.value
+    }
+}
+impl DerefMut for WildDocValue {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }
 impl WildDocValue {
@@ -26,5 +36,5 @@ impl WildDocValue {
         }
     }
 }
-pub type Vars = HashMap<Vec<u8>, Arc<WildDocValue>>;
+pub type Vars = HashMap<Vec<u8>, Arc<RwLock<WildDocValue>>>;
 pub type VarsStack = Vec<Vars>;

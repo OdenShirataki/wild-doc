@@ -208,9 +208,9 @@ BODY
 
 ### rust
 ```rust
-let r=wd.run(br#"<wd:def body_path="body.xml">
+let r=wd.run(br#"<wd:local body_path="body.xml">
     <wd:include src="layout.xml" />
-<wd:def>"#,b"");
+<wd:local>"#,b"");
     println!("{}",r);
 ```
 

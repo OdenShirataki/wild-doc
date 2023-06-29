@@ -4,7 +4,7 @@ mod value;
 
 pub use include::IncludeAdaptor;
 pub use state::WildDocState;
-pub use value::{VarsStack, WildDocValue};
+pub use value::{Vars, VarsStack, WildDocValue};
 
 pub use anyhow;
 pub use serde_json;

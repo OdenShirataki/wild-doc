@@ -103,7 +103,9 @@ impl WildDocScript for Deno {
                             .to_rust_string_lossy(scope);
                         for stack in stack.read().unwrap().iter().rev() {
                             if let Some(v) = stack.get(key.as_bytes()) {
-                                if let Ok(r) = serde_v8::to_v8(scope, v.value().clone()) {
+                                if let Ok(r) =
+                                    serde_v8::to_v8(scope, v.read().unwrap().value().clone())
+                                {
                                     retval.set(r.into());
                                 }
                                 break;

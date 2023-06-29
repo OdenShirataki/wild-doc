@@ -17,7 +17,8 @@ use maybe_xml::{
     },
 };
 use semilattice_database_session::{Activity, CollectionRow, Session, SessionDatabase, Uuid};
-use wild_doc_script::{WildDocScript, WildDocState, WildDocValue};
+use serde_json::Value;
+use wild_doc_script::{Vars, WildDocScript, WildDocState, WildDocValue};
 
 use crate::{anyhow::Result, xml_util};
 
@@ -60,6 +61,29 @@ impl Parser {
                     },
                 );
             }
+            b"global" => {
+                if let Some(stack) = self.state.stack().write().unwrap().get(0) {
+                    if let Some(global) = stack.get(b"global".as_ref()) {
+                        if let (Some(Some(var)), Some(Some(value))) = (
+                            attributes.get(b"var".as_ref()),
+                            attributes.get(b"value".as_ref()),
+                        ) {
+                            if let Ok(mut global) = global.write() {
+                                let mut json: &mut Value = &mut global;
+                                let var = var.to_str();
+                                let splited = var.split('.');
+                                for s in splited {
+                                    if !json[s].is_object() {
+                                        json[s] = serde_json::json!({});
+                                    }
+                                    json = &mut json[s];
+                                }
+                                *json = value.value().clone();
+                            }
+                        }
+                    }
+                }
+            }
             b"print_escape_html" => {
                 return Ok(
                     if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
@@ -89,7 +113,7 @@ impl Parser {
             false
         }
     }
-    fn search_stack(&self, key: &[u8]) -> Option<Arc<WildDocValue>> {
+    fn search_stack(&self, key: &[u8]) -> Option<Arc<RwLock<WildDocValue>>> {
         for stack in self.state.stack().read().unwrap().iter().rev() {
             if let Some(v) = stack.get(key) {
                 return Some(v.clone());
@@ -103,7 +127,8 @@ impl Parser {
         let mut splited = attribute_value.split(|c| *c == b'.');
         if let Some(root) = splited.next() {
             if let Some(root) = self.search_stack(root) {
-                let mut next_value = root.value();
+                let next_value = root.read().unwrap();
+                let mut next_value = next_value.value();
                 while {
                     if let Some(next) = splited.next() {
                         match next_value {
@@ -342,8 +367,8 @@ impl Parser {
                                     r.push(b'>');
                                 }
 
-                                b"def" => {
-                                    self.def(&attributes);
+                                b"local" => {
+                                    self.local(&attributes);
                                 }
                                 b"row" => {
                                     self.row(&attributes);
@@ -405,7 +430,7 @@ impl Parser {
                         false
                     } {
                         match name.local().as_bytes() {
-                            b"def"
+                            b"local"
                             | b"result"
                             | b"collections"
                             | b"sessions"
@@ -456,11 +481,11 @@ impl Parser {
         Ok(r)
     }
 
-    fn def(&mut self, attributes: &AttributeMap) {
-        let mut json = HashMap::new();
+    fn local(&mut self, attributes: &AttributeMap) {
+        let mut json: Vars = HashMap::new();
         for (key, v) in attributes {
             if let Some(v) = v {
-                json.insert(key.to_vec(), v.clone());
+                json.insert(key.to_vec(), Arc::new(RwLock::new(v.as_ref().clone())));
             }
         }
         self.state.stack().write().unwrap().push(json);
@@ -585,7 +610,9 @@ impl Parser {
                 }
                 json.insert(
                     var.as_bytes().to_vec(),
-                    Arc::new(WildDocValue::new(serde_json::Value::Object(json_inner))),
+                    Arc::new(RwLock::new(WildDocValue::new(serde_json::Value::Object(
+                        json_inner,
+                    )))),
                 );
             }
         }
@@ -600,7 +627,9 @@ impl Parser {
                 let collections = self.database.read().unwrap().collections();
                 json.insert(
                     var.to_string().as_bytes().to_vec(),
-                    Arc::new(WildDocValue::new(serde_json::json!(collections))),
+                    Arc::new(RwLock::new(WildDocValue::new(serde_json::json!(
+                        collections
+                    )))),
                 );
             }
         }
@@ -663,7 +692,7 @@ impl Parser {
                 if let Ok(sessions) = self.database.read().unwrap().sessions() {
                     json.insert(
                         var.to_string().as_bytes().to_vec(),
-                        Arc::new(WildDocValue::new(serde_json::json!(sessions))),
+                        Arc::new(RwLock::new(WildDocValue::new(serde_json::json!(sessions)))),
                     );
                 }
             }
@@ -694,12 +723,16 @@ impl Parser {
             if let Some(cursor) = session.sequence_cursor() {
                 json.insert(
                     str_max.as_bytes().to_vec(),
-                    Arc::new(WildDocValue::new(serde_json::json!(cursor.max))),
+                    Arc::new(RwLock::new(WildDocValue::new(serde_json::json!(
+                        cursor.max
+                    )))),
                 );
 
                 json.insert(
                     str_current.as_bytes().to_vec(),
-                    Arc::new(WildDocValue::new(serde_json::json!(cursor.current))),
+                    Arc::new(RwLock::new(WildDocValue::new(serde_json::json!(
+                        cursor.current
+                    )))),
                 );
             }
         }

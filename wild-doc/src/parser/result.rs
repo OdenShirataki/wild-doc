@@ -1,7 +1,10 @@
 use semilattice_database_session::{
     anyhow, Activity, CollectionRow, Condition, Order, OrderKey, Uuid,
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 use super::{AttributeMap, Parser, WildDocValue};
 
@@ -224,7 +227,9 @@ impl Parser {
 
                     json.insert(
                         var.as_bytes().to_vec(),
-                        Arc::new(WildDocValue::new(serde_json::Value::Object(json_inner))),
+                        Arc::new(RwLock::new(WildDocValue::new(serde_json::Value::Object(
+                            json_inner,
+                        )))),
                     );
                 }
             }
