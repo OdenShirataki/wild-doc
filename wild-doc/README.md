@@ -121,8 +121,8 @@ let r=wd.run(br#"
                 <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="personn.field.country" />
             </li></wd:for>
         </ul>
-    </wd:result>
-</wd>"#,b"").unwrap();
+    </wd:result><global var="result_options" value:js="wd.result_options" />
+"#,b"").unwrap();
 println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
 
 //search in update section.
@@ -181,7 +181,7 @@ let r=wd.run(br#"
         wd.general.b=1>2;
     ?>
     a:<wd:print value:js="wd.general.a" />
-    v:<wd:print value:js="wd.general.b" />
+    v:<wd:print value:js="wd.general.b" /><global var="result_options" value:js="wd.result_options" />
 "#,br#"{
     "name":"Ken"
     ,"from":"US"
