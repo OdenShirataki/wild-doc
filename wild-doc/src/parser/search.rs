@@ -38,6 +38,23 @@ impl Parser {
                     search_map.insert(name.into_owned(), (collection_id, condition));
                     return last_xml;
                 }
+                if let Some(Some(value)) =
+                    attributes.get(b"create_collection_if_not_exists".as_ref())
+                {
+                    if value.to_str() == "true" {
+                        if let Ok(collection_id) = self
+                            .database
+                            .clone()
+                            .write()
+                            .unwrap()
+                            .collection_id_or_create(collection_name.as_ref())
+                        {
+                            let (last_xml, condition) = self.make_conditions(attributes, xml);
+                            search_map.insert(name.into_owned(), (collection_id, condition));
+                            return last_xml;
+                        }
+                    }
+                }
             }
         }
         return xml;
