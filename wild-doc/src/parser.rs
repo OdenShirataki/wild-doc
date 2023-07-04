@@ -121,7 +121,7 @@ impl Parser {
         }
         None
     }
-    fn attibute_var(&self, attribute_value: &[u8]) -> Option<WildDocValue> {
+    fn attibute_var(&self, attribute_value: &[u8]) -> WildDocValue {
         let mut value = None;
 
         let mut splited = attribute_value.split(|c| *c == b'.');
@@ -163,7 +163,11 @@ impl Parser {
                 } {}
             }
         }
-        value
+        if let Some(value) = value {
+            return value;
+        } else {
+            WildDocValue::new(serde_json::json!(""))
+        }
     }
     fn attribute_script<'a>(&mut self, script: &str, value: &[u8]) -> Option<WildDocValue> {
         let source = "(".to_owned() + xml_util::quot_unescape(value).as_str() + ")";
@@ -192,7 +196,7 @@ impl Parser {
         if name.ends_with(b":var") {
             (
                 &name[..name.len() - b":var".len()],
-                self.attibute_var(value),
+                Some(self.attibute_var(value)),
             )
         } else {
             for key in self.scripts.keys() {
