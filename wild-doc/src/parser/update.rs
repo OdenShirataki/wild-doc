@@ -36,7 +36,7 @@ impl Parser {
             let session_rows = self
                 .database
                 .clone()
-                .read()
+                .write()
                 .unwrap()
                 .update(session, updates)?;
             let mut commit_rows = vec![];
