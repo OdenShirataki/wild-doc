@@ -1,6 +1,7 @@
 use semilattice_database_session::{
-    anyhow, Activity, CollectionRow, Condition, Order, OrderKey, Uuid,
+    anyhow, Activity, Collection, CollectionRow, Condition, Order, OrderKey, Uuid,
 };
+use serde_json::{json, Map, Value};
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -9,6 +10,53 @@ use std::{
 use super::{AttributeMap, Parser, WildDocValue};
 
 impl Parser {
+    fn row_values(&self, collection: &Collection, row: u32) -> Map<String, Value> {
+        let collection_id = collection.id();
+
+        let mut json_row = Map::new();
+        json_row.insert("row".to_owned(), json!(row));
+        json_row.insert(
+            "uuid".to_owned(),
+            json!(Uuid::from_u128(collection.uuid(row)).to_string()),
+        );
+        json_row.insert(
+            "activity".to_owned(),
+            json!(collection.activity(row) == Activity::Active),
+        );
+        json_row.insert("term_begin".to_owned(), json!(collection.term_begin(row)));
+        json_row.insert("term_end".to_owned(), json!(collection.term_end(row)));
+
+        let mut json_depends = Map::new();
+        for d in self
+            .database
+            .read()
+            .unwrap()
+            .relation()
+            .depends(None, &CollectionRow::new(collection_id, row))
+        {
+            let mut json_depend = Map::new();
+
+            let collection_id = d.collection_id();
+
+            if let Some(collection) = self.database.read().unwrap().collection(collection_id) {
+                json_depend.insert("collection_id".to_owned(), json!(collection_id));
+                json_depend.insert("collection_name".to_owned(), json!(collection.name()));
+                json_depend.insert("row".to_owned(), json!(d.row()));
+                json_depends.insert(d.key().to_string(), Value::Object(json_depend));
+            }
+        }
+        json_row.insert("depends".to_owned(), Value::Object(json_depends));
+
+        let mut json_field = Map::new();
+        for field_name in &collection.field_names() {
+            if let Ok(value) = std::str::from_utf8(collection.field_bytes(row, field_name)) {
+                json_field.insert(field_name.as_str().to_owned(), json!(value));
+            }
+        }
+        json_row.insert("field".to_owned(), Value::Object(json_field));
+        json_row
+    }
+
     pub(super) fn result(
         &mut self,
         attributes: &AttributeMap,
@@ -22,10 +70,10 @@ impl Parser {
             let search = search.to_str();
             let var = var.to_str();
             if search != "" && var != "" {
-                let mut json_inner = serde_json::Map::new();
+                let mut json_inner = Map::new();
                 if let Some((collection_id, conditions)) = search_map.get(search.as_ref()) {
                     let collection_id = *collection_id;
-                    json_inner.insert("collection_id".to_owned(), serde_json::json!(collection_id));
+                    json_inner.insert("collection_id".to_owned(), json!(collection_id));
                     let orders = make_order(
                         if let Some(Some(sort)) = attributes.get(b"sort".as_ref()) {
                             sort.to_str()
@@ -57,74 +105,69 @@ impl Parser {
                                 .result_session(session.search(collection_id, conditions), orders)?
                                 .iter()
                                 .map(|row| {
-                                    let mut json_row = serde_json::Map::new();
+                                    let mut json_row = Map::new();
                                     if let Some(temporary_collection) =
                                         session.temporary_collection(collection_id)
                                     {
                                         if let Some(entity) = temporary_collection.get(row) {
-                                            json_row
-                                                .insert("row".to_owned(), serde_json::json!(row));
+                                            json_row.insert("row".to_owned(), json!(row));
                                             json_row.insert(
                                                 "uuid".to_owned(),
-                                                serde_json::json!(
-                                                    Uuid::from_u128(entity.uuid()).to_string()
-                                                ),
+                                                json!(Uuid::from_u128(entity.uuid()).to_string()),
                                             );
                                             json_row.insert(
                                                 "activity".to_owned(),
-                                                serde_json::json!(
-                                                    entity.activity() == Activity::Active
-                                                ),
+                                                json!(entity.activity() == Activity::Active),
                                             );
                                             json_row.insert(
                                                 "term_begin".to_owned(),
-                                                serde_json::json!(entity.term_begin()),
+                                                json!(entity.term_begin()),
                                             );
                                             json_row.insert(
                                                 "term_begin".to_owned(),
-                                                serde_json::json!(entity.term_end()),
+                                                json!(entity.term_end()),
                                             );
 
-                                            let mut json_depends = serde_json::Map::new();
+                                            let mut json_depends = Map::new();
                                             for d in entity.depends() {
-                                                let mut json_depend = serde_json::Map::new();
+                                                let mut json_depend = Map::new();
                                                 json_depend.insert(
                                                     "collection_id".to_owned(),
-                                                    serde_json::json!(d.collection_id()),
+                                                    json!(d.collection_id()),
                                                 );
-                                                json_depend.insert(
-                                                    "row".to_owned(),
-                                                    serde_json::json!(d.row()),
-                                                );
+                                                json_depend
+                                                    .insert("row".to_owned(), json!(d.row()));
 
                                                 json_depends.insert(
                                                     d.key().to_string(),
-                                                    serde_json::Value::Object(json_depend),
+                                                    Value::Object(json_depend),
                                                 );
                                             }
                                             json_row.insert(
                                                 "depends".to_owned(),
-                                                serde_json::Value::Object(json_depends),
+                                                Value::Object(json_depends),
                                             );
 
-                                            let mut json_field = serde_json::Map::new();
+                                            let mut json_field = Map::new();
                                             for (field_name, value) in entity.fields() {
                                                 if let Ok(value) = std::str::from_utf8(value) {
                                                     json_field.insert(
                                                         field_name.as_str().to_owned(),
-                                                        serde_json::json!(value),
+                                                        json!(value),
                                                     );
                                                 }
                                             }
                                             json_row.insert(
                                                 "field".to_owned(),
-                                                serde_json::Value::Object(json_field),
+                                                Value::Object(json_field),
                                             );
+                                        } else if *row > 0 {
+                                            json_row = self.row_values(collection, *row as u32);
                                         }
                                     }
-                                    serde_json::Value::Object(json_row)
+                                    Value::Object(json_row)
                                 })
-                                .collect::<Vec<serde_json::Value>>()
+                                .collect::<Vec<Value>>()
                         } else {
                             let mut search = self.database.read().unwrap().search(collection);
                             for c in conditions {
@@ -136,100 +179,19 @@ impl Parser {
                                 .unwrap()
                                 .result(search, &orders)?
                                 .iter()
-                                .map(|row| {
-                                    let row = *row;
-                                    let mut json_row = serde_json::Map::new();
-                                    json_row.insert("row".to_owned(), serde_json::json!(row));
-                                    json_row.insert(
-                                        "uuid".to_owned(),
-                                        serde_json::json!(
-                                            Uuid::from_u128(collection.uuid(row)).to_string()
-                                        ),
-                                    );
-                                    json_row.insert(
-                                        "activity".to_owned(),
-                                        serde_json::json!(
-                                            collection.activity(row) == Activity::Active
-                                        ),
-                                    );
-                                    json_row.insert(
-                                        "term_begin".to_owned(),
-                                        serde_json::json!(collection.term_begin(row)),
-                                    );
-                                    json_row.insert(
-                                        "term_end".to_owned(),
-                                        serde_json::json!(collection.term_end(row)),
-                                    );
-
-                                    let mut json_depends = serde_json::Map::new();
-                                    for d in self
-                                        .database
-                                        .read()
-                                        .unwrap()
-                                        .relation()
-                                        .depends(None, &CollectionRow::new(collection_id, row))
-                                    {
-                                        let mut json_depend = serde_json::Map::new();
-
-                                        let collection_id = d.collection_id();
-
-                                        if let Some(collection) =
-                                            self.database.read().unwrap().collection(collection_id)
-                                        {
-                                            json_depend.insert(
-                                                "collection_id".to_owned(),
-                                                serde_json::json!(collection_id),
-                                            );
-                                            json_depend.insert(
-                                                "collection_name".to_owned(),
-                                                serde_json::json!(collection.name()),
-                                            );
-                                            json_depend.insert(
-                                                "row".to_owned(),
-                                                serde_json::json!(d.row()),
-                                            );
-                                            json_depends.insert(
-                                                d.key().to_string(),
-                                                serde_json::Value::Object(json_depend),
-                                            );
-                                        }
-                                    }
-                                    json_row.insert(
-                                        "depends".to_owned(),
-                                        serde_json::Value::Object(json_depends),
-                                    );
-
-                                    let mut json_field = serde_json::Map::new();
-                                    for field_name in &collection.field_names() {
-                                        if let Ok(value) = std::str::from_utf8(
-                                            collection.field_bytes(row, field_name),
-                                        ) {
-                                            json_field.insert(
-                                                field_name.as_str().to_owned(),
-                                                serde_json::json!(value),
-                                            );
-                                        }
-                                    }
-                                    json_row.insert(
-                                        "field".to_owned(),
-                                        serde_json::Value::Object(json_field),
-                                    );
-                                    serde_json::Value::Object(json_row)
-                                })
-                                .collect::<Vec<serde_json::Value>>()
+                                .map(|row| Value::Object(self.row_values(collection, *row)))
+                                .collect::<Vec<Value>>()
                         }
                     } else {
-                        Vec::<serde_json::Value>::new()
+                        Vec::<Value>::new()
                     };
                     let len = json_rows.len();
-                    json_inner.insert("rows".to_owned(), serde_json::Value::Array(json_rows));
-                    json_inner.insert("len".to_owned(), serde_json::json!(len));
+                    json_inner.insert("rows".to_owned(), Value::Array(json_rows));
+                    json_inner.insert("len".to_owned(), json!(len));
 
                     json.insert(
                         var.as_bytes().to_vec(),
-                        Arc::new(RwLock::new(WildDocValue::new(serde_json::Value::Object(
-                            json_inner,
-                        )))),
+                        Arc::new(RwLock::new(WildDocValue::new(Value::Object(json_inner)))),
                     );
                 }
             }
