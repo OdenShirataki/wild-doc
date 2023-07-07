@@ -6,6 +6,7 @@ use maybe_xml::{
 use semilattice_database_session::{
     Activity, CollectionRow, Depends, KeyValue, Pend, Record, Term,
 };
+use serde_json::Value;
 use std::{collections::HashMap, error, fmt};
 
 use crate::{
@@ -45,24 +46,29 @@ impl Parser {
                     commit_rows = self.database.write().unwrap().commit(session)?;
                 }
             }
-            if let Some(Some(src)) = attributes.get(b"result_callback".as_ref()) {
-                let src = src.to_str();
-                if src.len() > 0 {
-                    if let (Ok(json_commit_rows), Ok(json_session_rows)) = (
-                        serde_json::to_string(&commit_rows),
-                        serde_json::to_string(&session_rows),
-                    ) {
-                        if let Some(script) = self.scripts.get("script") {
-                            let _ = script.lock().unwrap().eval(
-                                ("{const update_result={commit_rows:".to_owned()
-                                    + json_commit_rows.as_str()
-                                    + ",session_rows:"
-                                    + json_session_rows.as_str()
-                                    + "};"
-                                    + src.as_ref()
-                                    + "}")
-                                    .as_bytes(),
-                            );
+            if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
+                if let Some(stack) = self.state.stack().write().unwrap().get(0) {
+                    if let Some(global) = stack.get(b"global".as_ref()) {
+                        if let Ok(mut global) = global.write() {
+                            let mut json: &mut Value = &mut global;
+                            let var = name.to_str();
+                            let splited = var.split('.');
+                            for s in splited {
+                                if !json[s].is_object() {
+                                    json[s] = serde_json::json!({});
+                                }
+                                json = &mut json[s];
+                            }
+                            if let Some(obj) = json.as_object_mut() {
+                                obj.insert(
+                                    "commit_rows".to_owned(),
+                                    serde_json::json!(commit_rows),
+                                );
+                                obj.insert(
+                                    "session_rows".to_owned(),
+                                    serde_json::json!(session_rows),
+                                );
+                            }
                         }
                     }
                 }
