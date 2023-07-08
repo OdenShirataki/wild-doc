@@ -1,5 +1,6 @@
 mod include;
 mod parser;
+mod script;
 mod xml_util;
 
 pub use include::IncludeLocal;
@@ -15,9 +16,10 @@ use std::{
 use anyhow::Result;
 use semilattice_database_session::SessionDatabase;
 
-use parser::Parser;
-
 use wild_doc_script::{IncludeAdaptor, WildDocScript, WildDocState, WildDocValue};
+
+use parser::Parser;
+use script::Var;
 
 #[cfg(feature = "js")]
 use wild_doc_script_deno::Deno;
@@ -66,6 +68,11 @@ impl WildDoc {
         state: WildDocState,
     ) -> Result<HashMap<String, Arc<Mutex<dyn WildDocScript>>>> {
         let mut scripts: HashMap<String, Arc<Mutex<dyn WildDocScript>>> = HashMap::new();
+
+        scripts.insert(
+            "var".to_owned(),
+            Arc::new(Mutex::new(Var::new(state.clone())?)),
+        );
 
         #[cfg(feature = "js")]
         scripts.insert(

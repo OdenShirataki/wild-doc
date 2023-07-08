@@ -6,7 +6,6 @@ use maybe_xml::{
 use semilattice_database_session::{
     Activity, CollectionRow, Depends, KeyValue, Pend, Record, Term,
 };
-use serde_json::Value;
 use std::{collections::HashMap, error, fmt};
 
 use crate::{
@@ -47,31 +46,10 @@ impl Parser {
                 }
             }
             if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
-                if let Some(stack) = self.state.stack().write().unwrap().get(0) {
-                    if let Some(global) = stack.get(b"global".as_ref()) {
-                        if let Ok(mut global) = global.write() {
-                            let mut json: &mut Value = &mut global;
-                            let var = name.to_str();
-                            let splited = var.split('.');
-                            for s in splited {
-                                if !json[s].is_object() {
-                                    json[s] = serde_json::json!({});
-                                }
-                                json = &mut json[s];
-                            }
-                            if let Some(obj) = json.as_object_mut() {
-                                obj.insert(
-                                    "commit_rows".to_owned(),
-                                    serde_json::json!(commit_rows),
-                                );
-                                obj.insert(
-                                    "session_rows".to_owned(),
-                                    serde_json::json!(session_rows),
-                                );
-                            }
-                        }
-                    }
-                }
+                let mut value = serde_json::Map::new();
+                value.insert("commit_rows".to_owned(), serde_json::json!(commit_rows));
+                value.insert("session_rows".to_owned(), serde_json::json!(session_rows));
+                self.register_global(name.to_str().as_ref(), &value.into());
             }
         }
         Ok(())

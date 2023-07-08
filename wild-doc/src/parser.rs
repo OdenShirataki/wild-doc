@@ -46,6 +46,23 @@ impl Parser {
         })
     }
 
+    pub(crate) fn register_global(&mut self, name: &str, value: &serde_json::Value) {
+        if let Some(stack) = self.state.stack().write().unwrap().get(0) {
+            if let Some(global) = stack.get(b"global".as_ref()) {
+                if let Ok(mut global) = global.write() {
+                    let mut json: &mut Value = &mut global;
+                    let splited = name.split('.');
+                    for s in splited {
+                        if !json[s].is_object() {
+                            json[s] = serde_json::json!({});
+                        }
+                        json = &mut json[s];
+                    }
+                    *json = value.clone();
+                }
+            }
+        }
+    }
     fn parse_wd_start_or_empty_tag(
         &mut self,
         name: &[u8],
@@ -62,26 +79,11 @@ impl Parser {
                 );
             }
             b"global" => {
-                if let Some(stack) = self.state.stack().write().unwrap().get(0) {
-                    if let Some(global) = stack.get(b"global".as_ref()) {
-                        if let (Some(Some(var)), Some(Some(value))) = (
-                            attributes.get(b"var".as_ref()),
-                            attributes.get(b"value".as_ref()),
-                        ) {
-                            if let Ok(mut global) = global.write() {
-                                let mut json: &mut Value = &mut global;
-                                let var = var.to_str();
-                                let splited = var.split('.');
-                                for s in splited {
-                                    if !json[s].is_object() {
-                                        json[s] = serde_json::json!({});
-                                    }
-                                    json = &mut json[s];
-                                }
-                                *json = value.value().clone();
-                            }
-                        }
-                    }
+                if let (Some(Some(var)), Some(Some(value))) = (
+                    attributes.get(b"var".as_ref()),
+                    attributes.get(b"value".as_ref()),
+                ) {
+                    self.register_global(var.to_str().as_ref(), value.value());
                 }
             }
             b"print_escape_html" => {
@@ -113,66 +115,13 @@ impl Parser {
             false
         }
     }
-    fn search_stack(&self, key: &[u8]) -> Option<Arc<RwLock<WildDocValue>>> {
-        for stack in self.state.stack().read().unwrap().iter().rev() {
-            if let Some(v) = stack.get(key) {
-                return Some(v.clone());
-            }
-        }
-        None
-    }
-    fn attibute_var(&self, attribute_value: &[u8]) -> WildDocValue {
-        let mut value = None;
-
-        let mut splited = attribute_value.split(|c| *c == b'.');
-        if let Some(root) = splited.next() {
-            if let Some(root) = self.search_stack(root) {
-                let next_value = root.read().unwrap();
-                let mut next_value = next_value.value();
-                while {
-                    if let Some(next) = splited.next() {
-                        match next_value {
-                            serde_json::Value::Object(map) => {
-                                let mut ret = false;
-                                if let Some(v) =
-                                    map.get(unsafe { std::str::from_utf8_unchecked(next) })
-                                {
-                                    next_value = v;
-                                    ret = true;
-                                }
-                                ret
-                            }
-                            serde_json::Value::Array(map) => {
-                                let mut ret = false;
-                                if let Ok(index) = std::str::from_utf8(next) {
-                                    if let Ok(index) = index.parse::<usize>() {
-                                        if let Some(v) = map.get(index) {
-                                            next_value = v;
-                                            ret = true;
-                                        }
-                                    }
-                                }
-                                ret
-                            }
-                            _ => false,
-                        }
-                    } else {
-                        value = Some(WildDocValue::new(next_value.clone()));
-                        false
-                    }
-                } {}
-            }
-        }
-        if let Some(value) = value {
-            return value;
-        } else {
-            WildDocValue::new(serde_json::json!(""))
-        }
-    }
     fn attribute_script<'a>(&mut self, script: &str, value: &[u8]) -> Option<WildDocValue> {
-        let source = "(".to_owned() + xml_util::quot_unescape(value).as_str() + ")";
         if let Some(script) = self.scripts.get(script) {
-            if let Ok(Some(v)) = script.lock().unwrap().eval(source.as_ref()) {
+            if let Ok(v) = script
+                .lock()
+                .unwrap()
+                .eval(xml_util::quot_unescape(value).as_bytes())
+            {
                 Some(WildDocValue::new(v))
             } else {
                 None
@@ -193,22 +142,15 @@ impl Parser {
         name: &'a [u8],
         value: &[u8],
     ) -> (&[u8], Option<WildDocValue>) {
-        if name.ends_with(b":var") {
-            (
-                &name[..name.len() - b":var".len()],
-                Some(self.attibute_var(value)),
-            )
-        } else {
-            for key in self.scripts.keys() {
-                if name.ends_with((":".to_owned() + key.as_str()).as_bytes()) {
-                    return (
-                        &name[..name.len() - (key.len() + 1)],
-                        self.attribute_script(key.to_owned().as_str(), value),
-                    );
-                }
+        for key in self.scripts.keys() {
+            if name.ends_with((":".to_owned() + key.as_str()).as_bytes()) {
+                return (
+                    &name[..name.len() - (key.len() + 1)],
+                    self.attribute_script(key.to_owned().as_str(), value),
+                );
             }
-            (name, None)
         }
+        (name, None)
     }
     fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes) {
         for attribute in attributes {

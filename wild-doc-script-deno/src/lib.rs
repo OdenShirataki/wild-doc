@@ -188,14 +188,21 @@ impl WildDocScript for Deno {
             self.run_event_loop(false).await
         })
     }
-    fn eval(&mut self, code: &[u8]) -> Result<Option<serde_json::Value>> {
+    fn eval(&mut self, code: &[u8]) -> Result<serde_json::Value> {
+        let code = "(".to_owned() + std::str::from_utf8(code)? + ")";
         let scope = &mut self.js_runtime.handle_scope();
         Ok(
-            v8::String::new_from_one_byte(scope, code, NewStringType::Normal)
-                .and_then(|code| v8::Script::compile(scope, code, None))
-                .and_then(|v| v.run(scope))
-                .and_then(|v| serde_v8::from_v8(scope, v).ok())
-                .and_then(|v| serde_json::from_value(v).ok()),
+            if let Some(v) =
+                v8::String::new_from_one_byte(scope, code.as_bytes(), NewStringType::Normal)
+                    .and_then(|code| v8::Script::compile(scope, code, None))
+                    .and_then(|v| v.run(scope))
+                    .and_then(|v| serde_v8::from_v8(scope, v).ok())
+                    .and_then(|v| serde_json::from_value(v).ok())
+            {
+                v
+            } else {
+                serde_json::json!("")
+            },
         )
     }
 }

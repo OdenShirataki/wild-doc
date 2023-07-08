@@ -39,12 +39,17 @@ impl WildDocScript for WdPy {
         Ok(())
     }
 
-    fn eval(&mut self, code: &[u8]) -> Result<Option<serde_json::Value>> {
-        let code = std::str::from_utf8(code)?;
-        let obj =
-            Python::with_gil(|py| -> PyResult<PyObject> { py.eval(code, None, None)?.extract() });
-        let return_string = obj.unwrap().to_string();
-        Ok(Some(return_string.into()))
+    fn eval(&mut self, code: &[u8]) -> Result<serde_json::Value> {
+        Ok(Python::with_gil(|py| -> PyResult<PyObject> {
+            py.eval(
+                ("(".to_owned() + std::str::from_utf8(code)? + ")").as_str(),
+                None,
+                None,
+            )?
+            .extract()
+        })?
+        .to_string()
+        .into())
     }
 }
 
