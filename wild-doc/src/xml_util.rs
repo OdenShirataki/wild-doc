@@ -23,7 +23,9 @@ pub(crate) fn inner<'a>(xml: &'a [u8]) -> (&[u8], usize) {
             | State::ScannedComment(end)
             | State::ScannedDeclaration(end)
             | State::ScannedEmptyElementTag(end) => pos += end,
-            _ => {}
+            _ => {
+                break;
+            }
         }
     }
     (&xml[..0], 0)
