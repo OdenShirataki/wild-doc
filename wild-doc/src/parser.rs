@@ -255,6 +255,10 @@ impl Parser {
                             r.append(&mut parsed);
                         } else {
                             match name.local().as_bytes() {
+                                b"comment" => {
+                                    let (_, outer_end) = xml_util::inner(xml);
+                                    xml = &xml[outer_end..];
+                                }
                                 b"session" => {
                                     self.session(&attributes)?;
                                 }
