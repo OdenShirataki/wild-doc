@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     str::FromStr,
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -308,26 +309,32 @@ impl Parser {
                 let i = len - 1;
 
                 if let Some(method) = match method_pair[i] {
-                    "match" => Some(search::Field::Match(value.as_bytes().to_vec())),
-                    "min" => Some(search::Field::Min(value.as_bytes().to_vec())),
-                    "max" => Some(search::Field::Max(value.as_bytes().to_vec())),
-                    "partial" => Some(search::Field::Partial(value.to_string())),
-                    "forward" => Some(search::Field::Forward(value.to_string())),
-                    "backward" => Some(search::Field::Backward(value.to_string())),
+                    "match" => Some(search::Field::Match(Arc::new(value.as_bytes().to_vec()))),
+                    "min" => Some(search::Field::Min(Arc::new(value.as_bytes().to_vec()))),
+                    "max" => Some(search::Field::Max(Arc::new(value.as_bytes().to_vec()))),
+                    "partial" => Some(search::Field::Partial(Arc::new(value.to_string()))),
+                    "forward" => Some(search::Field::Forward(Arc::new(value.to_string()))),
+                    "backward" => Some(search::Field::Backward(Arc::new(value.to_string()))),
                     "range" => {
                         let s: Vec<&str> = value.split("..").collect();
                         if s.len() == 2 {
                             Some(search::Field::Range(
-                                s[0].as_bytes().to_vec(),
-                                s[1].as_bytes().to_vec(),
+                                Arc::new(s[0].as_bytes().to_vec()),
+                                Arc::new(s[1].as_bytes().to_vec()),
                             ))
                         } else {
                             None
                         }
                     }
-                    "value_forward" => Some(search::Field::ValueForward(value.to_string())),
-                    "value_backward" => Some(search::Field::ValueBackward(value.to_string())),
-                    "value_partial" => Some(search::Field::ValuePartial(value.to_string())),
+                    "value_forward" => {
+                        Some(search::Field::ValueForward(Arc::new(value.to_string())))
+                    }
+                    "value_backward" => {
+                        Some(search::Field::ValueBackward(Arc::new(value.to_string())))
+                    }
+                    "value_partial" => {
+                        Some(search::Field::ValuePartial(Arc::new(value.to_string())))
+                    }
                     _ => None,
                 } {
                     return Some(Condition::Field(name.to_string(), method));
