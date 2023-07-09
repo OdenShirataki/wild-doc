@@ -325,6 +325,9 @@ impl Parser {
                             None
                         }
                     }
+                    "value_forward" => Some(search::Field::ValueForward(value.to_string())),
+                    "value_backward" => Some(search::Field::ValueBackward(value.to_string())),
+                    "value_partial" => Some(search::Field::ValuePartial(value.to_string())),
                     _ => None,
                 } {
                     return Some(Condition::Field(name.to_string(), method));
