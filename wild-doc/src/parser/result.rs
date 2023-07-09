@@ -85,8 +85,10 @@ impl Parser {
 
                     let mut session_maybe_has_collection = None;
                     for i in (0..self.sessions.len()).rev() {
-                        if let Some(_) = self.sessions[i].0.temporary_collection(collection_id) {
-                            session_maybe_has_collection = Some(&self.sessions[i].0);
+                        if let Some(_) =
+                            self.sessions[i].session.temporary_collection(collection_id)
+                        {
+                            session_maybe_has_collection = Some(&self.sessions[i].session);
                             break;
                         }
                     }

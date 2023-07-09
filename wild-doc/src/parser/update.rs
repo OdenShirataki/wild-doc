@@ -32,17 +32,21 @@ impl Parser {
     pub fn update(&mut self, xml: &[u8], attributes: &AttributeMap) -> Result<()> {
         let inner_xml = self.parse(xml)?;
         let updates = self.make_update_struct(inner_xml.as_slice())?;
-        if let Some((ref mut session, _)) = self.sessions.last_mut() {
+        if let Some(ref mut session_state) = self.sessions.last_mut() {
             let session_rows = self
                 .database
                 .clone()
                 .read()
                 .unwrap()
-                .update(session, updates)?;
+                .update(&mut session_state.session, updates)?;
             let mut commit_rows = vec![];
             if let Some(Some(commit)) = attributes.get(b"commit".as_ref()) {
                 if commit.to_str() == "1" {
-                    commit_rows = self.database.write().unwrap().commit(session)?;
+                    commit_rows = self
+                        .database
+                        .write()
+                        .unwrap()
+                        .commit(&mut session_state.session)?;
                 }
             }
             if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
@@ -79,15 +83,15 @@ impl Parser {
                     let in_session = row < 0;
                     if in_session {
                         let mut valid = false;
-                        if let Some(session) = self.sessions.pop() {
+                        if let Some(session_state) = self.sessions.pop() {
                             if let Some(temporary_collection) =
-                                session.0.temporary_collection(collection_id)
+                                session_state.session.temporary_collection(collection_id)
                             {
                                 if let Some(_) = temporary_collection.get(&row) {
                                     valid = true;
                                 }
                             }
-                            self.sessions.push(session);
+                            self.sessions.push(session_state);
                         }
                         if !valid {
                             return Err(DependError);

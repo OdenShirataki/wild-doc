@@ -24,9 +24,14 @@ use crate::{anyhow::Result, xml_util};
 
 type AttributeMap = HashMap<Vec<u8>, Option<Arc<WildDocValue>>>;
 
+struct SessionState {
+    session: Session,
+    commit_on_close: bool,
+    clear_on_close: bool,
+}
 pub struct Parser {
     database: Arc<RwLock<SessionDatabase>>,
-    sessions: Vec<(Session, bool)>,
+    sessions: Vec<SessionState>,
     scripts: Arc<HashMap<String, Arc<Mutex<dyn WildDocScript>>>>,
     state: WildDocState,
     include_stack: Vec<String>,
@@ -388,15 +393,19 @@ impl Parser {
                                 self.state.stack().write().unwrap().pop();
                             }
                             b"session" => {
-                                if let Some((ref mut session, clear_on_close)) = self.sessions.pop()
-                                {
-                                    if clear_on_close {
+                                if let Some(ref mut session_state) = self.sessions.pop() {
+                                    if session_state.commit_on_close {
+                                        self.database
+                                            .write()
+                                            .unwrap()
+                                            .commit(&mut session_state.session)?;
+                                    } else if session_state.clear_on_close {
                                         let _ = self
                                             .database
                                             .clone()
                                             .write()
                                             .unwrap()
-                                            .session_clear(session);
+                                            .session_clear(&mut session_state.session);
                                     }
                                 }
                             }
@@ -456,7 +465,7 @@ impl Parser {
                     let mut session_maybe_has_collection = None;
                     for i in (0..self.sessions.len()).rev() {
                         if let Some(temporary_collection) =
-                            self.sessions[i].0.temporary_collection(collection_id)
+                            self.sessions[i].session.temporary_collection(collection_id)
                         {
                             session_maybe_has_collection = Some(temporary_collection);
                             break;
@@ -589,6 +598,13 @@ impl Parser {
         if let Some(Some(session_name)) = attributes.get(b"name".as_ref()) {
             let session_name = session_name.to_str();
             if session_name != "" {
+                let commit_on_close =
+                    if let Some(Some(col)) = attributes.get(b"commit_on_close".as_ref()) {
+                        col.to_str() == "true"
+                    } else {
+                        false
+                    };
+
                 let clear_on_close =
                     if let Some(Some(col)) = attributes.get(b"clear_on_close".as_ref()) {
                         col.to_str() == "true"
@@ -627,7 +643,11 @@ impl Parser {
                                 .session_restart(&mut session, expire)?;
                         }
                     }
-                    self.sessions.push((session, clear_on_close));
+                    self.sessions.push(SessionState {
+                        session,
+                        commit_on_close,
+                        clear_on_close,
+                    });
                 }
             }
         }
@@ -669,8 +689,8 @@ impl Parser {
         }
 
         let mut json = HashMap::new();
-        if let Some((session, _)) = self.sessions.last() {
-            if let Some(cursor) = session.sequence_cursor() {
+        if let Some(session_state) = self.sessions.last() {
+            if let Some(cursor) = session_state.session.sequence_cursor() {
                 json.insert(
                     str_max.as_bytes().to_vec(),
                     Arc::new(RwLock::new(WildDocValue::new(serde_json::json!(
