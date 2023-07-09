@@ -47,7 +47,6 @@ impl WildDocScript for Deno {
             deno_core::FastString::from_static(
                 r#"wd={
     general:{}
-    ,result_options:{}
 };"#,
             ),
         )?;
