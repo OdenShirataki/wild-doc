@@ -123,7 +123,7 @@ impl Parser {
                     xml = &xml[pos..];
                     let token_collection = token::borrowed::StartTag::from(token_bytes);
                     if token_collection.name().as_bytes() == b"collection" {
-                        let token_attributes = self.parse_attibutes(token_collection.attributes());
+                        let token_attributes = self.parse_attibutes(&token_collection.attributes());
                         if let Some(Some(collection_name)) = token_attributes.get(b"name".as_ref())
                         {
                             let collection_id = self
@@ -145,7 +145,7 @@ impl Parser {
                                         let token_bytes = &xml[..pos];
                                         xml = &xml[pos..];
                                         let token = token::borrowed::StartTag::from(token_bytes);
-                                        let attributes = self.parse_attibutes(token.attributes());
+                                        let attributes = self.parse_attibutes(&token.attributes());
                                         let name = token.name();
                                         match name.as_bytes() {
                                             b"field" => {
@@ -190,7 +190,7 @@ impl Parser {
                                         match name.as_bytes() {
                                             b"depend" => {
                                                 let attributes =
-                                                    self.parse_attibutes(token.attributes());
+                                                    self.parse_attibutes(&token.attributes());
                                                 self.depend(&attributes, &mut depends)?;
                                             }
                                             _ => {}

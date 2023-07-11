@@ -71,10 +71,11 @@ impl Parser {
     fn parse_wd_start_or_empty_tag(
         &mut self,
         name: &[u8],
-        attributes: &AttributeMap,
+        attributes: &Option<Attributes<'_>>,
     ) -> Result<Option<Vec<u8>>> {
         match name {
             b"print" => {
+                let attributes = self.parse_attibutes(attributes);
                 return Ok(
                     if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
                         Some(value.to_str().into_owned().into_bytes())
@@ -84,6 +85,7 @@ impl Parser {
                 );
             }
             b"global" => {
+                let attributes = self.parse_attibutes(attributes);
                 if let (Some(Some(var)), Some(Some(value))) = (
                     attributes.get(b"var".as_ref()),
                     attributes.get(b"value".as_ref()),
@@ -92,6 +94,7 @@ impl Parser {
                 }
             }
             b"print_escape_html" => {
+                let attributes = self.parse_attibutes(attributes);
                 return Ok(
                     if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
                         Some(xml_util::escape_html(&value.to_str()).into_bytes())
@@ -101,12 +104,15 @@ impl Parser {
                 );
             }
             b"include" => {
+                let attributes = self.parse_attibutes(attributes);
                 return Ok(Some(self.get_include_content(attributes)?));
             }
             b"delete_collection" => {
+                let attributes = self.parse_attibutes(attributes);
                 self.delete_collection(attributes)?;
             }
             b"session_gc" => {
+                let attributes = self.parse_attibutes(attributes);
                 self.session_gc(attributes)?;
             }
             _ => {}
@@ -186,7 +192,7 @@ impl Parser {
         }
     }
 
-    fn parse_attibutes(&mut self, attributes: Option<Attributes>) -> AttributeMap {
+    fn parse_attibutes(&mut self, attributes: &Option<Attributes>) -> AttributeMap {
         let mut r: AttributeMap = HashMap::new();
         if let Some(attributes) = attributes {
             for attribute in attributes.iter() {
@@ -250,27 +256,25 @@ impl Parser {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
                     let token = token::borrowed::StartTag::from(token_bytes);
-                    let attributes = token.attributes();
                     let name = token.name();
                     if Self::is_wd_tag(&name) {
-                        let attributes = self.parse_attibutes(attributes);
-                        if let Some(mut parsed) =
-                            self.parse_wd_start_or_empty_tag(name.local().as_bytes(), &attributes)?
-                        {
+                        if let Some(mut parsed) = self.parse_wd_start_or_empty_tag(
+                            name.local().as_bytes(),
+                            &token.attributes(),
+                        )? {
                             r.append(&mut parsed);
                         } else {
                             match name.local().as_bytes() {
-                                b"comment" => {
-                                    let (_, outer_end) = xml_util::inner(xml);
-                                    xml = &xml[outer_end..];
-                                }
                                 b"session" => {
-                                    self.session(&attributes)?;
+                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    self.session(attributes)?;
                                 }
                                 b"session_sequence_cursor" => {
-                                    self.session_sequence(&attributes)?;
+                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    self.session_sequence(attributes)?;
                                 }
                                 b"sessions" => {
+                                    let attributes = self.parse_attibutes(&token.attributes());
                                     self.sessions(&attributes);
                                 }
                                 b"re" => {
@@ -279,54 +283,72 @@ impl Parser {
                                     xml = &xml[outer_end..];
                                     r.append(&mut self.parse(&parsed)?);
                                 }
+                                b"comment" => {
+                                    let (_, outer_end) = xml_util::inner(xml);
+                                    xml = &xml[outer_end..];
+                                }
                                 b"letitgo" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
                                     r.append(&mut inner_xml.to_vec());
                                     xml = &xml[outer_end..];
                                 }
                                 b"update" => {
+                                    let attributes = self.parse_attibutes(&token.attributes());
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
                                     self.update(inner_xml, &attributes)?;
                                     xml = &xml[outer_end..];
                                 }
                                 b"search" => {
+                                    let attributes = self.parse_attibutes(&token.attributes());
                                     xml = self.search(xml, &attributes, &mut search_map);
                                 }
                                 b"result" => {
+                                    let attributes = self.parse_attibutes(&token.attributes());
                                     self.result(&attributes, &search_map)?;
                                 }
                                 b"collections" => {
-                                    self.collections(&attributes);
+                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    self.collections(attributes);
                                 }
                                 b"case" => {
+                                    let attributes = self.parse_attibutes(&token.attributes());
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut self.case(&attributes, inner_xml)?);
+                                    r.append(&mut self.case(attributes, inner_xml)?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"if" => {
+                                    let attributes = self.parse_attibutes(&token.attributes());
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut self.r#if(&attributes, inner_xml)?);
+                                    r.append(&mut self.r#if(attributes, inner_xml)?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"for" => {
+                                    let attributes = self.parse_attibutes(&token.attributes());
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut self.r#for(&attributes, inner_xml)?);
+                                    r.append(&mut self.r#for(attributes, inner_xml)?);
+                                    xml = &xml[outer_end..];
+                                }
+                                b"while" => {
+                                    let (inner_xml, outer_end) = xml_util::inner(xml);
+                                    r.append(&mut self.r#while(token.attributes(), inner_xml)?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"tag" => {
-                                    let (name, mut attr) = self.custom_tag(&attributes);
+                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    let (name, mut attr) = self.custom_tag(attributes);
                                     tag_stack.push(name.clone());
                                     r.push(b'<');
                                     r.append(&mut name.into_bytes());
                                     r.append(&mut attr);
                                     r.push(b'>');
                                 }
-
                                 b"local" => {
-                                    self.local(&attributes);
+                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    self.local(attributes);
                                 }
                                 b"row" => {
-                                    self.row(&attributes);
+                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    self.row(attributes);
                                 }
                                 _ => {}
                             }
@@ -334,7 +356,7 @@ impl Parser {
                     } else {
                         r.push(b'<');
                         r.append(&mut name.to_vec());
-                        if let Some(attributes) = attributes {
+                        if let Some(attributes) = token.attributes() {
                             self.output_attributes(&mut r, attributes)
                         }
                         r.push(b'>');
@@ -346,8 +368,8 @@ impl Parser {
                     let token = token::borrowed::EmptyElementTag::from(token_bytes);
                     let name = token.name();
                     if name.as_bytes() == b"wd:tag" {
-                        let attributes = self.parse_attibutes(token.attributes());
-                        let (name, mut attr) = self.custom_tag(&attributes);
+                        let attributes = self.parse_attibutes(&token.attributes());
+                        let (name, mut attr) = self.custom_tag(attributes);
                         r.push(b'<');
                         r.append(&mut name.into_bytes());
                         r.append(&mut attr);
@@ -356,10 +378,10 @@ impl Parser {
                         r.push(b'>');
                     } else {
                         if Self::is_wd_tag(&name) {
-                            let attributes = self.parse_attibutes(token.attributes());
-                            if let Some(mut parsed) = self
-                                .parse_wd_start_or_empty_tag(name.local().as_bytes(), &attributes)?
-                            {
+                            if let Some(mut parsed) = self.parse_wd_start_or_empty_tag(
+                                name.local().as_bytes(),
+                                &token.attributes(),
+                            )? {
                                 r.append(&mut parsed);
                             }
                         } else {
@@ -440,7 +462,7 @@ impl Parser {
         Ok(r)
     }
 
-    fn local(&mut self, attributes: &AttributeMap) {
+    fn local(&mut self, attributes: AttributeMap) {
         let mut json: Vars = HashMap::new();
         for (key, v) in attributes {
             if let Some(v) = v {
@@ -449,7 +471,7 @@ impl Parser {
         }
         self.state.stack().write().unwrap().push(json);
     }
-    fn row(&mut self, attributes: &AttributeMap) {
+    fn row(&mut self, attributes: AttributeMap) {
         let mut json = HashMap::new();
 
         if let (Some(Some(collection_id)), Some(Some(row)), Some(Some(var))) = (
@@ -577,7 +599,7 @@ impl Parser {
         }
         self.state.stack().write().unwrap().push(json);
     }
-    fn collections(&mut self, attributes: &AttributeMap) {
+    fn collections(&mut self, attributes: AttributeMap) {
         let mut json = HashMap::new();
 
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
@@ -594,7 +616,7 @@ impl Parser {
         }
         self.state.stack().write().unwrap().push(json);
     }
-    fn session(&mut self, attributes: &AttributeMap) -> io::Result<()> {
+    fn session(&mut self, attributes: AttributeMap) -> io::Result<()> {
         if let Some(Some(session_name)) = attributes.get(b"name".as_ref()) {
             let session_name = session_name.to_str();
             if session_name != "" {
@@ -669,7 +691,7 @@ impl Parser {
         }
         self.state.stack().write().unwrap().push(json);
     }
-    fn session_sequence(&mut self, attributes: &AttributeMap) -> io::Result<()> {
+    fn session_sequence(&mut self, attributes: AttributeMap) -> io::Result<()> {
         let mut str_max = if let Some(Some(s)) = attributes.get(b"max".as_ref()) {
             s.to_str()
         } else {
@@ -710,7 +732,7 @@ impl Parser {
 
         Ok(())
     }
-    fn session_gc(&mut self, attributes: &AttributeMap) -> io::Result<()> {
+    fn session_gc(&mut self, attributes: AttributeMap) -> io::Result<()> {
         let mut expire = 60 * 60 * 24;
         if let Some(Some(str_expire)) = attributes.get(b"expire".as_ref()) {
             if let Ok(parsed) = str_expire.to_str().parse::<i64>() {
@@ -719,7 +741,7 @@ impl Parser {
         }
         self.database.write().unwrap().session_gc(expire)
     }
-    fn delete_collection(&mut self, attributes: &AttributeMap) -> Result<()> {
+    fn delete_collection(&mut self, attributes: AttributeMap) -> Result<()> {
         if let Some(Some(str_collection)) = attributes.get(b"collection".as_ref()) {
             self.database
                 .clone()
@@ -730,7 +752,7 @@ impl Parser {
         Ok(())
     }
 
-    fn custom_tag(&mut self, attributes: &AttributeMap) -> (String, Vec<u8>) {
+    fn custom_tag(&mut self, attributes: AttributeMap) -> (String, Vec<u8>) {
         let mut html_attr = vec![];
         let mut name = "".to_string();
         for (key, value) in attributes {

@@ -5,7 +5,7 @@ use std::{
 
 use maybe_xml::{
     scanner::{Scanner, State},
-    token,
+    token::{self, prop::Attributes},
 };
 
 use crate::{anyhow::Result, xml_util};
@@ -13,7 +13,7 @@ use crate::{anyhow::Result, xml_util};
 use super::{AttributeMap, Parser, WildDocValue};
 
 impl Parser {
-    pub(super) fn get_include_content(&mut self, attributes: &AttributeMap) -> Result<Vec<u8>> {
+    pub(super) fn get_include_content(&mut self, attributes: AttributeMap) -> Result<Vec<u8>> {
         if let Some(Some(src)) = attributes.get(b"src".as_ref()) {
             let src = src.to_str().into_owned();
             let (xml, filename) = if let Some(xml) = self
@@ -52,7 +52,7 @@ impl Parser {
         Ok(b"".to_vec())
     }
 
-    pub(super) fn case(&mut self, attributes: &AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
+    pub(super) fn case(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         let cmp_src = if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
             value.to_str()
         } else {
@@ -72,7 +72,7 @@ impl Parser {
                         b"wd:when" => {
                             let (inner_xml, outer_end) = xml_util::inner(xml);
                             xml = &xml[outer_end..];
-                            let attributes = self.parse_attibutes(token.attributes());
+                            let attributes = self.parse_attibutes(&token.attributes());
                             if let Some(Some(right)) = attributes.get(b"value".as_ref()) {
                                 if cmp_src == right.to_str() {
                                     return Ok(self.parse(inner_xml)?);
@@ -102,7 +102,7 @@ impl Parser {
         Ok(vec![])
     }
 
-    pub(super) fn r#if(&mut self, attributes: &AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
+    pub(super) fn r#if(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
             if value.to_str() == "true" {
                 return self.parse(xml);
@@ -111,7 +111,7 @@ impl Parser {
         Ok(vec![])
     }
 
-    pub(super) fn r#for(&mut self, attributes: &AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
+    pub(super) fn r#for(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         let mut r = Vec::new();
         if let (Some(Some(var)), Some(Some(r#in))) = (
             attributes.get(b"var".as_ref()),
@@ -164,6 +164,26 @@ impl Parser {
                     }
                     _ => {}
                 }
+            }
+        }
+        Ok(r)
+    }
+    pub(super) fn r#while(
+        &mut self,
+        attributes: Option<Attributes<'_>>,
+        xml: &[u8],
+    ) -> Result<Vec<u8>> {
+        let mut r = Vec::new();
+        loop {
+            let attributes = self.parse_attibutes(&attributes);
+            if let Some(Some(cont)) = attributes.get(b"continue".as_ref()) {
+                if cont.value() == true {
+                    r.append(&mut self.parse(xml)?);
+                } else {
+                    break;
+                }
+            } else {
+                break;
             }
         }
         Ok(r)
