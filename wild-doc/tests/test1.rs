@@ -11,7 +11,7 @@ fn test1() {
 
     let mut wd = WildDoc::new(dir, Box::new(IncludeLocal::new("./include/"))).unwrap();
 
-    let update_xml = br#"<wd:session name="account"><wd:update commit="1">
+    let update_xml = br#"<wd:session name="account"><wd:update commit="true">
     <collection name="account">
         <field name="id">admin</field>
         <field name="password">admin</field>
@@ -58,7 +58,7 @@ fn test1() {
 
     //update data.
     /*wd.run(r#"<wd:session name="hoge">
-        <wd:update commit="1">
+        <wd:update commit="true">
             <collection name="person">
                 <field name="name">Noah</field>
                 <field name="country">US</field>
@@ -75,7 +75,7 @@ fn test1() {
     </wd:session>"#,b"").unwrap();*/
 
     let update_xml = br#"<wd:session name="hoge">
-    <wd:update commit="1">
+    <wd:update commit="true">
         <collection name="person">
             <field name="name"><wd:print value:var="input.name" /></field>
             <field name="country"><wd:print value:var="input.from" /></field>
@@ -185,7 +185,7 @@ fn test1() {
 
     //search in update section.
     let r=wd.run(br#"<wd:session name="hoge">
-        <wd:update commit="1">
+        <wd:update commit="true">
             <wd:search
                 name="person"
                 collection="person"

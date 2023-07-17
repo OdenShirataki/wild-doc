@@ -18,7 +18,7 @@ let mut wd=WildDoc::new(
 
 //update data.
 /*wd.run(br#"<wd:session name="hoge">
-    <wd:update commit="1">
+    <wd:update commit="true">
         <collection name="person">
             <field name="name">Noah</field>
             <field name="country">US</field>
@@ -35,7 +35,7 @@ let mut wd=WildDoc::new(
 </wd:session>"#,b"").unwrap();*/
 
 let update_xml=br#"<wd:session name="hoge">
-<wd:update commit="1">
+<wd:update commit="true">
     <collection name="person">
         <field name="name"><wd:print value:var="input.name" /></field>
         <field name="country"><wd:print value:var="input.from" /></field>
@@ -127,7 +127,7 @@ println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
 
 //search in update section.
 wd.run(br#"<wd:session name="hoge">
-    <wd:update commit="1">
+    <wd:update commit="true">
         <wd:search name="person" collection="person"></wd:search>
         <wd:result var="q" search="person">
             <wd:for var="r" in:var="q.rows">

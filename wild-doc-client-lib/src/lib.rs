@@ -130,7 +130,7 @@ mod tests {
         client
             .exec(
                 r#"<wd:session name="hoge">
-            <wd:update commit="1">
+            <wd:update commit="true">
                 <collection name="person">
                     <field name="name">Noah</field>
                     <field name="country">US</field>
@@ -210,7 +210,7 @@ mod tests {
         "#);
         */
         client.exec(r#"<wd:session name="hoge">
-            <wd:update commit="1">
+            <wd:update commit="true">
                 <wd:search name="person" collection="person"></wd:search>
                 <wd:result var="q" search="person">
                     <wd:for var="r" key="i" in:var="q.rows">
