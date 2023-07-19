@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.83.2"
+version = "0.83.3"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -26,7 +26,7 @@ toml.workspace = true
 maybe_xml = "0.3"
 chrono = "0.4"
 
-semilattice-database-session = { version = "0.9", path = "../../semilattice-database/semilattice-database-session" }
+semilattice-database-session = { version = "0.10", path = "../../semilattice-database/semilattice-database-session" }
 
 wild-doc-script = { version = "0.2", path = "../wild-doc-script" }
 

@@ -307,7 +307,6 @@ impl Parser {
                 let method_pair: Vec<&str> = method.split('!').collect();
                 let len = method_pair.len();
                 let i = len - 1;
-
                 if let Some(method) = match method_pair[i] {
                     "match" => Some(search::Field::Match(Arc::new(value.as_bytes().to_vec()))),
                     "min" => Some(search::Field::Min(Arc::new(value.as_bytes().to_vec()))),

@@ -121,13 +121,14 @@ impl Parser {
             if var != "" {
                 match &r#in.value() {
                     serde_json::Value::Object(map) => {
+                        let key_name = attributes.get(b"key".as_ref());
                         for (key, value) in map {
                             let mut vars = HashMap::new();
                             vars.insert(
                                 var.as_bytes().to_vec(),
                                 Arc::new(RwLock::new(WildDocValue::new(value.clone()))),
                             );
-                            if let Some(Some(key_name)) = attributes.get(b"key".as_ref()) {
+                            if let Some(Some(key_name)) = key_name {
                                 vars.insert(
                                     key_name.to_str().as_bytes().to_vec(),
                                     Arc::new(RwLock::new(WildDocValue::new(serde_json::json!(
@@ -141,6 +142,7 @@ impl Parser {
                         }
                     }
                     serde_json::Value::Array(vec) => {
+                        let key_name = attributes.get(b"key".as_ref());
                         let mut key = 0;
                         for value in vec {
                             let mut vars = HashMap::new();
@@ -148,18 +150,18 @@ impl Parser {
                                 var.as_bytes().to_vec(),
                                 Arc::new(RwLock::new(WildDocValue::new(value.clone()))),
                             );
-                            if let Some(Some(key_name)) = attributes.get(b"key".as_ref()) {
+                            if let Some(Some(key_name)) = key_name {
                                 vars.insert(
                                     key_name.to_str().as_bytes().to_vec(),
                                     Arc::new(RwLock::new(WildDocValue::new(serde_json::json!(
                                         key
                                     )))),
                                 );
+                                key += 1;
                             }
                             self.state.stack().write().unwrap().push(vars);
                             r.append(&mut self.parse(xml)?);
                             self.state.stack().write().unwrap().pop();
-                            key += 1;
                         }
                     }
                     _ => {}
