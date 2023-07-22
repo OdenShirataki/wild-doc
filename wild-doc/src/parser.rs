@@ -565,6 +565,8 @@ impl Parser {
                                             .read()
                                             .unwrap()
                                             .relation()
+                                            .read()
+                                            .unwrap()
                                             .depends(
                                                 None,
                                                 &CollectionRow::new(collection_id, row)

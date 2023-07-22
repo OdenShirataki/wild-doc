@@ -164,7 +164,9 @@ impl Parser {
                     self.database
                         .write()
                         .unwrap()
-                        .relation_mut()
+                        .relation()
+                        .write()
+                        .unwrap()
                         .delete_pends_by_collection_row(&collection_row)?;
                     for d in depends {
                         self.database.write().unwrap().register_relation(
