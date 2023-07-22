@@ -10,7 +10,7 @@ use maybe_xml::{
     scanner::{Scanner, State},
     token,
 };
-use semilattice_database_session::{search, Activity, CollectionRow, Condition, Depend, Uuid};
+use semilattice_database_session::{search, Activity, CollectionRow, Condition, Uuid};
 
 use super::{AttributeMap, Parser};
 
@@ -212,18 +212,18 @@ impl Parser {
                         .unwrap()
                         .collection_id(&collection_name),
                 ) {
-                    return Some(Condition::Depend(Depend::new(
+                    return Some(Condition::Depend(
                         if let Some(Some(akey)) = attributes.get(b"key".as_ref()) {
-                            akey.to_str()
+                            Some(akey.to_str().into_owned())
                         } else {
-                            "".into()
+                            None
                         },
                         if row < 0 {
                             CollectionRow::new(-collection_id, (-row) as u32)
                         } else {
                             CollectionRow::new(collection_id, row as u32)
                         },
-                    )));
+                    ));
                 }
             }
         }
