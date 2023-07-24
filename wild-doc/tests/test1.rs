@@ -9,7 +9,7 @@ fn test1() {
     }
     std::fs::create_dir_all(dir).unwrap();
 
-    let mut wd = WildDoc::new(dir, Box::new(IncludeLocal::new("./include/"))).unwrap();
+    let mut wd = WildDoc::new(dir, Box::new(IncludeLocal::new("./include/")), None).unwrap();
 
     let update_xml = br#"<wd:session name="account"><wd:update commit="true">
     <collection name="account">

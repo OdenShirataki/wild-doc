@@ -4,7 +4,7 @@ mod script;
 mod xml_util;
 
 pub use include::IncludeLocal;
-pub use semilattice_database_session::anyhow;
+pub use semilattice_database_session::{anyhow, DataOption};
 
 use std::{
     collections::HashMap,
@@ -49,6 +49,7 @@ impl WildDoc {
     pub fn new<P: AsRef<Path>>(
         dir: P,
         default_include_adaptor: Box<dyn IncludeAdaptor + Send>,
+        collection_settings: Option<HashMap<String, DataOption>>,
     ) -> io::Result<Self> {
         let dir = dir.as_ref();
         let mut cache_dir = dir.to_path_buf();
@@ -57,7 +58,10 @@ impl WildDoc {
             std::fs::create_dir_all(&cache_dir)?;
         }
         Ok(Self {
-            database: Arc::new(RwLock::new(SessionDatabase::new(dir)?)),
+            database: Arc::new(RwLock::new(SessionDatabase::new(
+                dir.into(),
+                collection_settings,
+            )?)),
             default_include_adaptor: Arc::new(Mutex::new(default_include_adaptor)),
             cache_dir,
         })
