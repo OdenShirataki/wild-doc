@@ -10,7 +10,7 @@ use std::{
 
 use serde::Deserialize;
 
-use wild_doc::{anyhow::Result, WildDoc};
+use wild_doc::{anyhow::Result, DataOption, WildDoc};
 
 use include::{IncludeEmpty, IncludeRemote};
 
@@ -24,6 +24,7 @@ struct ConfigServer {
     bind_addr: Option<String>,
     port: Option<String>,
     delete_dir_on_start: Option<String>,
+    collection: Option<HashMap<String, DataOption>>,
 }
 
 fn main() {
@@ -69,6 +70,7 @@ fn main() {
                                                         WildDoc::new(
                                                             dir,
                                                             Box::new(IncludeEmpty::new()),
+                                                            config.collection.clone(),
                                                         )
                                                         .unwrap(),
                                                     ))

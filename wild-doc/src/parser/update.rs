@@ -4,7 +4,7 @@ use maybe_xml::{
     token,
 };
 use semilattice_database_session::{
-    Activity, CollectionRow, Depends, KeyValue, Pend, Record, Term,
+    Activity, CollectionRow, Depends, KeyValue, Pend, Record, SessionRecord, Term,
 };
 use std::{collections::HashMap, error, fmt};
 
@@ -39,12 +39,9 @@ impl Parser {
             let pend_key = pend.key();
             for record in pend.records() {
                 match record {
-                    Record::New {
+                    SessionRecord::New {
                         collection_id,
-                        activity,
-                        term_begin,
-                        term_end,
-                        fields,
+                        record,
                         depends,
                         pends,
                     } => {
@@ -56,23 +53,20 @@ impl Parser {
                         depends.push((pend_key.to_owned(), depend.clone()));
                         if let Ok(mut ret_rows) = self.record_new(
                             *collection_id,
-                            activity,
-                            term_begin,
-                            term_end,
-                            fields,
+                            &record.activity,
+                            &record.term_begin,
+                            &record.term_end,
+                            &record.fields,
                             &Depends::Overwrite(depends),
                             pends,
                         ) {
                             rows.append(&mut ret_rows);
                         }
                     }
-                    Record::Update {
+                    SessionRecord::Update {
                         collection_id,
                         row,
-                        activity,
-                        term_begin,
-                        term_end,
-                        fields,
+                        record,
                         depends,
                         pends,
                     } => {
@@ -85,10 +79,10 @@ impl Parser {
                         if let Ok(mut ret_rows) = self.record_update(
                             *collection_id,
                             *row,
-                            activity,
-                            term_begin,
-                            term_end,
-                            fields,
+                            &record.activity,
+                            &record.term_begin,
+                            &record.term_end,
+                            &record.fields,
                             &Depends::Overwrite(depends),
                             pends,
                         ) {
@@ -199,51 +193,45 @@ impl Parser {
             let mut commit_rows = vec![];
             for record in updates {
                 match record {
-                    Record::New {
+                    SessionRecord::New {
                         collection_id,
-                        activity,
-                        term_begin,
-                        term_end,
-                        fields,
+                        record,
                         depends,
                         pends,
                     } => {
                         if let Ok(mut rows) = self.record_new(
                             collection_id,
-                            &activity,
-                            &term_begin,
-                            &term_end,
-                            &fields,
+                            &record.activity,
+                            &record.term_begin,
+                            &record.term_end,
+                            &record.fields,
                             &depends,
                             &pends,
                         ) {
                             commit_rows.append(&mut rows);
                         }
                     }
-                    Record::Update {
+                    SessionRecord::Update {
                         collection_id,
                         row,
-                        activity,
-                        term_begin,
-                        term_end,
-                        fields,
+                        record,
                         depends,
                         pends,
                     } => {
                         if let Ok(mut rows) = self.record_update(
                             collection_id,
                             row,
-                            &activity,
-                            &term_begin,
-                            &term_end,
-                            &fields,
+                            &record.activity,
+                            &record.term_begin,
+                            &record.term_end,
+                            &record.fields,
                             &depends,
                             &pends,
                         ) {
                             commit_rows.append(&mut rows);
                         }
                     }
-                    Record::Delete { collection_id, row } => {
+                    SessionRecord::Delete { collection_id, row } => {
                         if collection_id > 0 {
                             self.database
                                 .write()
@@ -342,7 +330,7 @@ impl Parser {
         Err(DependError)
     }
 
-    fn make_update_struct(&mut self, xml: &[u8]) -> Result<Vec<Record>> {
+    fn make_update_struct(&mut self, xml: &[u8]) -> Result<Vec<SessionRecord>> {
         let mut updates = Vec::new();
         let mut xml = xml;
         let mut scanner = Scanner::new();
@@ -469,7 +457,7 @@ impl Parser {
                                 (collection_id, row as u32)
                             };
                             if is_delete {
-                                updates.push(Record::Delete { collection_id, row });
+                                updates.push(SessionRecord::Delete { collection_id, row });
                             } else {
                                 let mut activity = Activity::Active;
                                 if let Some(Some(str)) = token_attributes.get(b"activity".as_ref())
@@ -511,12 +499,14 @@ impl Parser {
                                     f.push(KeyValue::new(key, value.as_bytes()))
                                 }
                                 if row == 0 {
-                                    updates.push(Record::New {
+                                    updates.push(SessionRecord::New {
                                         collection_id,
-                                        activity,
-                                        term_begin,
-                                        term_end,
-                                        fields: f,
+                                        record: Record {
+                                            activity,
+                                            term_begin,
+                                            term_end,
+                                            fields: f,
+                                        },
                                         depends: Depends::Overwrite(depends),
                                         pends,
                                     });
@@ -527,13 +517,15 @@ impl Parser {
                                     {
                                         inherit_depend_if_empty = str.to_str() == "true";
                                     }
-                                    updates.push(Record::Update {
+                                    updates.push(SessionRecord::Update {
                                         collection_id,
                                         row,
-                                        activity,
-                                        term_begin,
-                                        term_end,
-                                        fields: f,
+                                        record: Record {
+                                            activity,
+                                            term_begin,
+                                            term_end,
+                                            fields: f,
+                                        },
                                         depends: if inherit_depend_if_empty && depends.len() == 0 {
                                             Depends::Default
                                         } else {

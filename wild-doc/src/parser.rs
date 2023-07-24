@@ -538,26 +538,34 @@ impl Parser {
                                 {
                                     let row = row as u32;
 
-                                    json_inner.insert(
-                                        "uuid".to_owned(),
-                                        serde_json::json!(
-                                            Uuid::from_u128(collection.uuid(row)).to_string()
-                                        ),
-                                    );
-                                    json_inner.insert(
-                                        "activity".to_owned(),
-                                        serde_json::json!(
-                                            collection.activity(row) == Activity::Active
-                                        ),
-                                    );
-                                    json_inner.insert(
-                                        "term_begin".to_owned(),
-                                        serde_json::json!(collection.term_begin(row)),
-                                    );
-                                    json_inner.insert(
-                                        "term_end".to_owned(),
-                                        serde_json::json!(collection.term_end(row)),
-                                    );
+                                    if let Some(uuid) = collection.uuid_string(row) {
+                                        json_inner
+                                            .insert("uuid".to_owned(), serde_json::json!(uuid));
+                                    }
+                                    if let Some(activity) = collection.activity(row) {
+                                        json_inner.insert(
+                                            "activity".to_owned(),
+                                            serde_json::json!(activity == Activity::Active),
+                                        );
+                                    };
+                                    if let Some(term_begin) = collection.term_begin(row) {
+                                        json_inner.insert(
+                                            "term_begin".to_owned(),
+                                            serde_json::json!(term_begin),
+                                        );
+                                    }
+                                    if let Some(term_end) = collection.term_end(row) {
+                                        json_inner.insert(
+                                            "term_end".to_owned(),
+                                            serde_json::json!(term_end),
+                                        );
+                                    }
+                                    if let Some(last_updated) = collection.last_updated(row) {
+                                        json_inner.insert(
+                                            "last_updated".to_owned(),
+                                            serde_json::json!(last_updated),
+                                        );
+                                    }
                                     json_inner.insert(
                                         "depends".to_owned(),
                                         serde_json::json!(serde_json::json!(self

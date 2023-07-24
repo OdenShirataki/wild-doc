@@ -15,16 +15,21 @@ impl Parser {
 
         let mut json_row = Map::new();
         json_row.insert("row".to_owned(), json!(row));
-        json_row.insert(
-            "uuid".to_owned(),
-            json!(Uuid::from_u128(collection.uuid(row)).to_string()),
-        );
-        json_row.insert(
-            "activity".to_owned(),
-            json!(collection.activity(row) == Activity::Active),
-        );
-        json_row.insert("term_begin".to_owned(), json!(collection.term_begin(row)));
-        json_row.insert("term_end".to_owned(), json!(collection.term_end(row)));
+        if let Some(uuid) = collection.uuid_string(row) {
+            json_row.insert("uuid".to_owned(), json!(uuid));
+        }
+        if let Some(activity) = collection.activity(row) {
+            json_row.insert("activity".to_owned(), json!(activity == Activity::Active));
+        }
+        if let Some(term_begin) = collection.term_begin(row) {
+            json_row.insert("term_begin".to_owned(), json!(term_begin));
+        }
+        if let Some(term_end) = collection.term_end(row) {
+            json_row.insert("term_end".to_owned(), json!(term_end));
+        }
+        if let Some(last_updated) = collection.last_updated(row) {
+            json_row.insert("last_updated".to_owned(), json!(last_updated));
+        }
 
         let mut json_depends = Map::new();
         for d in self
