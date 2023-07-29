@@ -1,5 +1,5 @@
 use semilattice_database_session::{
-    anyhow, Activity, Collection, CollectionRow, Condition, Order, OrderKey, Uuid,
+    anyhow, search::Search, Activity, Collection, CollectionRow, Order, OrderKey, Uuid,
 };
 use serde_json::{json, Map, Value};
 use std::{
@@ -67,7 +67,7 @@ impl Parser {
     pub(super) fn result(
         &mut self,
         attributes: &AttributeMap,
-        search_map: &HashMap<String, (i32, Vec<Condition>)>,
+        search_map: &HashMap<String, Search>,
     ) -> anyhow::Result<()> {
         let mut json = HashMap::new();
         if let (Some(Some(search)), Some(Some(var))) = (
@@ -78,8 +78,8 @@ impl Parser {
             let var = var.to_str();
             if search != "" && var != "" {
                 let mut json_inner = Map::new();
-                if let Some((collection_id, conditions)) = search_map.get(search.as_ref()) {
-                    let collection_id = *collection_id;
+                if let Some(search) = search_map.get(search.as_ref()) {
+                    let collection_id = search.collection_id();
                     json_inner.insert("collection_id".to_owned(), json!(collection_id));
                     let orders = make_order(
                         if let Some(Some(sort)) = attributes.get(b"sort".as_ref()) {
@@ -111,7 +111,7 @@ impl Parser {
                                 .clone()
                                 .read()
                                 .unwrap()
-                                .result_session(session.search(collection_id, conditions), orders)?
+                                .result_session(session.search(&search), orders)?
                                 .iter()
                                 .map(|row| {
                                     let mut json_row = Map::new();
@@ -178,10 +178,6 @@ impl Parser {
                                 })
                                 .collect::<Vec<Value>>()
                         } else {
-                            let mut search = self.database.read().unwrap().search(collection);
-                            for c in conditions {
-                                search = search.search(c.clone());
-                            }
                             self.database
                                 .clone()
                                 .read()

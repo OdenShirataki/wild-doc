@@ -10,7 +10,10 @@ use maybe_xml::{
     scanner::{Scanner, State},
     token,
 };
-use semilattice_database_session::{search, Activity, CollectionRow, Condition, Uuid};
+use semilattice_database_session::{
+    search::{self, Search},
+    Activity, CollectionRow, Condition, Uuid,
+};
 
 use super::{AttributeMap, Parser};
 
@@ -19,7 +22,7 @@ impl Parser {
         &mut self,
         xml: &'a [u8],
         attributes: &AttributeMap,
-        search_map: &mut HashMap<String, (i32, Vec<Condition>)>,
+        search_map: &mut HashMap<String, Search>,
     ) -> &'a [u8] {
         if let (Some(Some(name)), Some(Some(collection_name))) = (
             attributes.get(b"name".as_ref()),
@@ -36,7 +39,7 @@ impl Parser {
                     .collection_id(collection_name.as_ref())
                 {
                     let (last_xml, condition) = self.make_conditions(attributes, xml);
-                    search_map.insert(name.into_owned(), (collection_id, condition));
+                    search_map.insert(name.into_owned(), Search::new(collection_id, condition));
                     return last_xml;
                 }
                 if let Some(Some(value)) =
@@ -51,7 +54,8 @@ impl Parser {
                             .collection_id_or_create(collection_name.as_ref())
                         {
                             let (last_xml, condition) = self.make_conditions(attributes, xml);
-                            search_map.insert(name.into_owned(), (collection_id, condition));
+                            search_map
+                                .insert(name.into_owned(), Search::new(collection_id, condition));
                             return last_xml;
                         }
                     }
@@ -60,6 +64,7 @@ impl Parser {
         }
         return xml;
     }
+
     fn make_conditions<'a>(
         &mut self,
         attributes: &AttributeMap,
@@ -139,6 +144,11 @@ impl Parser {
                                 result_conditions.push(Condition::Wide(cond));
                                 xml = last_xml;
                             }
+                            b"virtual" => {
+                                let attributes = self.parse_attibutes(&token.attributes());
+                                let mut map = HashMap::new();
+                                xml = self.search(xml, &attributes, &mut map);
+                            }
                             _ => {}
                         }
                     }
@@ -151,17 +161,17 @@ impl Parser {
                     let name = token.name();
                     match name.local().as_bytes() {
                         b"row" => {
-                            if let Some(c) = self.condition_row(&attributes) {
+                            if let Some(c) = Self::condition_row(&attributes) {
                                 result_conditions.push(c);
                             }
                         }
                         b"field" => {
-                            if let Some(c) = self.condition_field(&attributes) {
+                            if let Some(c) = Self::condition_field(&attributes) {
                                 result_conditions.push(c);
                             }
                         }
                         b"uuid" => {
-                            if let Some(c) = self.condition_uuid(&attributes) {
+                            if let Some(c) = Self::condition_uuid(&attributes) {
                                 result_conditions.push(c);
                             }
                         }
@@ -177,7 +187,7 @@ impl Parser {
                     let token = token::borrowed::EndTag::from(&xml[..pos]);
                     xml = &xml[pos..];
                     match token.name().as_bytes() {
-                        b"wd:search" | b"narrow" | b"wide" => {
+                        b"wd:search" | b"narrow" | b"wide" | b"virtual" => {
                             break;
                         }
                         _ => {}
@@ -229,7 +239,7 @@ impl Parser {
         }
         None
     }
-    fn condition_row<'a>(&mut self, attributes: &AttributeMap) -> Option<Condition> {
+    fn condition_row(attributes: &AttributeMap) -> Option<Condition> {
         if let (Some(Some(method)), Some(Some(value))) = (
             attributes.get(b"method".as_ref()),
             attributes.get(b"value".as_ref()),
@@ -276,7 +286,7 @@ impl Parser {
         None
     }
 
-    fn condition_uuid<'a>(&mut self, attributes: &AttributeMap) -> Option<Condition> {
+    fn condition_uuid(attributes: &AttributeMap) -> Option<Condition> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
             let value = value.to_str();
             if value != "" {
@@ -294,7 +304,7 @@ impl Parser {
         None
     }
 
-    fn condition_field<'a>(&mut self, attributes: &AttributeMap) -> Option<Condition> {
+    fn condition_field(attributes: &AttributeMap) -> Option<Condition> {
         if let (Some(Some(name)), Some(Some(method)), Some(Some(value))) = (
             attributes.get(b"name".as_ref()),
             attributes.get(b"method".as_ref()),
