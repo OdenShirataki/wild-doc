@@ -29,6 +29,106 @@ impl error::Error for DependError {
 }
 
 impl Parser {
+    pub fn update(&mut self, xml: &[u8], attributes: &AttributeMap) -> Result<()> {
+        let inner_xml = self.parse(xml)?;
+        let updates = self.make_update_struct(inner_xml.as_slice())?;
+
+        if if let None = self.sessions.last() {
+            true
+        } else {
+            false
+        } || if let Some(Some(without_session)) = attributes.get(b"without_session".as_ref()) {
+            without_session.to_str() == "true"
+        } else {
+            false
+        } {
+            let mut commit_rows = vec![];
+            for record in updates {
+                match record {
+                    SessionRecord::New {
+                        collection_id,
+                        record,
+                        depends,
+                        pends,
+                    } => {
+                        if let Ok(mut rows) = self.record_new(
+                            collection_id,
+                            &record.activity,
+                            &record.term_begin,
+                            &record.term_end,
+                            &record.fields,
+                            &depends,
+                            &pends,
+                        ) {
+                            commit_rows.append(&mut rows);
+                        }
+                    }
+                    SessionRecord::Update {
+                        collection_id,
+                        row,
+                        record,
+                        depends,
+                        pends,
+                    } => {
+                        if let Ok(mut rows) = self.record_update(
+                            collection_id,
+                            row,
+                            &record.activity,
+                            &record.term_begin,
+                            &record.term_end,
+                            &record.fields,
+                            &depends,
+                            &pends,
+                        ) {
+                            commit_rows.append(&mut rows);
+                        }
+                    }
+                    SessionRecord::Delete { collection_id, row } => {
+                        if collection_id > 0 {
+                            self.database
+                                .write()
+                                .unwrap()
+                                .delete_recursive(&CollectionRow::new(collection_id, row))?;
+                        }
+                    }
+                }
+            }
+            if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
+                let mut value = serde_json::Map::new();
+                value.insert("commit_rows".to_owned(), serde_json::json!(commit_rows));
+                value.insert("session_rows".to_owned(), serde_json::json!([]));
+                self.register_global(name.to_str().as_ref(), &value.into());
+            }
+        } else {
+            if let Some(ref mut session_state) = self.sessions.last_mut() {
+                let session_rows = self
+                    .database
+                    .clone()
+                    .read()
+                    .unwrap()
+                    .update(&mut session_state.session, updates)?;
+                let mut commit_rows = vec![];
+                if let Some(Some(commit)) = attributes.get(b"commit".as_ref()) {
+                    if commit.to_str() == "true" {
+                        commit_rows = self
+                            .database
+                            .write()
+                            .unwrap()
+                            .commit(&mut session_state.session)?;
+                    }
+                }
+                if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
+                    let mut value = serde_json::Map::new();
+                    value.insert("commit_rows".to_owned(), serde_json::json!(commit_rows));
+                    value.insert("session_rows".to_owned(), serde_json::json!(session_rows));
+                    self.register_global(name.to_str().as_ref(), &value.into());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     fn update_pends(
         &mut self,
         depend: CollectionRow,
@@ -175,106 +275,6 @@ impl Parser {
             }
         }
         Ok(rows)
-    }
-
-    pub fn update(&mut self, xml: &[u8], attributes: &AttributeMap) -> Result<()> {
-        let inner_xml = self.parse(xml)?;
-        let updates = self.make_update_struct(inner_xml.as_slice())?;
-
-        if if let None = self.sessions.last() {
-            true
-        } else {
-            false
-        } || if let Some(Some(without_session)) = attributes.get(b"without_session".as_ref()) {
-            without_session.to_str() == "true"
-        } else {
-            false
-        } {
-            let mut commit_rows = vec![];
-            for record in updates {
-                match record {
-                    SessionRecord::New {
-                        collection_id,
-                        record,
-                        depends,
-                        pends,
-                    } => {
-                        if let Ok(mut rows) = self.record_new(
-                            collection_id,
-                            &record.activity,
-                            &record.term_begin,
-                            &record.term_end,
-                            &record.fields,
-                            &depends,
-                            &pends,
-                        ) {
-                            commit_rows.append(&mut rows);
-                        }
-                    }
-                    SessionRecord::Update {
-                        collection_id,
-                        row,
-                        record,
-                        depends,
-                        pends,
-                    } => {
-                        if let Ok(mut rows) = self.record_update(
-                            collection_id,
-                            row,
-                            &record.activity,
-                            &record.term_begin,
-                            &record.term_end,
-                            &record.fields,
-                            &depends,
-                            &pends,
-                        ) {
-                            commit_rows.append(&mut rows);
-                        }
-                    }
-                    SessionRecord::Delete { collection_id, row } => {
-                        if collection_id > 0 {
-                            self.database
-                                .write()
-                                .unwrap()
-                                .delete_recursive(&CollectionRow::new(collection_id, row))?;
-                        }
-                    }
-                }
-            }
-            if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
-                let mut value = serde_json::Map::new();
-                value.insert("commit_rows".to_owned(), serde_json::json!(commit_rows));
-                value.insert("session_rows".to_owned(), serde_json::json!([]));
-                self.register_global(name.to_str().as_ref(), &value.into());
-            }
-        } else {
-            if let Some(ref mut session_state) = self.sessions.last_mut() {
-                let session_rows = self
-                    .database
-                    .clone()
-                    .read()
-                    .unwrap()
-                    .update(&mut session_state.session, updates)?;
-                let mut commit_rows = vec![];
-                if let Some(Some(commit)) = attributes.get(b"commit".as_ref()) {
-                    if commit.to_str() == "true" {
-                        commit_rows = self
-                            .database
-                            .write()
-                            .unwrap()
-                            .commit(&mut session_state.session)?;
-                    }
-                }
-                if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
-                    let mut value = serde_json::Map::new();
-                    value.insert("commit_rows".to_owned(), serde_json::json!(commit_rows));
-                    value.insert("session_rows".to_owned(), serde_json::json!(session_rows));
-                    self.register_global(name.to_str().as_ref(), &value.into());
-                }
-            }
-        }
-
-        Ok(())
     }
 
     fn depend(

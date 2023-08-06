@@ -1,7 +1,10 @@
+mod join;
+
 use std::{
     collections::HashMap,
+    io,
     str::FromStr,
-    sync::Arc,
+    sync::{Arc, RwLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -11,54 +14,61 @@ use maybe_xml::{
     token,
 };
 use semilattice_database_session::{
-    search::{self, Search},
+    search::{self, Join, Search},
     Activity, CollectionRow, Condition, Uuid,
 };
 
 use super::{AttributeMap, Parser};
 
 impl Parser {
-    pub(crate) fn search<'a>(
-        &mut self,
-        xml: &'a [u8],
-        attributes: &AttributeMap,
-        search_map: &mut HashMap<String, Search>,
-    ) -> &'a [u8] {
-        if let (Some(Some(name)), Some(Some(collection_name))) = (
-            attributes.get(b"name".as_ref()),
-            attributes.get(b"collection".as_ref()),
-        ) {
-            let name = name.to_str();
+    fn collection_id(&mut self, attributes: &AttributeMap) -> io::Result<Option<i32>> {
+        if let Some(Some(collection_name)) = attributes.get(b"collection".as_ref()) {
             let collection_name = collection_name.to_str();
-            if name != "" && collection_name != "" {
-                if let Some(collection_id) = self
-                    .database
-                    .clone()
-                    .read()
-                    .unwrap()
-                    .collection_id(collection_name.as_ref())
-                {
-                    let (last_xml, condition) = self.make_conditions(attributes, xml);
-                    search_map.insert(name.into_owned(), Search::new(collection_id, condition));
-                    return last_xml;
-                }
+            if let Some(collection_id) = self
+                .database
+                .clone()
+                .read()
+                .unwrap()
+                .collection_id(collection_name.as_ref())
+            {
+                return Ok(Some(collection_id));
+            }
+            if collection_name != "" {
                 if let Some(Some(value)) =
                     attributes.get(b"create_collection_if_not_exists".as_ref())
                 {
                     if value.to_str() == "true" {
-                        if let Ok(collection_id) = self
+                        let collection_id = self
                             .database
                             .clone()
                             .write()
                             .unwrap()
-                            .collection_id_or_create(collection_name.as_ref())
-                        {
-                            let (last_xml, condition) = self.make_conditions(attributes, xml);
-                            search_map
-                                .insert(name.into_owned(), Search::new(collection_id, condition));
-                            return last_xml;
-                        }
+                            .collection_id_or_create(collection_name.as_ref())?;
+                        return Ok(Some(collection_id));
                     }
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    pub(crate) fn search<'a>(
+        &mut self,
+        xml: &'a [u8],
+        attributes: &AttributeMap,
+        search_map: &mut HashMap<String, Arc<RwLock<Search>>>,
+    ) -> &'a [u8] {
+        if let Some(Some(name)) = attributes.get(b"name".as_ref()) {
+            let name = name.to_str();
+            if name != "" {
+                if let Ok(Some(collection_id)) = self.collection_id(attributes) {
+                    let (last_xml, condition, join) = self.make_conditions(attributes, xml);
+                    search_map.insert(
+                        name.into_owned(),
+                        Arc::new(RwLock::new(Search::new(collection_id, condition, join))),
+                    );
+                    return last_xml;
                 }
             }
         }
@@ -69,8 +79,8 @@ impl Parser {
         &mut self,
         attributes: &AttributeMap,
         xml: &'a [u8],
-    ) -> (&'a [u8], Vec<Condition>) {
-        let (last_xml, mut conditions) = self.condition_loop(xml);
+    ) -> (&'a [u8], Vec<Condition>, HashMap<String, Join>) {
+        let (last_xml, mut conditions, join) = self.condition_loop(xml);
 
         if let Some(Some(activity)) = attributes.get(b"activity".as_ref()) {
             let activity = activity.to_str();
@@ -118,10 +128,14 @@ impl Parser {
                 }
             }
         }
-        (last_xml, conditions)
+        (last_xml, conditions, join)
     }
 
-    fn condition_loop<'a>(&mut self, xml: &'a [u8]) -> (&'a [u8], Vec<Condition>) {
+    fn condition_loop<'a>(
+        &mut self,
+        xml: &'a [u8],
+    ) -> (&'a [u8], Vec<Condition>, HashMap<String, Join>) {
+        let mut join = HashMap::new();
         let mut result_conditions = Vec::new();
         let mut xml = xml;
         let mut scanner = Scanner::new();
@@ -135,19 +149,18 @@ impl Parser {
                     if let None = name.namespace_prefix() {
                         match name.local().as_bytes() {
                             b"narrow" => {
-                                let (last_xml, cond) = self.condition_loop(xml);
+                                let (last_xml, cond, _) = self.condition_loop(xml);
                                 result_conditions.push(Condition::Narrow(cond));
                                 xml = last_xml;
                             }
                             b"wide" => {
-                                let (last_xml, cond) = self.condition_loop(xml);
+                                let (last_xml, cond, _) = self.condition_loop(xml);
                                 result_conditions.push(Condition::Wide(cond));
                                 xml = last_xml;
                             }
-                            b"virtual" => {
+                            b"join" => {
                                 let attributes = self.parse_attibutes(&token.attributes());
-                                let mut map = HashMap::new();
-                                xml = self.search(xml, &attributes, &mut map);
+                                xml = self.join(xml, &attributes, &mut join);
                             }
                             _ => {}
                         }
@@ -187,7 +200,7 @@ impl Parser {
                     let token = token::borrowed::EndTag::from(&xml[..pos]);
                     xml = &xml[pos..];
                     match token.name().as_bytes() {
-                        b"wd:search" | b"narrow" | b"wide" | b"virtual" => {
+                        b"wd:search" | b"narrow" | b"wide" => {
                             break;
                         }
                         _ => {}
@@ -203,7 +216,7 @@ impl Parser {
                 _ => {}
             }
         }
-        (xml, result_conditions)
+        (xml, result_conditions, join)
     }
 
     fn condition_depend(&mut self, attributes: &AttributeMap) -> Option<Condition> {

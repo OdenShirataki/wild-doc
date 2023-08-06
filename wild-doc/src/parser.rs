@@ -521,12 +521,12 @@ impl Parser {
                                     let fields = entity.fields();
                                     for field_name in field.to_str().split(",") {
                                         if let Some(value) = fields.get(field_name) {
-                                            if let Ok(value) = std::str::from_utf8(value) {
-                                                json_field.insert(
-                                                    field_name.to_owned(),
-                                                    serde_json::json!(value),
-                                                );
-                                            }
+                                            json_field.insert(
+                                                field_name.to_owned(),
+                                                serde_json::json!(unsafe {
+                                                    std::str::from_utf8_unchecked(value)
+                                                }),
+                                            );
                                         }
                                     }
                                 }
@@ -584,12 +584,12 @@ impl Parser {
                                     if let Some(Some(field)) = attributes.get(b"field".as_ref()) {
                                         for field_name in field.to_str().split(",") {
                                             let field = collection.field_bytes(row, field_name);
-                                            if let Ok(field) = std::str::from_utf8(field) {
-                                                json_field.insert(
-                                                    field_name.to_owned(),
-                                                    serde_json::json!(field),
-                                                );
-                                            }
+                                            json_field.insert(
+                                                field_name.to_owned(),
+                                                serde_json::json!(unsafe {
+                                                    std::str::from_utf8_unchecked(field)
+                                                }),
+                                            );
                                         }
                                     }
                                 }

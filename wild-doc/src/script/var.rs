@@ -61,12 +61,12 @@ impl WildDocScript for Var {
                             }
                             serde_json::Value::Array(map) => {
                                 let mut ret = false;
-                                if let Ok(index) = std::str::from_utf8(next) {
-                                    if let Ok(index) = index.parse::<usize>() {
-                                        if let Some(v) = map.get(index) {
-                                            next_value = v;
-                                            ret = true;
-                                        }
+                                if let Ok(index) =
+                                    unsafe { std::str::from_utf8_unchecked(next) }.parse::<usize>()
+                                {
+                                    if let Some(v) = map.get(index) {
+                                        next_value = v;
+                                        ret = true;
                                     }
                                 }
                                 ret
