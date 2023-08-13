@@ -17,6 +17,8 @@ use semilattice_database_session::{
     Activity, CollectionRow, Condition, Uuid,
 };
 
+use crate::xml_util;
+
 use super::{AttributeMap, Parser};
 
 impl Parser {
@@ -148,14 +150,22 @@ impl Parser {
                     if let None = name.namespace_prefix() {
                         match name.local().as_bytes() {
                             b"narrow" => {
-                                let (last_xml, cond, _) = self.condition_loop(xml);
-                                result_conditions.push(Condition::Narrow(cond));
-                                xml = last_xml;
+                                let (inner_xml, outer_end) = xml_util::inner(xml);
+                                xml = &xml[outer_end..];
+
+                                if let Ok(inner_xml) = self.parse(inner_xml) {
+                                    let (_, cond, _) = self.condition_loop(&inner_xml);
+                                    result_conditions.push(Condition::Narrow(cond));
+                                }
                             }
                             b"wide" => {
-                                let (last_xml, cond, _) = self.condition_loop(xml);
-                                result_conditions.push(Condition::Wide(cond));
-                                xml = last_xml;
+                                let (inner_xml, outer_end) = xml_util::inner(xml);
+                                xml = &xml[outer_end..];
+
+                                if let Ok(inner_xml) = self.parse(inner_xml) {
+                                    let (_, cond, _) = self.condition_loop(&inner_xml);
+                                    result_conditions.push(Condition::Wide(cond));
+                                }
                             }
                             b"join" => {
                                 let attributes = self.parse_attibutes(&token.attributes());
