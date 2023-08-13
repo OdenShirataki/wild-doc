@@ -8,9 +8,10 @@ use std::{
     thread,
 };
 
+use anyhow::Result;
 use serde::Deserialize;
 
-use wild_doc::{anyhow::Result, DataOption, WildDoc};
+use wild_doc::{DataOption, WildDoc};
 
 use include::{IncludeEmpty, IncludeRemote};
 
@@ -66,14 +67,11 @@ fn main() {
                                                     if !std::path::Path::new(dir).exists() {
                                                         std::fs::create_dir_all(dir).unwrap();
                                                     }
-                                                    Arc::new(Mutex::new(
-                                                        WildDoc::new(
-                                                            dir,
-                                                            Box::new(IncludeEmpty::new()),
-                                                            config.collection.clone(),
-                                                        )
-                                                        .unwrap(),
-                                                    ))
+                                                    Arc::new(Mutex::new(WildDoc::new(
+                                                        dir,
+                                                        Box::new(IncludeEmpty::new()),
+                                                        config.collection.clone(),
+                                                    )))
                                                 });
                                             let wd = Arc::clone(&wd);
                                             thread::spawn(move || {

@@ -2,7 +2,6 @@ mod join;
 
 use std::{
     collections::HashMap,
-    io,
     str::FromStr,
     sync::{Arc, RwLock},
     time::{SystemTime, UNIX_EPOCH},
@@ -21,7 +20,7 @@ use semilattice_database_session::{
 use super::{AttributeMap, Parser};
 
 impl Parser {
-    fn collection_id(&mut self, attributes: &AttributeMap) -> io::Result<Option<i32>> {
+    fn collection_id(&mut self, attributes: &AttributeMap) -> Option<i32> {
         if let Some(Some(collection_name)) = attributes.get(b"collection".as_ref()) {
             let collection_name = collection_name.to_str();
             if let Some(collection_id) = self
@@ -31,26 +30,26 @@ impl Parser {
                 .unwrap()
                 .collection_id(collection_name.as_ref())
             {
-                return Ok(Some(collection_id));
+                return Some(collection_id);
             }
             if collection_name != "" {
                 if let Some(Some(value)) =
                     attributes.get(b"create_collection_if_not_exists".as_ref())
                 {
                     if value.to_str() == "true" {
-                        let collection_id = self
-                            .database
-                            .clone()
-                            .write()
-                            .unwrap()
-                            .collection_id_or_create(collection_name.as_ref())?;
-                        return Ok(Some(collection_id));
+                        return Some(
+                            self.database
+                                .clone()
+                                .write()
+                                .unwrap()
+                                .collection_id_or_create(collection_name.as_ref()),
+                        );
                     }
                 }
             }
         }
 
-        Ok(None)
+        None
     }
 
     pub(crate) fn search<'a>(
@@ -62,7 +61,7 @@ impl Parser {
         if let Some(Some(name)) = attributes.get(b"name".as_ref()) {
             let name = name.to_str();
             if name != "" {
-                if let Ok(Some(collection_id)) = self.collection_id(attributes) {
+                if let Some(collection_id) = self.collection_id(attributes) {
                     let (last_xml, condition, join) = self.make_conditions(attributes, xml);
                     search_map.insert(
                         name.into_owned(),

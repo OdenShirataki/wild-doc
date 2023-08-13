@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.86.1"
+version = "0.87.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -23,6 +23,8 @@ py = [ "wild-doc-script-python" ]
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
+
+anyhow = "1.0"
 maybe_xml = "0.3"
 chrono = "0.4"
 
