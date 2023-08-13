@@ -1,5 +1,4 @@
 use semilattice_database_session::{
-    anyhow,
     search::{Search, SearchResult},
     Activity, Collection, CollectionRow, CustomSort, Order, OrderKey, Uuid,
 };

@@ -9,6 +9,8 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
+use anyhow::Result;
+
 use maybe_xml::{
     scanner::{Scanner, State},
     token::{
@@ -20,7 +22,7 @@ use semilattice_database_session::{Activity, CollectionRow, Session, SessionData
 use serde_json::Value;
 use wild_doc_script::{Vars, WildDocScript, WildDocState, WildDocValue};
 
-use crate::{anyhow::Result, xml_util};
+use crate::xml_util;
 
 type AttributeMap = HashMap<Vec<u8>, Option<Arc<WildDocValue>>>;
 
@@ -109,11 +111,11 @@ impl Parser {
             }
             b"delete_collection" => {
                 let attributes = self.parse_attibutes(attributes);
-                self.delete_collection(attributes)?;
+                self.delete_collection(attributes);
             }
             b"session_gc" => {
                 let attributes = self.parse_attibutes(attributes);
-                self.session_gc(attributes)?;
+                self.session_gc(attributes);
             }
             _ => {}
         }
@@ -420,7 +422,7 @@ impl Parser {
                                         self.database
                                             .write()
                                             .unwrap()
-                                            .commit(&mut session_state.session)?;
+                                            .commit(&mut session_state.session);
                                     } else if session_state.clear_on_close {
                                         let _ = self
                                             .database
@@ -654,33 +656,30 @@ impl Parser {
                 } else {
                     None
                 };
-                if let Ok(mut session) =
-                    self.database.read().unwrap().session(&session_name, expire)
-                {
-                    if let Some(Some(cursor)) = attributes.get(b"cursor".as_ref()) {
-                        let cursor = cursor.to_str();
-                        if cursor != "" {
-                            if let Ok(cursor) = cursor.parse::<usize>() {
-                                session.set_sequence_cursor(cursor)
-                            }
+                let mut session = self.database.read().unwrap().session(&session_name, expire);
+                if let Some(Some(cursor)) = attributes.get(b"cursor".as_ref()) {
+                    let cursor = cursor.to_str();
+                    if cursor != "" {
+                        if let Ok(cursor) = cursor.parse::<usize>() {
+                            session.set_sequence_cursor(cursor)
                         }
                     }
-                    if let Some(Some(initialize)) = attributes.get(b"initialize".as_ref()) {
-                        let initialize = initialize.to_str();
-                        if initialize == "true" {
-                            self.database
-                                .clone()
-                                .read()
-                                .unwrap()
-                                .session_restart(&mut session, expire)?;
-                        }
-                    }
-                    self.sessions.push(SessionState {
-                        session,
-                        commit_on_close,
-                        clear_on_close,
-                    });
                 }
+                if let Some(Some(initialize)) = attributes.get(b"initialize".as_ref()) {
+                    let initialize = initialize.to_str();
+                    if initialize == "true" {
+                        self.database
+                            .clone()
+                            .read()
+                            .unwrap()
+                            .session_restart(&mut session, expire);
+                    }
+                }
+                self.sessions.push(SessionState {
+                    session,
+                    commit_on_close,
+                    clear_on_close,
+                });
             }
         }
         Ok(())
@@ -691,12 +690,11 @@ impl Parser {
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
             let var = var.to_str();
             if var != "" {
-                if let Ok(sessions) = self.database.read().unwrap().sessions() {
-                    json.insert(
-                        var.to_string().as_bytes().to_vec(),
-                        Arc::new(RwLock::new(WildDocValue::new(serde_json::json!(sessions)))),
-                    );
-                }
+                let sessions = self.database.read().unwrap().sessions();
+                json.insert(
+                    var.to_string().as_bytes().to_vec(),
+                    Arc::new(RwLock::new(WildDocValue::new(serde_json::json!(sessions)))),
+                );
             }
         }
         self.state.stack().write().unwrap().push(json);
@@ -742,24 +740,23 @@ impl Parser {
 
         Ok(())
     }
-    fn session_gc(&mut self, attributes: AttributeMap) -> io::Result<()> {
+    fn session_gc(&mut self, attributes: AttributeMap) {
         let mut expire = 60 * 60 * 24;
         if let Some(Some(str_expire)) = attributes.get(b"expire".as_ref()) {
             if let Ok(parsed) = str_expire.to_str().parse::<i64>() {
                 expire = parsed;
             }
         }
-        self.database.write().unwrap().session_gc(expire)
+        self.database.write().unwrap().session_gc(expire);
     }
-    fn delete_collection(&mut self, attributes: AttributeMap) -> Result<()> {
+    fn delete_collection(&mut self, attributes: AttributeMap) {
         if let Some(Some(str_collection)) = attributes.get(b"collection".as_ref()) {
             self.database
                 .clone()
                 .write()
                 .unwrap()
-                .delete_collection(str_collection.to_str().as_ref())?;
+                .delete_collection(str_collection.to_str().as_ref());
         }
-        Ok(())
     }
 
     fn custom_tag(&mut self, attributes: AttributeMap) -> (String, Vec<u8>) {

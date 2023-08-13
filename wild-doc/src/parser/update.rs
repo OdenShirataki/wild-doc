@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use chrono::TimeZone;
 use maybe_xml::{
     scanner::{Scanner, State},
@@ -8,10 +9,7 @@ use semilattice_database_session::{
 };
 use std::{collections::HashMap, error, fmt};
 
-use crate::{
-    anyhow::{anyhow, Result},
-    xml_util,
-};
+use crate::xml_util;
 
 use super::{AttributeMap, Parser};
 
@@ -30,110 +28,103 @@ impl error::Error for DependError {
 
 impl Parser {
     pub fn update(&mut self, xml: &[u8], attributes: &AttributeMap) -> Result<()> {
-        let inner_xml = self.parse(xml)?;
-        let updates = self.make_update_struct(inner_xml.as_slice())?;
+        if let Ok(inner_xml) = self.parse(xml) {
+            let updates = self.make_update_struct(inner_xml.as_slice())?;
 
-        if if let None = self.sessions.last() {
-            true
-        } else {
-            false
-        } || if let Some(Some(without_session)) = attributes.get(b"without_session".as_ref()) {
-            without_session.to_str() == "true"
-        } else {
-            false
-        } {
-            let mut commit_rows = vec![];
-            for record in updates {
-                match record {
-                    SessionRecord::New {
-                        collection_id,
-                        record,
-                        depends,
-                        pends,
-                    } => {
-                        if let Ok(mut rows) = self.record_new(
+            if if let None = self.sessions.last() {
+                true
+            } else {
+                false
+            } || if let Some(Some(without_session)) = attributes.get(b"without_session".as_ref())
+            {
+                without_session.to_str() == "true"
+            } else {
+                false
+            } {
+                let mut commit_rows = vec![];
+                for record in updates {
+                    match record {
+                        SessionRecord::New {
                             collection_id,
-                            &record.activity,
-                            &record.term_begin,
-                            &record.term_end,
-                            &record.fields,
-                            &depends,
-                            &pends,
-                        ) {
-                            commit_rows.append(&mut rows);
+                            record,
+                            depends,
+                            pends,
+                        } => {
+                            commit_rows.append(&mut self.record_new(
+                                collection_id,
+                                &record.activity,
+                                &record.term_begin,
+                                &record.term_end,
+                                &record.fields,
+                                &depends,
+                                &pends,
+                            ));
                         }
-                    }
-                    SessionRecord::Update {
-                        collection_id,
-                        row,
-                        record,
-                        depends,
-                        pends,
-                    } => {
-                        if let Ok(mut rows) = self.record_update(
+                        SessionRecord::Update {
                             collection_id,
                             row,
-                            &record.activity,
-                            &record.term_begin,
-                            &record.term_end,
-                            &record.fields,
-                            &depends,
-                            &pends,
-                        ) {
-                            commit_rows.append(&mut rows);
+                            record,
+                            depends,
+                            pends,
+                        } => {
+                            commit_rows.append(&mut self.record_update(
+                                collection_id,
+                                row,
+                                &record.activity,
+                                &record.term_begin,
+                                &record.term_end,
+                                &record.fields,
+                                &depends,
+                                &pends,
+                            ));
                         }
-                    }
-                    SessionRecord::Delete { collection_id, row } => {
-                        if collection_id > 0 {
-                            self.database
-                                .write()
-                                .unwrap()
-                                .delete_recursive(&CollectionRow::new(collection_id, row))?;
+                        SessionRecord::Delete { collection_id, row } => {
+                            if collection_id > 0 {
+                                self.database
+                                    .write()
+                                    .unwrap()
+                                    .delete_recursive(&CollectionRow::new(collection_id, row));
+                            }
                         }
-                    }
-                }
-            }
-            if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
-                let mut value = serde_json::Map::new();
-                value.insert("commit_rows".to_owned(), serde_json::json!(commit_rows));
-                value.insert("session_rows".to_owned(), serde_json::json!([]));
-                self.register_global(name.to_str().as_ref(), &value.into());
-            }
-        } else {
-            if let Some(ref mut session_state) = self.sessions.last_mut() {
-                let session_rows = self
-                    .database
-                    .clone()
-                    .read()
-                    .unwrap()
-                    .update(&mut session_state.session, updates)?;
-                let mut commit_rows = vec![];
-                if let Some(Some(commit)) = attributes.get(b"commit".as_ref()) {
-                    if commit.to_str() == "true" {
-                        commit_rows = self
-                            .database
-                            .write()
-                            .unwrap()
-                            .commit(&mut session_state.session)?;
                     }
                 }
                 if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
                     let mut value = serde_json::Map::new();
                     value.insert("commit_rows".to_owned(), serde_json::json!(commit_rows));
-                    value.insert("session_rows".to_owned(), serde_json::json!(session_rows));
+                    value.insert("session_rows".to_owned(), serde_json::json!([]));
                     self.register_global(name.to_str().as_ref(), &value.into());
+                }
+            } else {
+                if let Some(ref mut session_state) = self.sessions.last_mut() {
+                    let session_rows = self
+                        .database
+                        .clone()
+                        .read()
+                        .unwrap()
+                        .update(&mut session_state.session, updates);
+                    let mut commit_rows = vec![];
+                    if let Some(Some(commit)) = attributes.get(b"commit".as_ref()) {
+                        if commit.to_str() == "true" {
+                            commit_rows = self
+                                .database
+                                .write()
+                                .unwrap()
+                                .commit(&mut session_state.session);
+                        }
+                    }
+                    if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
+                        let mut value = serde_json::Map::new();
+                        value.insert("commit_rows".to_owned(), serde_json::json!(commit_rows));
+                        value.insert("session_rows".to_owned(), serde_json::json!(session_rows));
+                        self.register_global(name.to_str().as_ref(), &value.into());
+                    }
                 }
             }
         }
-
         Ok(())
     }
 
-    fn update_pends(
-        &mut self,
-        depend: CollectionRow,
-        pends: &Vec<Pend>,
-    ) -> Result<Vec<CollectionRow>> {
+    fn update_pends(&mut self, depend: CollectionRow, pends: &Vec<Pend>) -> Vec<CollectionRow> {
         let mut rows = vec![];
         for pend in pends {
             let pend_key = pend.key();
@@ -151,7 +142,8 @@ impl Parser {
                             Vec::new()
                         };
                         depends.push((pend_key.to_owned(), depend.clone()));
-                        if let Ok(mut ret_rows) = self.record_new(
+
+                        rows.append(&mut self.record_new(
                             *collection_id,
                             &record.activity,
                             &record.term_begin,
@@ -159,9 +151,7 @@ impl Parser {
                             &record.fields,
                             &Depends::Overwrite(depends),
                             pends,
-                        ) {
-                            rows.append(&mut ret_rows);
-                        }
+                        ));
                     }
                     SessionRecord::Update {
                         collection_id,
@@ -176,7 +166,8 @@ impl Parser {
                             Vec::new()
                         };
                         depends.push((pend_key.to_owned(), depend.clone()));
-                        if let Ok(mut ret_rows) = self.record_update(
+
+                        rows.append(&mut self.record_update(
                             *collection_id,
                             *row,
                             &record.activity,
@@ -185,15 +176,13 @@ impl Parser {
                             &record.fields,
                             &Depends::Overwrite(depends),
                             pends,
-                        ) {
-                            rows.append(&mut ret_rows);
-                        }
+                        ));
                     }
                     _ => unreachable!(),
                 }
             }
         }
-        Ok(rows)
+        rows
     }
 
     fn record_new(
@@ -205,14 +194,16 @@ impl Parser {
         fields: &Vec<KeyValue>,
         depends: &Depends,
         pends: &Vec<Pend>,
-    ) -> Result<Vec<CollectionRow>> {
+    ) -> Vec<CollectionRow> {
         let mut rows = vec![];
         if collection_id > 0 {
             let collection_row = if let Some(collection) =
                 self.database.write().unwrap().collection_mut(collection_id)
             {
-                let row = collection.create_row(activity, term_begin, term_end, fields)?;
-                Some(CollectionRow::new(collection_id, row))
+                Some(CollectionRow::new(
+                    collection_id,
+                    collection.create_row(activity, term_begin, term_end, fields),
+                ))
             } else {
                 None
             };
@@ -223,14 +214,14 @@ impl Parser {
                             depend_key,
                             depend_row,
                             collection_row.clone(),
-                        )?;
+                        );
                     }
                 }
                 rows.push(collection_row.clone());
-                self.update_pends(collection_row, pends)?;
+                self.update_pends(collection_row, pends);
             }
         }
-        Ok(rows)
+        rows
     }
     fn record_update(
         &mut self,
@@ -242,13 +233,13 @@ impl Parser {
         fields: &Vec<KeyValue>,
         depends: &Depends,
         pends: &Vec<Pend>,
-    ) -> Result<Vec<CollectionRow>> {
+    ) -> Vec<CollectionRow> {
         let mut rows = vec![];
         if collection_id > 0 {
             let collection_row = if let Some(collection) =
                 self.database.write().unwrap().collection_mut(collection_id)
             {
-                collection.update_row(row, activity, term_begin, term_end, fields)?;
+                collection.update_row(row, activity, term_begin, term_end, fields);
                 Some(CollectionRow::new(collection_id, row))
             } else {
                 None
@@ -261,20 +252,20 @@ impl Parser {
                         .relation()
                         .write()
                         .unwrap()
-                        .delete_pends_by_collection_row(&collection_row)?;
+                        .delete_pends_by_collection_row(&collection_row);
                     for d in depends {
                         self.database.write().unwrap().register_relation(
                             &d.0,
                             &d.1,
                             collection_row.clone(),
-                        )?;
+                        );
                     }
                 }
                 rows.push(collection_row.clone());
-                self.update_pends(collection_row, &pends)?;
+                self.update_pends(collection_row, &pends);
             }
         }
-        Ok(rows)
+        rows
     }
 
     fn depend(
@@ -349,7 +340,7 @@ impl Parser {
                                 .clone()
                                 .write()
                                 .unwrap()
-                                .collection_id_or_create(collection_name.to_str().as_ref())?;
+                                .collection_id_or_create(collection_name.to_str().as_ref());
 
                             let mut pends = Vec::new();
                             let mut depends = Vec::new();

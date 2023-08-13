@@ -1,5 +1,7 @@
 use std::sync::{Arc, RwLock};
 
+use anyhow::Result;
+
 use wild_doc_script::{VarsStack, WildDocScript, WildDocValue};
 
 pub struct Var {
@@ -18,7 +20,7 @@ impl Var {
 impl WildDocScript for Var {
     fn new(
         state: wild_doc_script::WildDocState,
-    ) -> semilattice_database_session::anyhow::Result<Self>
+    ) -> Result<Self>
     where
         Self: Sized,
     {
@@ -31,14 +33,14 @@ impl WildDocScript for Var {
         &mut self,
         _: &str,
         _: &[u8],
-    ) -> semilattice_database_session::anyhow::Result<()> {
+    ) -> Result<()> {
         Ok(())
     }
 
     fn eval(
         &mut self,
         code: &[u8],
-    ) -> semilattice_database_session::anyhow::Result<serde_json::Value> {
+    ) -> Result<serde_json::Value> {
         let mut value = serde_json::json!("");
 
         let mut splited = code.split(|c| *c == b'.');

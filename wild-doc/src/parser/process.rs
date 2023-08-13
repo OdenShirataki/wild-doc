@@ -3,12 +3,14 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use anyhow::Result;
+
 use maybe_xml::{
     scanner::{Scanner, State},
     token::{self, prop::Attributes},
 };
 
-use crate::{anyhow::Result, xml_util};
+use crate::xml_util;
 
 use super::{AttributeMap, Parser, WildDocValue};
 

@@ -4,16 +4,16 @@ mod script;
 mod xml_util;
 
 pub use include::IncludeLocal;
-pub use semilattice_database_session::{anyhow, DataOption};
+pub use semilattice_database_session::DataOption;
 
 use std::{
     collections::HashMap,
-    io::{self},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
 };
 
 use anyhow::Result;
+
 use semilattice_database_session::SessionDatabase;
 
 use wild_doc_script::{IncludeAdaptor, WildDocScript, WildDocState, WildDocValue};
@@ -50,21 +50,21 @@ impl WildDoc {
         dir: P,
         default_include_adaptor: Box<dyn IncludeAdaptor + Send>,
         collection_settings: Option<HashMap<String, DataOption>>,
-    ) -> io::Result<Self> {
+    ) -> Self {
         let dir = dir.as_ref();
         let mut cache_dir = dir.to_path_buf();
         cache_dir.push("modules");
         if !cache_dir.exists() {
-            std::fs::create_dir_all(&cache_dir)?;
+            std::fs::create_dir_all(&cache_dir).unwrap();
         }
-        Ok(Self {
+        Self {
             database: Arc::new(RwLock::new(SessionDatabase::new(
                 dir.into(),
                 collection_settings,
-            )?)),
+            ))),
             default_include_adaptor: Arc::new(Mutex::new(default_include_adaptor)),
             cache_dir,
-        })
+        }
     }
 
     fn setup_scripts(
