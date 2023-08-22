@@ -50,7 +50,7 @@ impl Parser {
                             depends,
                             pends,
                         } => {
-                            commit_rows.append(&mut self.record_new(
+                            commit_rows.extend(self.record_new(
                                 collection_id,
                                 &record.activity,
                                 &record.term_begin,
@@ -67,7 +67,7 @@ impl Parser {
                             depends,
                             pends,
                         } => {
-                            commit_rows.append(&mut self.record_update(
+                            commit_rows.extend(self.record_update(
                                 collection_id,
                                 row,
                                 &record.activity,
@@ -143,7 +143,7 @@ impl Parser {
                         };
                         depends.push((pend_key.to_owned(), depend.clone()));
 
-                        rows.append(&mut self.record_new(
+                        rows.extend(self.record_new(
                             *collection_id,
                             &record.activity,
                             &record.term_begin,
@@ -167,7 +167,7 @@ impl Parser {
                         };
                         depends.push((pend_key.to_owned(), depend.clone()));
 
-                        rows.append(&mut self.record_update(
+                        rows.extend(self.record_update(
                             *collection_id,
                             *row,
                             &record.activity,
@@ -485,10 +485,10 @@ impl Parser {
                                         }
                                     }
                                 }
-                                let mut f = Vec::new();
-                                for (key, value) in fields {
-                                    f.push(KeyValue::new(key, value.as_bytes()))
-                                }
+                                let f = fields
+                                    .iter()
+                                    .map(|(key, value)| KeyValue::new(key, value.as_bytes()))
+                                    .collect();
                                 if row == 0 {
                                     updates.push(SessionRecord::New {
                                         collection_id,

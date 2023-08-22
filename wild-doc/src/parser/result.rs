@@ -248,20 +248,21 @@ impl Parser {
                                 .collect::<Vec<Value>>();
                             rows
                         } else {
-                            let result = search
+                            let rows = if let Some(r) = search
                                 .write()
                                 .unwrap()
-                                .result(&self.database.read().unwrap())?;
-                            let rows = if let Some(r) = result.read().unwrap().as_ref() {
+                                .result(&self.database.read().unwrap())
+                                .read()
+                                .unwrap()
+                                .as_ref()
+                            {
                                 r.sort(&self.database.read().unwrap(), &orders)
                             } else {
                                 vec![]
                             };
-                            let rows = rows
-                                .iter()
+                            rows.iter()
                                 .map(|row| Value::Object(self.row_values(collection, *row)))
-                                .collect::<Vec<Value>>();
-                            rows
+                                .collect::<Vec<Value>>()
                         }
                     } else {
                         Vec::<Value>::new()

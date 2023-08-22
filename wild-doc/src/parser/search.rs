@@ -270,12 +270,16 @@ impl Parser {
             if value != "" {
                 match method.to_str().as_ref() {
                     "in" => {
-                        let mut v = Vec::<isize>::new();
-                        for s in value.split(',') {
-                            if let Ok(i) = s.parse::<isize>() {
-                                v.push(i);
-                            }
-                        }
+                        let v: Vec<_> = value
+                            .split(',')
+                            .filter_map(|s| {
+                                if let Ok(i) = s.parse::<isize>() {
+                                    Some(i)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
                         if v.len() > 0 {
                             return Some(Condition::Row(search::Number::In(v)));
                         }
@@ -312,12 +316,16 @@ impl Parser {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
             let value = value.to_str();
             if value != "" {
-                let mut v = Vec::<u128>::new();
-                for s in value.split(',') {
-                    if let Ok(uuid) = Uuid::from_str(&s) {
-                        v.push(uuid.as_u128());
-                    }
-                }
+                let v: Vec<_> = value
+                    .split(',')
+                    .filter_map(|s| {
+                        if let Ok(uuid) = Uuid::from_str(&s) {
+                            Some(uuid.as_u128())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
                 if v.len() > 0 {
                     return Some(Condition::Uuid(v));
                 }
@@ -340,9 +348,9 @@ impl Parser {
                 let len = method_pair.len();
                 let i = len - 1;
                 if let Some(method) = match method_pair[i] {
-                    "match" => Some(search::Field::Match(Arc::new(value.as_bytes().to_vec()))),
-                    "min" => Some(search::Field::Min(Arc::new(value.as_bytes().to_vec()))),
-                    "max" => Some(search::Field::Max(Arc::new(value.as_bytes().to_vec()))),
+                    "match" => Some(search::Field::Match(value.as_bytes().to_vec())),
+                    "min" => Some(search::Field::Min(value.as_bytes().to_vec())),
+                    "max" => Some(search::Field::Max(value.as_bytes().to_vec())),
                     "partial" => Some(search::Field::Partial(Arc::new(value.to_string()))),
                     "forward" => Some(search::Field::Forward(Arc::new(value.to_string()))),
                     "backward" => Some(search::Field::Backward(Arc::new(value.to_string()))),
@@ -350,8 +358,8 @@ impl Parser {
                         let s: Vec<&str> = value.split("..").collect();
                         if s.len() == 2 {
                             Some(search::Field::Range(
-                                Arc::new(s[0].as_bytes().to_vec()),
-                                Arc::new(s[1].as_bytes().to_vec()),
+                                s[0].as_bytes().to_vec(),
+                                s[1].as_bytes().to_vec(),
                             ))
                         } else {
                             None

@@ -147,6 +147,8 @@ fn test1() {
     //use javascript
     let r=wd.run(br#"
         <?js
+            wd.general.result_options={};
+
             const ymd=function(){
                 const now=new Date();
                 return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
@@ -156,7 +158,7 @@ fn test1() {
                 const now=new Date();
                 return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
             };
-            wd.result_options['test']="OK";
+            wd.general.result_options['test']="OK";
             let hoge=wd.get_contents('body.xml');
             console.log("hoge",hoge);
         ?>
@@ -223,10 +225,12 @@ fn test1() {
             import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
             console.log(uuidv4());
 
+            wd.general.result_options={};
+        
             wd.general.a="OK";
             console.log(crypto.randomUUID());
-            wd.result_options.test="TEST";
-            wd.result_options.test2=crypto.randomUUID();
+            wd.general.result_options.test="TEST";
+            wd.general.result_options.test2=crypto.randomUUID();
         ?>
         a:<wd:print value:js="wd.general.a" />
         input:<wd:print value:js="wd.input.name" />

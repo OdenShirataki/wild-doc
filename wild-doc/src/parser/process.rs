@@ -139,7 +139,7 @@ impl Parser {
                                 );
                             }
                             self.state.stack().write().unwrap().push(vars);
-                            r.append(&mut self.parse(xml)?);
+                            r.extend(self.parse(xml)?);
                             self.state.stack().write().unwrap().pop();
                         }
                     }
@@ -162,7 +162,7 @@ impl Parser {
                                 key += 1;
                             }
                             self.state.stack().write().unwrap().push(vars);
-                            r.append(&mut self.parse(xml)?);
+                            r.extend(self.parse(xml)?);
                             self.state.stack().write().unwrap().pop();
                         }
                     }
@@ -182,7 +182,7 @@ impl Parser {
             let attributes = self.parse_attibutes(&attributes);
             if let Some(Some(cont)) = attributes.get(b"continue".as_ref()) {
                 if cont.value() == true {
-                    r.append(&mut self.parse(xml)?);
+                    r.extend(self.parse(xml)?);
                 } else {
                     break;
                 }

@@ -95,6 +95,8 @@ println!("{}",std::str::from_utf8(r.body()).unwrap());
 //use javascript
 let r=wd.run(br#"
     <?js
+        wd.general.result_options={};
+
         const ymd=function(){
             const now=new Date();
             return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
@@ -104,7 +106,7 @@ let r=wd.run(br#"
             const now=new Date();
             return now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
         };
-        wd.result_options['test']="OK";
+        wd.general.result_options['test']="OK";
     ?>
     <wd:search name="p" collection="person">
         <field name="country" method="match" value:js="wd.general.uk" />
@@ -121,7 +123,7 @@ let r=wd.run(br#"
                 <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="personn.field.country" />
             </li></wd:for>
         </ul>
-    </wd:result><global var="result_options" value:js="wd.result_options" />
+    </wd:result><global var="result_options" value:js="wd.general.result_options" />
 "#,b"").unwrap();
 println!("{} : {}",std::str::from_utf8(r.body()).unwrap(),r.options_json());
 
@@ -160,6 +162,8 @@ let r=wd.run(br#"
     <?js
         import { v4 as uuidv4 } from 'https://jspm.dev/uuid';
         console.log(uuidv4());
+
+        wd.general.result_options={};
 
         wd.general.a="OK";
         wd.stack.push({

@@ -146,7 +146,7 @@ impl Parser {
     fn output_attribute_value(r: &mut Vec<u8>, val: &[u8]) {
         r.push(b'=');
         r.push(b'"');
-        r.append(&mut val.to_vec());
+        r.extend(val.to_vec());
         r.push(b'"');
     }
 
@@ -174,11 +174,11 @@ impl Parser {
                 if new_name == b"wd-attr:replace" {
                     if let Some(value) = new_value {
                         r.push(b' ');
-                        r.append(&mut value.to_str().as_bytes().to_vec());
+                        r.extend(value.to_str().as_bytes().to_vec());
                     }
                 } else {
                     r.push(b' ');
-                    r.append(&mut new_name.to_vec());
+                    r.extend(new_name.to_vec());
                     if let Some(value) = new_value {
                         Self::output_attribute_value(
                             r,
@@ -189,7 +189,7 @@ impl Parser {
                     }
                 }
             } else {
-                r.append(&mut attribute.to_vec());
+                r.extend(attribute.to_vec());
             };
         }
     }
@@ -250,7 +250,7 @@ impl Parser {
                             }
                         }
                     } else {
-                        r.append(&mut token_bytes.to_vec());
+                        r.extend(token_bytes.to_vec());
                     }
                     xml = &xml[pos..];
                 }
@@ -260,11 +260,11 @@ impl Parser {
                     let token = token::borrowed::StartTag::from(token_bytes);
                     let name = token.name();
                     if Self::is_wd_tag(&name) {
-                        if let Some(mut parsed) = self.parse_wd_start_or_empty_tag(
+                        if let Some(parsed) = self.parse_wd_start_or_empty_tag(
                             name.local().as_bytes(),
                             &token.attributes(),
                         )? {
-                            r.append(&mut parsed);
+                            r.extend(parsed);
                         } else {
                             match name.local().as_bytes() {
                                 b"session" => {
@@ -283,7 +283,7 @@ impl Parser {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
                                     let parsed = self.parse(inner_xml)?;
                                     xml = &xml[outer_end..];
-                                    r.append(&mut self.parse(&parsed)?);
+                                    r.extend(self.parse(&parsed)?);
                                 }
                                 b"comment" => {
                                     let (_, outer_end) = xml_util::inner(xml);
@@ -291,7 +291,7 @@ impl Parser {
                                 }
                                 b"letitgo" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut inner_xml.to_vec());
+                                    r.extend(inner_xml.to_vec());
                                     xml = &xml[outer_end..];
                                 }
                                 b"update" => {
@@ -315,33 +315,33 @@ impl Parser {
                                 b"case" => {
                                     let attributes = self.parse_attibutes(&token.attributes());
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut self.case(attributes, inner_xml)?);
+                                    r.extend(self.case(attributes, inner_xml)?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"if" => {
                                     let attributes = self.parse_attibutes(&token.attributes());
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut self.r#if(attributes, inner_xml)?);
+                                    r.extend(self.r#if(attributes, inner_xml)?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"for" => {
                                     let attributes = self.parse_attibutes(&token.attributes());
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut self.r#for(attributes, inner_xml)?);
+                                    r.extend(self.r#for(attributes, inner_xml)?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"while" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.append(&mut self.r#while(token.attributes(), inner_xml)?);
+                                    r.extend(self.r#while(token.attributes(), inner_xml)?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"tag" => {
                                     let attributes = self.parse_attibutes(&token.attributes());
-                                    let (name, mut attr) = self.custom_tag(attributes);
+                                    let (name, attr) = self.custom_tag(attributes);
                                     tag_stack.push(name.clone());
                                     r.push(b'<');
-                                    r.append(&mut name.into_bytes());
-                                    r.append(&mut attr);
+                                    r.extend(name.into_bytes());
+                                    r.extend(attr);
                                     r.push(b'>');
                                 }
                                 b"local" => {
@@ -357,7 +357,7 @@ impl Parser {
                         }
                     } else {
                         r.push(b'<');
-                        r.append(&mut name.to_vec());
+                        r.extend(name.to_vec());
                         if let Some(attributes) = token.attributes() {
                             self.output_attributes(&mut r, attributes)
                         }
@@ -371,24 +371,24 @@ impl Parser {
                     let name = token.name();
                     if name.as_bytes() == b"wd:tag" {
                         let attributes = self.parse_attibutes(&token.attributes());
-                        let (name, mut attr) = self.custom_tag(attributes);
+                        let (name, attr) = self.custom_tag(attributes);
                         r.push(b'<');
-                        r.append(&mut name.into_bytes());
-                        r.append(&mut attr);
+                        r.extend(name.into_bytes());
+                        r.extend(attr);
                         r.push(b' ');
                         r.push(b'/');
                         r.push(b'>');
                     } else {
                         if Self::is_wd_tag(&name) {
-                            if let Some(mut parsed) = self.parse_wd_start_or_empty_tag(
+                            if let Some(parsed) = self.parse_wd_start_or_empty_tag(
                                 name.local().as_bytes(),
                                 &token.attributes(),
                             )? {
-                                r.append(&mut parsed);
+                                r.extend(parsed);
                             }
                         } else {
                             r.push(b'<');
-                            r.append(&mut name.to_vec());
+                            r.extend(name.to_vec());
                             if let Some(attributes) = token.attributes() {
                                 self.output_attributes(&mut r, attributes)
                             }
@@ -435,26 +435,26 @@ impl Parser {
                             }
                             b"tag" => {
                                 if let Some(name) = tag_stack.pop() {
-                                    r.append(&mut b"</".to_vec());
-                                    r.append(&mut name.into_bytes());
+                                    r.extend(b"</".to_vec());
+                                    r.extend(name.into_bytes());
                                     r.push(b'>');
                                 }
                             }
                             _ => {}
                         }
                     } else {
-                        r.append(&mut token_bytes.to_vec());
+                        r.extend(token_bytes.to_vec());
                     }
                 }
                 State::ScannedCharacters(pos)
                 | State::ScannedCdata(pos)
                 | State::ScannedComment(pos)
                 | State::ScannedDeclaration(pos) => {
-                    r.append(&mut xml[..pos].to_vec());
+                    r.extend(xml[..pos].to_vec());
                     xml = &xml[pos..];
                 }
                 State::ScanningCharacters => {
-                    r.append(&mut xml.to_vec());
+                    r.extend(xml.to_vec());
                     break;
                 }
                 _ => {}
@@ -770,15 +770,15 @@ impl Parser {
                     let attr = xml_util::quot_unescape(value.to_str().as_bytes());
                     if attr.len() > 0 {
                         html_attr.push(b' ');
-                        html_attr.append(&mut attr.as_bytes().to_vec());
+                        html_attr.extend(attr.as_bytes().to_vec());
                     }
                 } else {
                     html_attr.push(b' ');
-                    html_attr.append(&mut key.to_vec());
+                    html_attr.extend(key.to_vec());
                     html_attr.push(b'=');
                     html_attr.push(b'"');
-                    html_attr.append(
-                        &mut value
+                    html_attr.extend(
+                        value
                             .to_str()
                             .replace("&", "&amp;")
                             .replace("<", "&lt;")
