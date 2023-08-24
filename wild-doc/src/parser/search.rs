@@ -270,16 +270,7 @@ impl Parser {
             if value != "" {
                 match method.to_str().as_ref() {
                     "in" => {
-                        let v: Vec<_> = value
-                            .split(',')
-                            .filter_map(|s| {
-                                if let Ok(i) = s.parse::<isize>() {
-                                    Some(i)
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
+                        let v: Vec<_> = value.split(',').flat_map(|s| s.parse::<isize>()).collect();
                         if v.len() > 0 {
                             return Some(Condition::Row(search::Number::In(v)));
                         }
@@ -318,13 +309,7 @@ impl Parser {
             if value != "" {
                 let v: Vec<_> = value
                     .split(',')
-                    .filter_map(|s| {
-                        if let Ok(uuid) = Uuid::from_str(&s) {
-                            Some(uuid.as_u128())
-                        } else {
-                            None
-                        }
-                    })
+                    .flat_map(|s| Uuid::from_str(&s).map(|uuid| uuid.as_u128()))
                     .collect();
                 if v.len() > 0 {
                     return Some(Condition::Uuid(v));

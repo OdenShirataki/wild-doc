@@ -20,7 +20,7 @@ use maybe_xml::{
 };
 use semilattice_database_session::{Activity, CollectionRow, Session, SessionDatabase, Uuid};
 use serde_json::Value;
-use wild_doc_script::{Vars, WildDocScript, WildDocState, WildDocValue};
+use wild_doc_script::{WildDocScript, WildDocState, WildDocValue};
 
 use crate::xml_util;
 
@@ -465,13 +465,18 @@ impl Parser {
     }
 
     fn local(&mut self, attributes: AttributeMap) {
-        let mut json: Vars = HashMap::new();
-        for (key, v) in attributes {
-            if let Some(v) = v {
-                json.insert(key.to_vec(), Arc::new(RwLock::new(v.as_ref().clone())));
-            }
-        }
-        self.state.stack().write().unwrap().push(json);
+        self.state.stack().write().unwrap().push(
+            attributes
+                .iter()
+                .filter_map(|(k, v)| {
+                    if let Some(v) = v {
+                        Some((k.to_vec(), Arc::new(RwLock::new(v.as_ref().clone()))))
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+        );
     }
     fn row(&mut self, attributes: AttributeMap) {
         let mut json = HashMap::new();

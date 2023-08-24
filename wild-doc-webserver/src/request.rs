@@ -80,10 +80,11 @@ pub(super) async fn request(
     let document_dir = std::path::PathBuf::from(document_dir);
     let mut response = Response::new(Body::empty());
 
-    let mut headers: HashMap<String, String> = HashMap::new();
-    for (key, value) in req.headers() {
-        headers.insert(key.to_string(), value.to_str().unwrap().to_owned());
-    }
+    let headers: HashMap<String, String> = req
+        .headers()
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_str().unwrap().to_owned()))
+        .collect();
     if let Some(host) = headers.get("host") {
         if let Some(host) = host.split(":").collect::<Vec<&str>>().get(0) {
             let host = host.to_string();
