@@ -29,11 +29,9 @@ impl WildDocValue {
         &self.value
     }
     pub fn to_str<'a>(&'a self) -> Cow<'a, str> {
-        if let Some(s) = self.value.as_str() {
-            Cow::Borrowed(s)
-        } else {
-            Cow::Owned(self.value.to_string())
-        }
+        self.value
+            .as_str()
+            .map_or(Cow::Owned(self.value.to_string()), Cow::Borrowed)
     }
 }
 pub type Vars = HashMap<Vec<u8>, Arc<RwLock<WildDocValue>>>;
