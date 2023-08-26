@@ -42,27 +42,15 @@ static SETTING: Lazy<std::sync::Mutex<HashMap<String, String>>> = Lazy::new(|| {
                 if let Some(config) = config.wilddoc {
                     m.insert(
                         "server_addr".to_string(),
-                        if let Some(server_addr) = config.server_addr {
-                            server_addr
-                        } else {
-                            "localhost".to_string()
-                        },
+                        config.server_addr.unwrap_or("localhost".to_string()),
                     );
                     m.insert(
                         "server_port".to_string(),
-                        if let Some(server_port) = config.server_port {
-                            server_port
-                        } else {
-                            "51818".to_string()
-                        },
+                        config.server_port.unwrap_or("51818".to_string()),
                     );
                     m.insert(
                         "document_dir".to_string(),
-                        if let Some(document_dir) = config.document_dir {
-                            document_dir
-                        } else {
-                            "document".to_string()
-                        },
+                        config.document_dir.unwrap_or("document".to_string()),
                     );
                 }
             }
