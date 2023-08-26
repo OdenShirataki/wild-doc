@@ -50,7 +50,6 @@ impl Parser {
                 }
             }
         }
-
         None
     }
 
@@ -76,6 +75,12 @@ impl Parser {
         return xml;
     }
 
+    fn now() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    }
     fn make_conditions<'a>(
         &mut self,
         attributes: &AttributeMap,
@@ -85,48 +90,28 @@ impl Parser {
 
         if let Some(Some(activity)) = attributes.get(b"activity".as_ref()) {
             let activity = activity.to_str();
-            if activity == "inactive" {
-                conditions.push(Condition::Activity(Activity::Inactive));
-            } else if activity == "active" {
-                conditions.push(Condition::Activity(Activity::Active));
-            }
+            conditions.push(Condition::Activity(if activity == "inactive" {
+                Activity::Inactive
+            } else {
+                Activity::Active
+            }));
         }
         if let Some(Some(term)) = attributes.get(b"term".as_ref()) {
             let term = term.to_str();
             if term != "all" {
                 let term: Vec<&str> = term.split('@').collect();
-                if term.len() == 2 {
-                    conditions.push(Condition::Term(
-                        chrono::Local
-                            .datetime_from_str(term[1], "%Y-%m-%d %H:%M:%S")
-                            .map_or(
-                                search::Term::In(
-                                    SystemTime::now()
-                                        .duration_since(UNIX_EPOCH)
-                                        .unwrap()
-                                        .as_secs(),
-                                ),
-                                |t| match term[0] {
-                                    "in" => search::Term::In(t.timestamp() as u64),
-                                    "future" => search::Term::Future(t.timestamp() as u64),
-                                    "past" => search::Term::Past(t.timestamp() as u64),
-                                    _ => search::Term::In(
-                                        SystemTime::now()
-                                            .duration_since(UNIX_EPOCH)
-                                            .unwrap()
-                                            .as_secs(),
-                                    ),
-                                },
-                            ),
-                    ));
+                conditions.push(Condition::Term(if term.len() == 2 {
+                    chrono::Local
+                        .datetime_from_str(term[1], "%Y-%m-%d %H:%M:%S")
+                        .map_or(search::Term::In(Self::now()), |t| match term[0] {
+                            "in" => search::Term::In(t.timestamp() as u64),
+                            "future" => search::Term::Future(t.timestamp() as u64),
+                            "past" => search::Term::Past(t.timestamp() as u64),
+                            _ => search::Term::In(Self::now()),
+                        })
                 } else {
-                    conditions.push(Condition::Term(search::Term::In(
-                        SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs(),
-                    )));
-                }
+                    search::Term::In(Self::now())
+                }));
             }
         }
         (last_xml, conditions, join)
@@ -152,7 +137,6 @@ impl Parser {
                             b"narrow" => {
                                 let (inner_xml, outer_end) = xml_util::inner(xml);
                                 xml = &xml[outer_end..];
-
                                 if let Ok(inner_xml) = self.parse(inner_xml) {
                                     let (_, cond, _) = self.condition_loop(&inner_xml);
                                     result_conditions.push(Condition::Narrow(cond));
@@ -161,7 +145,6 @@ impl Parser {
                             b"wide" => {
                                 let (inner_xml, outer_end) = xml_util::inner(xml);
                                 xml = &xml[outer_end..];
-
                                 if let Ok(inner_xml) = self.parse(inner_xml) {
                                     let (_, cond, _) = self.condition_loop(&inner_xml);
                                     result_conditions.push(Condition::Wide(cond));
@@ -245,11 +228,10 @@ impl Parser {
                         .collection_id(&collection_name),
                 ) {
                     return Some(Condition::Depend(
-                        if let Some(Some(akey)) = attributes.get(b"key".as_ref()) {
-                            Some(akey.to_str().into_owned())
-                        } else {
-                            None
-                        },
+                        attributes
+                            .get(b"key".as_ref())
+                            .and_then(|v| v.as_ref())
+                            .map(|v| v.to_str().into_owned()),
                         if row < 0 {
                             CollectionRow::new(-collection_id, (-row) as u32)
                         } else {

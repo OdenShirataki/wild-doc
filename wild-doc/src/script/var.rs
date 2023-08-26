@@ -18,9 +18,7 @@ impl Var {
     }
 }
 impl WildDocScript for Var {
-    fn new(
-        state: wild_doc_script::WildDocState,
-    ) -> Result<Self>
+    fn new(state: wild_doc_script::WildDocState) -> Result<Self>
     where
         Self: Sized,
     {
@@ -29,18 +27,11 @@ impl WildDocScript for Var {
         })
     }
 
-    fn evaluate_module(
-        &mut self,
-        _: &str,
-        _: &[u8],
-    ) -> Result<()> {
+    fn evaluate_module(&mut self, _: &str, _: &[u8]) -> Result<()> {
         Ok(())
     }
 
-    fn eval(
-        &mut self,
-        code: &[u8],
-    ) -> Result<serde_json::Value> {
+    fn eval(&mut self, code: &[u8]) -> Result<serde_json::Value> {
         let mut value = serde_json::json!("");
 
         let mut splited = code.split(|c| *c == b'.');
@@ -49,36 +40,31 @@ impl WildDocScript for Var {
                 let next_value = root.read().unwrap();
                 let mut next_value = next_value.value();
                 while {
-                    if let Some(next) = splited.next() {
-                        match next_value {
-                            serde_json::Value::Object(map) => {
-                                let mut ret = false;
-                                if let Some(v) =
-                                    map.get(unsafe { std::str::from_utf8_unchecked(next) })
-                                {
+                    splited.next().map_or_else(
+                        || {
+                            value = next_value.clone();
+                            false
+                        },
+                        |next| match next_value {
+                            serde_json::Value::Object(map) => map
+                                .get(unsafe { std::str::from_utf8_unchecked(next) })
+                                .map_or(false, |v| {
                                     next_value = v;
-                                    ret = true;
-                                }
-                                ret
-                            }
+                                    true
+                                }),
                             serde_json::Value::Array(map) => {
-                                let mut ret = false;
-                                if let Ok(index) =
-                                    unsafe { std::str::from_utf8_unchecked(next) }.parse::<usize>()
-                                {
-                                    if let Some(v) = map.get(index) {
+                                unsafe { std::str::from_utf8_unchecked(next) }
+                                    .parse::<usize>()
+                                    .ok()
+                                    .and_then(|v| map.get(v))
+                                    .map_or(false, |v| {
                                         next_value = v;
-                                        ret = true;
-                                    }
-                                }
-                                ret
+                                        true
+                                    })
                             }
                             _ => false,
-                        }
-                    } else {
-                        value = next_value.clone();
-                        false
-                    }
+                        },
+                    )
                 } {}
             }
         }

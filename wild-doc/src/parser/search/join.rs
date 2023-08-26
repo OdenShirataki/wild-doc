@@ -75,12 +75,10 @@ impl Parser {
 
     fn join_condition_depend(attributes: &AttributeMap) -> JoinCondition {
         JoinCondition::Depend {
-            key: if let Some(Some(key)) = attributes.get(b"key".as_ref()) {
-                let key = key.to_str();
-                Some(key.into_owned())
-            } else {
-                None
-            },
+            key: attributes
+                .get(b"key".as_ref())
+                .and_then(|v| v.as_ref())
+                .map(|v| v.to_str().into_owned()),
         }
     }
 }

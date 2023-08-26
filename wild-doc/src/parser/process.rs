@@ -18,30 +18,31 @@ impl Parser {
     pub(super) fn get_include_content(&mut self, attributes: AttributeMap) -> Result<Vec<u8>> {
         if let Some(Some(src)) = attributes.get(b"src".as_ref()) {
             let src = src.to_str().into_owned();
-            let (xml, filename) = if let Some(xml) = self
+            let (xml, filename) = self
                 .state
                 .include_adaptor()
                 .lock()
                 .unwrap()
                 .include(src.clone().into())
-            {
-                (Some(xml), src.into())
-            } else {
-                let mut r = (None, "".to_owned());
-                if let Some(Some(substitute)) = attributes.get(b"substitute".as_ref()) {
-                    let substitute = substitute.to_str().into_owned();
-                    if let Some(xml) = self
-                        .state
-                        .include_adaptor()
-                        .lock()
-                        .unwrap()
-                        .include(substitute.clone().into())
-                    {
-                        r = (Some(xml), substitute.into());
-                    }
-                }
-                r
-            };
+                .map_or_else(
+                    || {
+                        let mut r = (None, "".to_owned());
+                        if let Some(Some(substitute)) = attributes.get(b"substitute".as_ref()) {
+                            let substitute = substitute.to_str().into_owned();
+                            if let Some(xml) = self
+                                .state
+                                .include_adaptor()
+                                .lock()
+                                .unwrap()
+                                .include(substitute.clone().into())
+                            {
+                                r = (Some(xml), substitute.into());
+                            }
+                        }
+                        r
+                    },
+                    |xml| (Some(xml), src.into()),
+                );
             if let Some(xml) = xml {
                 if xml.len() > 0 {
                     self.include_stack.push(filename);
@@ -55,11 +56,10 @@ impl Parser {
     }
 
     pub(super) fn case(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
-        let cmp_src = if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
-            value.to_str()
-        } else {
-            "".into()
-        };
+        let cmp_src = attributes
+            .get(b"value".as_ref())
+            .and_then(|v| v.as_ref())
+            .map_or("".into(), |v| v.to_str());
         let mut xml = xml;
         let mut scanner = Scanner::new();
         while let Some(state) = scanner.scan(&xml) {

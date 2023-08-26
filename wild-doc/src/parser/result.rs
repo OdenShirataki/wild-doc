@@ -153,18 +153,19 @@ impl Parser {
                     json_inner.insert("collection_id".to_owned(), json!(collection_id));
                     let orders = make_order(
                         search,
-                        if let Some(Some(sort)) = attributes.get(b"sort".as_ref()) {
-                            sort.to_str()
-                        } else {
-                            "".into()
-                        }
-                        .as_ref(),
+                        attributes
+                            .get(b"sort".as_ref())
+                            .and_then(|v| v.as_ref())
+                            .map_or("".into(), |v| v.to_str())
+                            .as_ref(),
                     );
 
                     let mut session_maybe_has_collection = None;
                     for i in (0..self.sessions.len()).rev() {
-                        if let Some(_) =
-                            self.sessions[i].session.temporary_collection(collection_id)
+                        if self.sessions[i]
+                            .session
+                            .temporary_collection(collection_id)
+                            .is_some()
                         {
                             session_maybe_has_collection = Some(&self.sessions[i].session);
                             break;
@@ -248,19 +249,15 @@ impl Parser {
                                 .collect::<Vec<Value>>();
                             rows
                         } else {
-                            let rows = if let Some(r) = search
+                            search
                                 .write()
                                 .unwrap()
                                 .result(&self.database.read().unwrap())
                                 .read()
                                 .unwrap()
                                 .as_ref()
-                            {
-                                r.sort(&self.database.read().unwrap(), &orders)
-                            } else {
-                                vec![]
-                            };
-                            rows.iter()
+                                .map_or(vec![], |v| v.sort(&self.database.read().unwrap(), &orders))
+                                .iter()
                                 .map(|row| Value::Object(self.row_values(collection, *row)))
                                 .collect::<Vec<Value>>()
                         }
@@ -292,24 +289,20 @@ fn make_order<'a>(search: &Arc<RwLock<Search>>, sort: &str) -> Vec<Order> {
             let o_split: Vec<&str> = o.split(" ").collect();
             let field = o_split[0];
             let order_key = if field.starts_with("field.") {
-                if let Some(field_name) = field.strip_prefix("field.") {
-                    Some(OrderKey::Field(field_name.to_owned()))
-                } else {
-                    None
-                }
+                field
+                    .strip_prefix("field.")
+                    .map(|v| OrderKey::Field(v.to_owned()))
             } else if field.starts_with("join.") {
-                if let Some(join) = field.strip_prefix("join.") {
-                    let s: Vec<&str> = join.split(".").collect();
+                field.strip_prefix("join.").map(|v| {
+                    let s: Vec<&str> = v.split(".").collect();
                     let join_name = s[0].to_owned();
                     let property = s[1].to_owned();
-                    Some(OrderKey::Custom(Box::new(WdCustomSort {
+                    OrderKey::Custom(Box::new(WdCustomSort {
                         result: search.read().unwrap().get_result(),
                         join_name,
                         property,
-                    })))
-                } else {
-                    None
-                }
+                    }))
+                })
             } else {
                 match field {
                     "serial" => Some(OrderKey::Serial),

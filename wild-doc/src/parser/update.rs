@@ -31,16 +31,12 @@ impl Parser {
         if let Ok(inner_xml) = self.parse(xml) {
             let updates = self.make_update_struct(inner_xml.as_slice())?;
 
-            if if let None = self.sessions.last() {
-                true
-            } else {
-                false
-            } || if let Some(Some(without_session)) = attributes.get(b"without_session".as_ref())
+            if !self.sessions.last().is_some()
+                || attributes
+                    .get(b"without_session".as_ref())
+                    .and_then(|v| v.as_ref())
+                    .map_or(false, |v| v.to_str() == "true")
             {
-                without_session.to_str() == "true"
-            } else {
-                false
-            } {
                 let mut commit_rows = vec![];
                 for record in updates {
                     match record {
@@ -197,16 +193,17 @@ impl Parser {
     ) -> Vec<CollectionRow> {
         let mut rows = vec![];
         if collection_id > 0 {
-            let collection_row = if let Some(collection) =
-                self.database.write().unwrap().collection_mut(collection_id)
-            {
-                Some(CollectionRow::new(
-                    collection_id,
-                    collection.create_row(activity, term_begin, term_end, fields),
-                ))
-            } else {
-                None
-            };
+            let collection_row = self
+                .database
+                .write()
+                .unwrap()
+                .collection_mut(collection_id)
+                .map(|v| {
+                    CollectionRow::new(
+                        collection_id,
+                        v.create_row(activity, term_begin, term_end, fields),
+                    )
+                });
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
                     for (depend_key, depend_row) in depends {
@@ -236,14 +233,15 @@ impl Parser {
     ) -> Vec<CollectionRow> {
         let mut rows = vec![];
         if collection_id > 0 {
-            let collection_row = if let Some(collection) =
-                self.database.write().unwrap().collection_mut(collection_id)
-            {
-                collection.update_row(row, activity, term_begin, term_end, fields);
-                Some(CollectionRow::new(collection_id, row))
-            } else {
-                None
-            };
+            let collection_row = self
+                .database
+                .write()
+                .unwrap()
+                .collection_mut(collection_id)
+                .map(|v| {
+                    v.update_row(row, activity, term_begin, term_end, fields);
+                    CollectionRow::new(collection_id, row)
+                });
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
                     self.database
@@ -296,7 +294,7 @@ impl Parser {
                             if let Some(temporary_collection) =
                                 session_state.session.temporary_collection(collection_id)
                             {
-                                if let Some(_) = temporary_collection.get(&row) {
+                                if temporary_collection.get(&row).is_some() {
                                     valid = true;
                                 }
                             }
@@ -432,16 +430,17 @@ impl Parser {
                                     }
                                 }
                             }
-                            let mut row: i64 = 0;
-                            if let Some(Some(str_row)) = token_attributes.get(b"row".as_ref()) {
-                                if let Ok(parsed) = str_row.to_str().parse::<i64>() {
-                                    row = parsed;
-                                }
-                            }
-                            let mut is_delete = false;
-                            if let Some(Some(str)) = token_attributes.get(b"delete".as_ref()) {
-                                is_delete = str.to_str() == "true";
-                            }
+
+                            let row: i64 = token_attributes
+                                .get(b"row".as_ref())
+                                .and_then(|v| v.as_ref())
+                                .and_then(|v| v.to_str().parse::<i64>().ok())
+                                .unwrap_or(0);
+
+                            let is_delete = token_attributes
+                                .get(b"delete".as_ref())
+                                .and_then(|v| v.as_ref())
+                                .map_or(false, |v| v.to_str() == "true");
                             let (collection_id, row) = if row < 0 {
                                 (-collection_id, (-row) as u32)
                             } else {

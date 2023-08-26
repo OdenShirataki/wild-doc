@@ -77,14 +77,11 @@ impl Parser {
     ) -> Result<Option<Vec<u8>>> {
         match name {
             b"print" => {
-                let attributes = self.parse_attibutes(attributes);
-                return Ok(
-                    if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
-                        Some(value.to_str().into_owned().into_bytes())
-                    } else {
-                        None
-                    },
-                );
+                return Ok(self
+                    .parse_attibutes(attributes)
+                    .get(b"value".as_ref())
+                    .and_then(|v| v.as_ref())
+                    .map(|v| v.to_str().into_owned().into_bytes()));
             }
             b"global" => {
                 let attributes = self.parse_attibutes(attributes);
@@ -96,14 +93,11 @@ impl Parser {
                 }
             }
             b"print_escape_html" => {
-                let attributes = self.parse_attibutes(attributes);
-                return Ok(
-                    if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
-                        Some(xml_util::escape_html(&value.to_str()).into_bytes())
-                    } else {
-                        None
-                    },
-                );
+                return Ok(self
+                    .parse_attibutes(attributes)
+                    .get(b"value".as_ref())
+                    .and_then(|v| v.as_ref())
+                    .map(|v| xml_util::escape_html(&v.to_str()).into_bytes()));
             }
             b"include" => {
                 let attributes = self.parse_attibutes(attributes);
@@ -122,26 +116,18 @@ impl Parser {
         Ok(None)
     }
     fn is_wd_tag(name: &TagName) -> bool {
-        if let Some(prefix) = name.namespace_prefix() {
-            prefix.as_bytes() == b"wd"
-        } else {
-            false
-        }
+        name.namespace_prefix()
+            .map_or(false, |v| v.as_bytes() == b"wd")
     }
     fn attribute_script<'a>(&mut self, script: &str, value: &[u8]) -> Option<WildDocValue> {
-        if let Some(script) = self.scripts.get(script) {
-            if let Ok(v) = script
+        self.scripts.get(script).and_then(|script| {
+            script
                 .lock()
                 .unwrap()
                 .eval(xml_util::quot_unescape(value).as_bytes())
-            {
-                Some(WildDocValue::new(v))
-            } else {
-                None
-            }
-        } else {
-            None
-        }
+                .ok()
+                .map(|v| WildDocValue::new(v))
+        })
     }
     fn output_attribute_value(r: &mut Vec<u8>, val: &[u8]) {
         r.push(b'=');
@@ -239,11 +225,7 @@ impl Parser {
                     if let Some(script) = self.scripts.get(target.to_str()?) {
                         if let Some(i) = token.instructions() {
                             if let Err(e) = script.lock().unwrap().evaluate_module(
-                                if let Some(last) = self.include_stack.last() {
-                                    last
-                                } else {
-                                    ""
-                                },
+                                self.include_stack.last().map_or("", |v| v),
                                 i.as_bytes(),
                             ) {
                                 return Err(e);
@@ -403,11 +385,10 @@ impl Parser {
                     xml = &xml[pos..];
                     let token = token::borrowed::EndTag::from(token_bytes);
                     let name = token.name();
-                    if if let Some(prefix) = name.namespace_prefix() {
-                        prefix.as_bytes() == b"wd"
-                    } else {
-                        false
-                    } {
+                    if name
+                        .namespace_prefix()
+                        .map_or(false, |v| v.as_bytes() == b"wd")
+                    {
                         match name.local().as_bytes() {
                             b"local"
                             | b"result"
@@ -469,11 +450,8 @@ impl Parser {
             attributes
                 .iter()
                 .filter_map(|(k, v)| {
-                    if let Some(v) = v {
-                        Some((k.to_vec(), Arc::new(RwLock::new(v.as_ref().clone()))))
-                    } else {
-                        None
-                    }
+                    v.as_ref()
+                        .map(|v| (k.to_vec(), Arc::new(RwLock::new(v.as_ref().clone()))))
                 })
                 .collect(),
         );
@@ -637,25 +615,20 @@ impl Parser {
         if let Some(Some(session_name)) = attributes.get(b"name".as_ref()) {
             let session_name = session_name.to_str();
             if session_name != "" {
-                let commit_on_close =
-                    if let Some(Some(col)) = attributes.get(b"commit_on_close".as_ref()) {
-                        col.to_str() == "true"
-                    } else {
-                        false
-                    };
+                let commit_on_close = attributes
+                    .get(b"commit_on_close".as_ref())
+                    .and_then(|v| v.as_ref())
+                    .map_or(false, |v| v.to_str() == "true");
 
-                let clear_on_close =
-                    if let Some(Some(col)) = attributes.get(b"clear_on_close".as_ref()) {
-                        col.to_str() == "true"
-                    } else {
-                        false
-                    };
+                let clear_on_close = attributes
+                    .get(b"clear_on_close".as_ref())
+                    .and_then(|v| v.as_ref())
+                    .map_or(false, |v| v.to_str() == "true");
 
-                let expire = if let Some(Some(expire)) = attributes.get(b"expire".as_ref()) {
-                    expire.to_str()
-                } else {
-                    "".into()
-                };
+                let expire = attributes
+                    .get(b"expire".as_ref())
+                    .and_then(|v| v.as_ref())
+                    .map_or("".into(), |v| v.to_str());
                 let expire = if expire.len() > 0 {
                     expire.parse::<i64>().ok()
                 } else {
@@ -705,20 +678,18 @@ impl Parser {
         self.state.stack().write().unwrap().push(json);
     }
     fn session_sequence(&mut self, attributes: AttributeMap) -> io::Result<()> {
-        let mut str_max = if let Some(Some(s)) = attributes.get(b"max".as_ref()) {
-            s.to_str()
-        } else {
-            "".into()
-        };
+        let mut str_max = attributes
+            .get(b"max".as_ref())
+            .and_then(|v| v.as_ref())
+            .map_or("".into(), |v| v.to_str());
         if str_max == "" {
             str_max = "session_sequence_max".into();
         }
 
-        let mut str_current = if let Some(Some(s)) = attributes.get(b"current".as_ref()) {
-            s.to_str()
-        } else {
-            "".into()
-        };
+        let mut str_current = attributes
+            .get(b"current".as_ref())
+            .and_then(|v| v.as_ref())
+            .map_or("".into(), |v| v.to_str());
         if str_current == "" {
             str_current = "session_sequence_current".into();
         }
@@ -746,13 +717,13 @@ impl Parser {
         Ok(())
     }
     fn session_gc(&mut self, attributes: AttributeMap) {
-        let mut expire = 60 * 60 * 24;
-        if let Some(Some(str_expire)) = attributes.get(b"expire".as_ref()) {
-            if let Ok(parsed) = str_expire.to_str().parse::<i64>() {
-                expire = parsed;
-            }
-        }
-        self.database.write().unwrap().session_gc(expire);
+        self.database.write().unwrap().session_gc(
+            attributes
+                .get(b"expire".as_ref())
+                .and_then(|v| v.as_ref())
+                .and_then(|v| v.to_str().parse::<i64>().ok())
+                .unwrap_or(60 * 60 * 24),
+        );
     }
     fn delete_collection(&mut self, attributes: AttributeMap) {
         if let Some(Some(str_collection)) = attributes.get(b"collection".as_ref()) {
