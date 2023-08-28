@@ -75,12 +75,6 @@ impl Parser {
         return xml;
     }
 
-    fn now() -> u64 {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-    }
     fn make_conditions<'a>(
         &mut self,
         attributes: &AttributeMap,
@@ -103,14 +97,22 @@ impl Parser {
                 conditions.push(Condition::Term(if term.len() == 2 {
                     chrono::Local
                         .datetime_from_str(term[1], "%Y-%m-%d %H:%M:%S")
-                        .map_or(search::Term::In(Self::now()), |t| match term[0] {
-                            "in" => search::Term::In(t.timestamp() as u64),
-                            "future" => search::Term::Future(t.timestamp() as u64),
-                            "past" => search::Term::Past(t.timestamp() as u64),
-                            _ => search::Term::In(Self::now()),
-                        })
+                        .map_or(
+                            search::Term::In(
+                                SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_secs(),
+                            ),
+                            |t| match term[0] {
+                                "in" => search::Term::In(t.timestamp() as u64),
+                                "future" => search::Term::Future(t.timestamp() as u64),
+                                "past" => search::Term::Past(t.timestamp() as u64),
+                                _ => search::Term::default(),
+                            },
+                        )
                 } else {
-                    search::Term::In(Self::now())
+                    search::Term::default()
                 }));
             }
         }
