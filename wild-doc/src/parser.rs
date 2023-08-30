@@ -192,13 +192,13 @@ impl Parser {
                     } else {
                         r.insert(attribute.name().to_vec(), {
                             let value = xml_util::quot_unescape(value.as_bytes());
-                            if let Ok(json_value) = serde_json::from_str(value.as_str()) {
-                                Some(Arc::new(WildDocValue::new(json_value)))
-                            } else {
-                                Some(Arc::new(WildDocValue::new(serde_json::json!(
-                                    value.as_str()
-                                ))))
-                            }
+                            Some(Arc::new(WildDocValue::new(
+                                if let Ok(json_value) = serde_json::from_str(value.as_str()) {
+                                    json_value
+                                } else {
+                                    serde_json::json!(value.as_str())
+                                },
+                            )))
                         });
                     }
                 } else {
