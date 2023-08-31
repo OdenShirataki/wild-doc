@@ -31,7 +31,7 @@ impl WildDocValue {
     pub fn to_str<'a>(&'a self) -> Cow<'a, str> {
         self.value
             .as_str()
-            .map_or(Cow::Owned(self.value.to_string()), Cow::Borrowed)
+            .map_or_else(|| Cow::Owned(self.value.to_string()), Cow::Borrowed)
     }
 }
 pub type Vars = HashMap<Vec<u8>, Arc<RwLock<WildDocValue>>>;

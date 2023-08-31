@@ -4,7 +4,6 @@ use std::{
     collections::HashMap,
     str::FromStr,
     sync::{Arc, RwLock},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use chrono::TimeZone;
@@ -97,13 +96,8 @@ impl Parser {
                 conditions.push(Condition::Term(if term.len() == 2 {
                     chrono::Local
                         .datetime_from_str(term[1], "%Y-%m-%d %H:%M:%S")
-                        .map_or(
-                            search::Term::In(
-                                SystemTime::now()
-                                    .duration_since(UNIX_EPOCH)
-                                    .unwrap()
-                                    .as_secs(),
-                            ),
+                        .map_or_else(
+                            |_| search::Term::default(),
                             |t| match term[0] {
                                 "in" => search::Term::In(t.timestamp() as u64),
                                 "future" => search::Term::Future(t.timestamp() as u64),

@@ -463,9 +463,9 @@ impl Parser {
                                 {
                                     let str = str.to_str();
                                     if str != "" {
-                                        if let Some(t) = chrono::Local
+                                        if let Ok(t) = chrono::Local
                                             .datetime_from_str(str.as_ref(), "%Y-%m-%d %H:%M:%S")
-                                            .map_or(None, |v| Some(v.timestamp()))
+                                            .map(|v| v.timestamp())
                                         {
                                             term_begin = Term::Overwrite(t as u64)
                                         }
@@ -476,9 +476,9 @@ impl Parser {
                                 {
                                     let str = str.to_str();
                                     if str != "" {
-                                        if let Some(t) = chrono::Local
+                                        if let Ok(t) = chrono::Local
                                             .datetime_from_str(str.as_ref(), "%Y-%m-%d %H:%M:%S")
-                                            .map_or(None, |v| Some(v.timestamp()))
+                                            .map(|v| v.timestamp())
                                         {
                                             term_end = Term::Overwrite(t as u64)
                                         }
