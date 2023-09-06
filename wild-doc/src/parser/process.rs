@@ -82,8 +82,7 @@ impl Parser {
                             }
                         }
                         b"wd:else" => {
-                            let (inner_xml, _) = xml_util::inner(xml);
-                            return Ok(self.parse(inner_xml)?);
+                            return Ok(self.parse(xml_util::inner(xml).0)?);
                         }
                         _ => {}
                     }

@@ -289,9 +289,7 @@ impl Parser {
                     .split(',')
                     .flat_map(|s| Uuid::from_str(&s).map(|uuid| uuid.as_u128()))
                     .collect();
-                if v.len() > 0 {
-                    return Some(Condition::Uuid(v));
-                }
+                return (v.len() > 0).then(|| Condition::Uuid(v));
             }
         }
         None
@@ -319,14 +317,9 @@ impl Parser {
                     "backward" => Some(search::Field::Backward(Arc::new(value.to_string()))),
                     "range" => {
                         let s: Vec<&str> = value.split("..").collect();
-                        if s.len() == 2 {
-                            Some(search::Field::Range(
-                                s[0].as_bytes().to_vec(),
-                                s[1].as_bytes().to_vec(),
-                            ))
-                        } else {
-                            None
-                        }
+                        (s.len() == 2).then(|| {
+                            search::Field::Range(s[0].as_bytes().to_vec(), s[1].as_bytes().to_vec())
+                        })
                     }
                     "value_forward" => {
                         Some(search::Field::ValueForward(Arc::new(value.to_string())))

@@ -44,8 +44,8 @@ impl Parser {
                     let attributes = self.parse_attibutes(&token.attributes());
                     let name = token.name();
                     match name.local().as_bytes() {
-                        b"depend" => {
-                            result_conditions.push(Self::join_condition_depend(&attributes));
+                        b"pends" => {
+                            result_conditions.push(Self::join_condition_pends(&attributes));
                         }
                         _ => {}
                     }
@@ -73,8 +73,8 @@ impl Parser {
         (xml, result_conditions)
     }
 
-    fn join_condition_depend(attributes: &AttributeMap) -> JoinCondition {
-        JoinCondition::Depend {
+    fn join_condition_pends(attributes: &AttributeMap) -> JoinCondition {
+        JoinCondition::Pends {
             key: attributes
                 .get(b"key".as_ref())
                 .and_then(|v| v.as_ref())

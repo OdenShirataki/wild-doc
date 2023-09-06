@@ -251,13 +251,13 @@ impl Parser {
                         .write()
                         .unwrap()
                         .delete_pends_by_collection_row(&collection_row);
-                    for d in depends {
+                    depends.iter().for_each(|d| {
                         self.database.write().unwrap().register_relation(
                             &d.0,
                             &d.1,
                             collection_row.clone(),
                         );
-                    }
+                    });
                 }
                 rows.push(collection_row.clone());
                 self.update_pends(collection_row, &pends);
@@ -284,8 +284,8 @@ impl Parser {
                     .unwrap()
                     .collection_id(&collection.to_str()),
             ) {
-                if row == 0 {
-                    return Err(DependError);
+                return if row == 0 {
+                    Err(DependError)
                 } else {
                     let in_session = row < 0;
                     if in_session {
@@ -312,8 +312,8 @@ impl Parser {
                             CollectionRow::new(collection_id, row as u32)
                         },
                     ));
-                }
-                return Ok(());
+                    Ok(())
+                };
             }
         }
         Err(DependError)
