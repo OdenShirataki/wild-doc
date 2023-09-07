@@ -484,46 +484,42 @@ impl Parser {
                                         }
                                     }
                                 }
-                                let f = fields
-                                    .iter()
-                                    .map(|(key, value)| KeyValue::new(key, value.as_bytes()))
-                                    .collect();
-                                if row == 0 {
-                                    updates.push(SessionRecord::New {
+                                let record = Record {
+                                    activity,
+                                    term_begin,
+                                    term_end,
+                                    fields: fields
+                                        .iter()
+                                        .map(|(key, value)| KeyValue::new(key, value.as_bytes()))
+                                        .collect(),
+                                };
+                                updates.push(if row == 0 {
+                                    SessionRecord::New {
                                         collection_id,
-                                        record: Record {
-                                            activity,
-                                            term_begin,
-                                            term_end,
-                                            fields: f,
-                                        },
+                                        record,
                                         depends: Depends::Overwrite(depends),
                                         pends,
-                                    });
+                                    }
                                 } else {
-                                    let mut inherit_depend_if_empty = false;
-                                    if let Some(Some(str)) =
+                                    let inherit_depend_if_empty = if let Some(Some(str)) =
                                         token_attributes.get(b"inherit_depend_if_empty".as_ref())
                                     {
-                                        inherit_depend_if_empty = str.to_str() == "true";
-                                    }
-                                    updates.push(SessionRecord::Update {
+                                        str.to_str() == "true"
+                                    } else {
+                                        false
+                                    };
+                                    SessionRecord::Update {
                                         collection_id,
                                         row,
-                                        record: Record {
-                                            activity,
-                                            term_begin,
-                                            term_end,
-                                            fields: f,
-                                        },
+                                        record,
                                         depends: if inherit_depend_if_empty && depends.len() == 0 {
                                             Depends::Default
                                         } else {
                                             Depends::Overwrite(depends)
                                         },
                                         pends,
-                                    });
-                                }
+                                    }
+                                });
                             }
                         }
                     }
