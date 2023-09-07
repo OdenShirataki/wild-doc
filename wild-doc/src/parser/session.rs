@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    io,
     sync::{Arc, RwLock},
 };
 
@@ -27,7 +26,7 @@ impl Parser {
         self.state.stack().write().unwrap().push(json);
     }
 
-    pub(super) fn session(&mut self, attributes: AttributeMap) -> io::Result<()> {
+    pub(super) fn session(&mut self, attributes: AttributeMap) {
         if let Some(Some(session_name)) = attributes.get(b"name".as_ref()) {
             let session_name = session_name.to_str();
             if session_name != "" {
@@ -76,10 +75,9 @@ impl Parser {
                 });
             }
         }
-        Ok(())
     }
 
-    pub(super) fn session_sequence(&mut self, attributes: AttributeMap) -> io::Result<()> {
+    pub(super) fn session_sequence(&mut self, attributes: AttributeMap) {
         let mut str_max = attributes
             .get(b"max".as_ref())
             .and_then(|v| v.as_ref())
@@ -111,8 +109,6 @@ impl Parser {
             }
         }
         self.state.stack().write().unwrap().push(json);
-
-        Ok(())
     }
     pub(super) fn session_gc(&mut self, attributes: AttributeMap) {
         self.database.write().unwrap().session_gc(

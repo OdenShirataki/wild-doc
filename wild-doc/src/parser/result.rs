@@ -16,7 +16,7 @@ impl Parser {
         &mut self,
         attributes: &AttributeMap,
         search_map: &HashMap<String, Arc<RwLock<Search>>>,
-    ) -> anyhow::Result<()> {
+    ) {
         let mut json = HashMap::new();
         if let (Some(Some(search)), Some(Some(var))) = (
             attributes.get(b"search".as_ref()),
@@ -93,7 +93,6 @@ impl Parser {
             }
         }
         self.state.stack().write().unwrap().push(json);
-        Ok(())
     }
 }
 

@@ -9,9 +9,9 @@ use super::{AttributeMap, Parser};
 
 impl Parser {
     pub(super) fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes) {
-        for attribute in attributes {
-            let name = attribute.name();
-            if let Some(value) = attribute.value() {
+        attributes.iter().for_each(|attr| {
+            let name = attr.name();
+            if let Some(value) = attr.value() {
                 let (new_name, new_value) =
                     self.attibute_var_or_script(name.as_bytes(), value.as_bytes());
                 if new_name == b"wd-attr:replace" {
@@ -32,36 +32,35 @@ impl Parser {
                     }
                 }
             } else {
-                r.extend(attribute.to_vec());
+                r.extend(attr.to_vec());
             };
-        }
+        });
     }
 
     pub(super) fn parse_attibutes(&mut self, attributes: &Option<Attributes>) -> AttributeMap {
         let mut r: AttributeMap = HashMap::new();
         if let Some(attributes) = attributes {
-            for attribute in attributes.iter() {
-                if let Some(value) = attribute.value() {
+            attributes.iter().for_each(|attr| {
+                if let Some(value) = attr.value() {
                     if let (prefix, Some(value)) =
-                        self.attibute_var_or_script(attribute.name().as_bytes(), value.as_bytes())
+                        self.attibute_var_or_script(attr.name().as_bytes(), value.as_bytes())
                     {
                         r.insert(prefix.to_vec(), Some(Arc::new(value)));
                     } else {
-                        r.insert(attribute.name().to_vec(), {
+                        r.insert(attr.name().to_vec(), {
                             let value = xml_util::quot_unescape(value.as_bytes());
                             Some(Arc::new(WildDocValue::new(
-                                if let Ok(json_value) = serde_json::from_str(value.as_str()) {
-                                    json_value
-                                } else {
-                                    serde_json::json!(value.as_str())
-                                },
+                                serde_json::from_str(value.as_str()).map_or_else(
+                                    |_| serde_json::json!(value.as_str()),
+                                    |json_value| json_value,
+                                ),
                             )))
                         });
                     }
                 } else {
-                    r.insert(attribute.name().to_vec(), None);
+                    r.insert(attr.name().to_vec(), None);
                 }
-            }
+            });
         }
         r
     }

@@ -1,8 +1,8 @@
 mod attr;
 mod collection;
 mod process;
-mod result;
 mod record;
+mod result;
 mod search;
 mod session;
 mod update;
@@ -149,11 +149,11 @@ impl Parser {
                             match name.local().as_bytes() {
                                 b"session" => {
                                     let attributes = self.parse_attibutes(&token.attributes());
-                                    self.session(attributes)?;
+                                    self.session(attributes);
                                 }
                                 b"session_sequence_cursor" => {
                                     let attributes = self.parse_attibutes(&token.attributes());
-                                    self.session_sequence(attributes)?;
+                                    self.session_sequence(attributes);
                                 }
                                 b"sessions" => {
                                     let attributes = self.parse_attibutes(&token.attributes());
@@ -186,7 +186,7 @@ impl Parser {
                                 }
                                 b"result" => {
                                     let attributes = self.parse_attibutes(&token.attributes());
-                                    self.result(&attributes, &search_map)?;
+                                    self.result(&attributes, &search_map);
                                 }
                                 b"record" => {
                                     let attributes = self.parse_attibutes(&token.attributes());
