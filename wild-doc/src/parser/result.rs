@@ -49,8 +49,7 @@ impl Parser {
                         }
                     }
                     let json_rows = if let Some(session) = session_maybe_has_collection {
-                        let session_search = session.search(&search);
-                        let rows = session_search
+                        session.search(&search)
                             .result(&self.database.read().unwrap(), &orders)?
                             .iter()
                             .map(|row| {
@@ -58,8 +57,7 @@ impl Parser {
                                 json_row.insert("row".to_owned(), json!(row));
                                 Value::Object(json_row)
                             })
-                            .collect::<Vec<Value>>();
-                        rows
+                            .collect::<Vec<Value>>()
                     } else {
                         search
                             .write()
