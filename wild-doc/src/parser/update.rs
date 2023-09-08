@@ -48,10 +48,7 @@ impl Parser {
                         } => {
                             commit_rows.extend(self.record_new(
                                 collection_id,
-                                &record.activity,
-                                &record.term_begin,
-                                &record.term_end,
-                                &record.fields,
+                                &record,
                                 &depends,
                                 &pends,
                             ));
@@ -66,10 +63,7 @@ impl Parser {
                             commit_rows.extend(self.record_update(
                                 collection_id,
                                 row,
-                                &record.activity,
-                                &record.term_begin,
-                                &record.term_end,
-                                &record.fields,
+                                &record,
                                 &depends,
                                 &pends,
                             ));
@@ -141,10 +135,7 @@ impl Parser {
 
                         rows.extend(self.record_new(
                             *collection_id,
-                            &record.activity,
-                            &record.term_begin,
-                            &record.term_end,
-                            &record.fields,
+                            record,
                             &Depends::Overwrite(depends),
                             pends,
                         ));
@@ -166,10 +157,7 @@ impl Parser {
                         rows.extend(self.record_update(
                             *collection_id,
                             *row,
-                            &record.activity,
-                            &record.term_begin,
-                            &record.term_end,
-                            &record.fields,
+                            record,
                             &Depends::Overwrite(depends),
                             pends,
                         ));
@@ -184,10 +172,7 @@ impl Parser {
     fn record_new(
         &mut self,
         collection_id: i32,
-        activity: &Activity,
-        term_begin: &Term,
-        term_end: &Term,
-        fields: &Vec<KeyValue>,
+        record: &Record,
         depends: &Depends,
         pends: &Vec<Pend>,
     ) -> Vec<CollectionRow> {
@@ -198,12 +183,7 @@ impl Parser {
                 .write()
                 .unwrap()
                 .collection_mut(collection_id)
-                .map(|v| {
-                    CollectionRow::new(
-                        collection_id,
-                        v.create_row(activity, term_begin, term_end, fields),
-                    )
-                });
+                .map(|v| CollectionRow::new(collection_id, v.create_row(record)));
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
                     for (depend_key, depend_row) in depends {
@@ -224,10 +204,7 @@ impl Parser {
         &mut self,
         collection_id: i32,
         row: u32,
-        activity: &Activity,
-        term_begin: &Term,
-        term_end: &Term,
-        fields: &Vec<KeyValue>,
+        record: &Record,
         depends: &Depends,
         pends: &Vec<Pend>,
     ) -> Vec<CollectionRow> {
@@ -239,7 +216,7 @@ impl Parser {
                 .unwrap()
                 .collection_mut(collection_id)
                 .map(|v| {
-                    v.update_row(row, activity, term_begin, term_end, fields);
+                    v.update_row(row, record);
                     CollectionRow::new(collection_id, row)
                 });
             if let Some(collection_row) = collection_row {

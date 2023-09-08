@@ -24,36 +24,30 @@ impl Parser {
     fn collection_id(&mut self, attributes: &AttributeMap) -> Option<i32> {
         if let Some(Some(collection_name)) = attributes.get(b"collection".as_ref()) {
             let collection_name = collection_name.to_str();
-            self.database
+            if let Some(collection_id) = self
+                .database
                 .clone()
                 .read()
                 .unwrap()
                 .collection_id(collection_name.as_ref())
-                .map_or_else(
-                    || {
-                        (collection_name != "")
-                            .then(|| {
-                                if let Some(Some(value)) =
-                                    attributes.get(b"create_collection_if_not_exists".as_ref())
-                                {
-                                    (value.to_str() == "true").then(|| {
-                                        self.database
-                                            .clone()
-                                            .write()
-                                            .unwrap()
-                                            .collection_id_or_create(collection_name.as_ref())
-                                    })
-                                } else {
-                                    None
-                                }
-                            })
-                            .and_then(|v| v)
-                    },
-                    |collection_id| Some(collection_id),
-                )
-        } else {
-            None
+            {
+                return Some(collection_id);
+            }
+            if collection_name != "" {
+                if let Some(Some(value)) =
+                    attributes.get(b"create_collection_if_not_exists".as_ref())
+                {
+                    return (value.to_str() == "true").then(|| {
+                        self.database
+                            .clone()
+                            .write()
+                            .unwrap()
+                            .collection_id_or_create(collection_name.as_ref())
+                    });
+                }
+            }
         }
+        None
     }
 
     pub(crate) fn search<'a>(
