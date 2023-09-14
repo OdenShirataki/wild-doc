@@ -10,6 +10,7 @@ mod var;
 
 use std::{
     collections::HashMap,
+    ops::Deref,
     sync::{Arc, Mutex, RwLock},
 };
 
@@ -67,7 +68,13 @@ impl Parser {
                     .parse_attibutes(attributes)
                     .get(b"value".as_ref())
                     .and_then(|v| v.as_ref())
-                    .map(|v| v.to_str().into_owned().into_bytes()));
+                    .map(|v| match v.deref() {
+                        WildDocValue::Json(json) => match json {
+                            serde_json::Value::String(s) => s.to_owned().into_bytes(),
+                            _ => json.to_string().into_bytes(),
+                        },
+                        WildDocValue::Binary(v) => v.to_vec(),
+                    }));
             }
             b"global" => {
                 let attributes = self.parse_attibutes(attributes);
@@ -75,7 +82,7 @@ impl Parser {
                     attributes.get(b"var".as_ref()),
                     attributes.get(b"value".as_ref()),
                 ) {
-                    self.register_global(var.to_str().as_ref(), value.value());
+                    self.register_global(&var.to_str(), value.to_json_value().as_ref());
                 }
             }
             b"print_escape_html" => {
@@ -350,9 +357,9 @@ impl Parser {
         for (key, value) in attributes {
             if let Some(value) = value {
                 if key.starts_with(b"wd-tag:name") {
-                    name = value.to_str().to_string();
+                    name = value.to_string();
                 } else if key.starts_with(b"wd-attr:replace") {
-                    let attr = xml_util::quot_unescape(value.to_str().as_bytes());
+                    let attr = xml_util::quot_unescape(value.to_string().as_bytes());
                     if attr.len() > 0 {
                         html_attr.push(b' ');
                         html_attr.extend(attr.as_bytes().to_vec());

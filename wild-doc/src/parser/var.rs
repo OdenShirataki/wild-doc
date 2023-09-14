@@ -1,7 +1,5 @@
 use std::sync::{Arc, RwLock};
 
-use serde_json::Value;
-
 use super::{AttributeMap, Parser};
 
 impl Parser {
@@ -9,15 +7,16 @@ impl Parser {
         if let Some(stack) = self.state.stack().write().unwrap().get(0) {
             if let Some(global) = stack.get(b"global".as_ref()) {
                 if let Ok(mut global) = global.write() {
-                    let mut json: &mut Value = &mut global;
-                    let splited = name.split('.');
-                    for s in splited {
-                        if !json[s].is_object() {
-                            json[s] = serde_json::json!({});
+                    if let Some(mut json) = global.to_json_value_mut() {
+                        let splited = name.split('.');
+                        for s in splited {
+                            if !json[s].is_object() {
+                                json[s] = serde_json::json!({});
+                            }
+                            json = &mut json[s];
                         }
-                        json = &mut json[s];
+                        *json = value.clone();
                     }
-                    *json = value.clone();
                 }
             }
         }

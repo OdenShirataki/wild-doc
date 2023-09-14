@@ -23,19 +23,18 @@ impl Parser {
             attributes.get(b"var".as_ref()),
         ) {
             let search = search.to_str();
-            let var = var.to_str();
-            if search != "" && var != "" {
+            let var = var.as_bytes();
+            if search != "" && var.as_ref() != b"" {
                 let mut json_inner = Map::new();
                 if let Some(search) = search_map.get(search.as_ref()) {
                     let collection_id = search.read().unwrap().collection_id();
                     json_inner.insert("collection_id".to_owned(), json!(collection_id));
                     let orders = make_order(
                         search,
-                        attributes
+                        &attributes
                             .get(b"sort".as_ref())
                             .and_then(|v| v.as_ref())
-                            .map_or("".into(), |v| v.to_str())
-                            .as_ref(),
+                            .map_or_else(|| "".to_owned(), |v| v.to_string()),
                     );
                     let mut session_maybe_has_collection = None;
                     for i in (0..self.sessions.len()).rev() {
@@ -86,8 +85,8 @@ impl Parser {
                     json_inner.insert("len".to_owned(), json!(len));
 
                     json.insert(
-                        var.as_bytes().to_vec(),
-                        Arc::new(RwLock::new(WildDocValue::new(Value::Object(json_inner)))),
+                        var.to_vec(),
+                        Arc::new(RwLock::new(WildDocValue::from(Value::Object(json_inner)))),
                     );
                 }
             }

@@ -17,10 +17,10 @@ impl Parser {
     ) -> &'a [u8] {
         if let Some(Some(name)) = attributes.get(b"name".as_ref()) {
             let name = name.to_str();
-            if name != "" {
+            if name.as_ref() != "" {
                 if let Some(collection_id) = self.collection_id(attributes) {
                     let (last_xml, condition) = self.join_condition_loop(xml);
-                    search_map.insert(name.into_owned(), Join::new(collection_id, condition));
+                    search_map.insert(name.to_string(), Join::new(collection_id, condition));
                     return last_xml;
                 }
             }
@@ -78,7 +78,7 @@ impl Parser {
             key: attributes
                 .get(b"key".as_ref())
                 .and_then(|v| v.as_ref())
-                .map(|v| v.to_str().into_owned()),
+                .map(|v| v.to_string()),
         }
     }
 }

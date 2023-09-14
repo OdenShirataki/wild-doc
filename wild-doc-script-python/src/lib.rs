@@ -8,9 +8,9 @@ use pyo3::{
     types::{PyCapsule, PyDict, PyModule},
     wrap_pyfunction, PyObject, PyResult, Python,
 };
-use wild_doc_script::{VarsStack, WildDocScript, WildDocState};
+use wild_doc_script::{VarsStack, WildDocScript, WildDocState, WildDocValue};
 
-use wild_doc_script::{anyhow::Result, serde_json};
+use wild_doc_script::anyhow::Result;
 
 pub struct WdPy {}
 impl WildDocScript for WdPy {
@@ -39,17 +39,19 @@ impl WildDocScript for WdPy {
         Ok(())
     }
 
-    fn eval(&mut self, code: &[u8]) -> Result<serde_json::Value> {
-        Ok(Python::with_gil(|py| -> PyResult<PyObject> {
-            py.eval(
-                ("(".to_owned() + std::str::from_utf8(code)? + ")").as_str(),
-                None,
-                None,
-            )?
-            .extract()
-        })?
-        .to_string()
-        .into())
+    fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
+        Ok(WildDocValue::from(
+            Python::with_gil(|py| -> PyResult<PyObject> {
+                py.eval(
+                    ("(".to_owned() + std::str::from_utf8(code)? + ")").as_str(),
+                    None,
+                    None,
+                )?
+                .extract()
+            })?
+            .to_string()
+            .into_bytes(),
+        ))
     }
 }
 
@@ -73,7 +75,7 @@ def v(data):
                     "",
                 )?
                 .getattr("v")?
-                .call1((v.read().unwrap().value().to_string(),))?
+                .call1((v.read().unwrap().to_string(),))?
                 .extract();
             }
         }

@@ -1,4 +1,7 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    ops::Deref,
+    sync::{Arc, RwLock},
+};
 
 use anyhow::Result;
 
@@ -31,14 +34,23 @@ impl WildDocScript for Var {
         Ok(())
     }
 
-    fn eval(&mut self, code: &[u8]) -> Result<serde_json::Value> {
+    fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
         let mut value = serde_json::json!("");
 
         let mut splited = code.split(|c| *c == b'.');
         if let Some(root) = splited.next() {
             if let Some(root) = self.search_stack(root) {
-                let next_value = root.read().unwrap();
-                let mut next_value = next_value.value();
+                let next_value = match root.read().unwrap().deref() {
+                    WildDocValue::Json(json) => json.clone(),
+                    WildDocValue::Binary(v) => {
+                        if let Ok(s) = std::str::from_utf8(v) {
+                            serde_json::json!(s)
+                        } else {
+                            serde_json::json!(v)
+                        }
+                    }
+                };
+                let mut next_value = &next_value;
                 while {
                     splited.next().map_or_else(
                         || {
@@ -68,6 +80,6 @@ impl WildDocScript for Var {
                 } {}
             }
         }
-        Ok(value)
+        Ok(WildDocValue::from(value))
     }
 }

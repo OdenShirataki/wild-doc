@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::HashMap,
     sync::{Arc, RwLock},
 };
@@ -14,12 +15,12 @@ impl Parser {
         let mut json = HashMap::new();
 
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
-            let var = var.to_str();
-            if var != "" {
+            let var = var.as_bytes();
+            if var.as_ref() != b"" {
                 let sessions = self.database.read().unwrap().sessions();
                 json.insert(
-                    var.to_string().as_bytes().to_vec(),
-                    Arc::new(RwLock::new(WildDocValue::new(json!(sessions)))),
+                    var.to_vec(),
+                    Arc::new(RwLock::new(WildDocValue::from(json!(sessions)))),
                 );
             }
         }
@@ -43,7 +44,7 @@ impl Parser {
                 let expire = attributes
                     .get(b"expire".as_ref())
                     .and_then(|v| v.as_ref())
-                    .map_or("".into(), |v| v.to_str());
+                    .map_or_else(|| "".into(), |v| v.to_str());
                 let expire = if expire.len() > 0 {
                     expire.parse::<i64>().ok()
                 } else {
@@ -59,8 +60,7 @@ impl Parser {
                     }
                 }
                 if let Some(Some(initialize)) = attributes.get(b"initialize".as_ref()) {
-                    let initialize = initialize.to_str();
-                    if initialize == "true" {
+                    if initialize.to_str() == "true" {
                         self.database
                             .clone()
                             .read()
@@ -81,30 +81,30 @@ impl Parser {
         let mut str_max = attributes
             .get(b"max".as_ref())
             .and_then(|v| v.as_ref())
-            .map_or("".into(), |v| v.to_str());
-        if str_max == "" {
-            str_max = "session_sequence_max".into();
+            .map_or(Cow::Borrowed(b"".as_ref()), |v| v.as_bytes());
+        if str_max.as_ref() == b"" {
+            str_max = Cow::Borrowed(b"session_sequence_max".as_ref());
         }
 
         let mut str_current = attributes
             .get(b"current".as_ref())
             .and_then(|v| v.as_ref())
-            .map_or("".into(), |v| v.to_str());
-        if str_current == "" {
-            str_current = "session_sequence_current".into();
+            .map_or(Cow::Borrowed(b"".as_ref()), |v| v.as_bytes());
+        if str_current.as_ref() == b"" {
+            str_current = Cow::Borrowed(b"session_sequence_current");
         }
 
         let mut json = HashMap::new();
         if let Some(session_state) = self.sessions.last() {
             if let Some(cursor) = session_state.session.sequence_cursor() {
                 json.insert(
-                    str_max.as_bytes().to_vec(),
-                    Arc::new(RwLock::new(WildDocValue::new(json!(cursor.max)))),
+                    str_max.to_vec(),
+                    Arc::new(RwLock::new(WildDocValue::from(json!(cursor.max)))),
                 );
 
                 json.insert(
-                    str_current.as_bytes().to_vec(),
-                    Arc::new(RwLock::new(WildDocValue::new(json!(cursor.current)))),
+                    str_current.to_vec(),
+                    Arc::new(RwLock::new(WildDocValue::from(json!(cursor.current)))),
                 );
             }
         }

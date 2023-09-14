@@ -100,12 +100,12 @@ impl WildDoc {
         let mut json = HashMap::new();
         json.insert(
             b"input".to_vec(),
-            Arc::new(RwLock::new(WildDocValue::new(
+            Arc::new(RwLock::new(WildDocValue::from(
                 serde_json::from_slice(input_json).unwrap_or(serde_json::json!({})),
             ))),
         );
-        let global = Arc::new(RwLock::new(WildDocValue::new(serde_json::json!({}))));
-        json.insert(b"global".to_vec(), global.clone());
+        let global = Arc::new(RwLock::new(WildDocValue::from(serde_json::json!({}))));
+        json.insert(b"global".to_vec(), Arc::clone(&global));
         let stack = Arc::new(RwLock::new(vec![json]));
 
         let state = WildDocState::new(stack.clone(), self.cache_dir.clone(), include_adaptor);
@@ -116,10 +116,9 @@ impl WildDoc {
         let options_json = global
             .read()
             .unwrap()
-            .value()
+            .to_json_value()
             .get("result_options")
             .cloned();
-
         Ok(WildDocResult { body, options_json })
     }
     pub fn run(&mut self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {

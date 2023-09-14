@@ -282,7 +282,7 @@ impl Parser {
                         }
                     }
                     depends.push((
-                        key.to_str().into_owned(),
+                        key.to_string(),
                         if in_session {
                             CollectionRow::new(-collection_id, (-row) as u32)
                         } else {
@@ -315,7 +315,7 @@ impl Parser {
                                 .clone()
                                 .write()
                                 .unwrap()
-                                .collection_id_or_create(collection_name.to_str().as_ref());
+                                .collection_id_or_create(&collection_name.to_str());
 
                             let mut pends = Vec::new();
                             let mut depends = Vec::new();
@@ -340,7 +340,7 @@ impl Parser {
                                                     attributes.get(b"name".as_ref())
                                                 {
                                                     fields.insert(
-                                                        field_name.to_str().into_owned(),
+                                                        field_name.to_string(),
                                                         std::str::from_utf8(inner_xml)?
                                                             .replace("&gt;", ">")
                                                             .replace("&lt;", "<")
@@ -359,7 +359,10 @@ impl Parser {
                                                 if let Some(Some(key)) =
                                                     attributes.get(b"key".as_ref())
                                                 {
-                                                    pends.push(Pend::new(key.to_str(), pends_tmp));
+                                                    pends.push(Pend::new(
+                                                        key.to_string(),
+                                                        pends_tmp,
+                                                    ));
                                                 }
                                             }
                                             _ => {}
@@ -441,7 +444,7 @@ impl Parser {
                                     let str = str.to_str();
                                     if str != "" {
                                         if let Ok(t) = chrono::Local
-                                            .datetime_from_str(str.as_ref(), "%Y-%m-%d %H:%M:%S")
+                                            .datetime_from_str(&str, "%Y-%m-%d %H:%M:%S")
                                             .map(|v| v.timestamp())
                                         {
                                             term_begin = Term::Overwrite(t as u64)
@@ -454,7 +457,7 @@ impl Parser {
                                     let str = str.to_str();
                                     if str != "" {
                                         if let Ok(t) = chrono::Local
-                                            .datetime_from_str(str.as_ref(), "%Y-%m-%d %H:%M:%S")
+                                            .datetime_from_str(&str, "%Y-%m-%d %H:%M:%S")
                                             .map(|v| v.timestamp())
                                         {
                                             term_end = Term::Overwrite(t as u64)

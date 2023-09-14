@@ -23,13 +23,13 @@ use super::{AttributeMap, Parser};
 impl Parser {
     fn collection_id(&mut self, attributes: &AttributeMap) -> Option<i32> {
         if let Some(Some(collection_name)) = attributes.get(b"collection".as_ref()) {
-            let collection_name = collection_name.to_str();
+            let collection_name = collection_name.to_string();
             if let Some(collection_id) = self
                 .database
                 .clone()
                 .read()
                 .unwrap()
-                .collection_id(collection_name.as_ref())
+                .collection_id(&collection_name)
             {
                 return Some(collection_id);
             }
@@ -42,7 +42,7 @@ impl Parser {
                             .clone()
                             .write()
                             .unwrap()
-                            .collection_id_or_create(collection_name.as_ref())
+                            .collection_id_or_create(&collection_name)
                     });
                 }
             }
@@ -80,15 +80,16 @@ impl Parser {
         let (last_xml, mut conditions, join) = self.condition_loop(xml);
 
         if let Some(Some(activity)) = attributes.get(b"activity".as_ref()) {
-            let activity = activity.to_str();
-            conditions.push(Condition::Activity(if activity == "inactive" {
-                Activity::Inactive
-            } else {
-                Activity::Active
-            }));
+            conditions.push(Condition::Activity(
+                if activity.as_bytes().as_ref() == b"inactive" {
+                    Activity::Inactive
+                } else {
+                    Activity::Active
+                },
+            ));
         }
         if let Some(Some(term)) = attributes.get(b"term".as_ref()) {
-            let term = term.to_str();
+            let term = term.to_string();
             if term != "all" {
                 let term: Vec<&str> = term.split('@').collect();
                 conditions.push(Condition::Term(if term.len() == 2 {
@@ -210,8 +211,8 @@ impl Parser {
             attributes.get(b"row".as_ref()),
             attributes.get(b"collection".as_ref()),
         ) {
-            let row = row.to_str();
-            let collection_name = collection_name.to_str();
+            let row = row.to_string();
+            let collection_name = collection_name.to_string();
             if row != "" && collection_name != "" {
                 if let (Ok(row), Some(collection_id)) = (
                     row.parse::<i64>(),
@@ -225,7 +226,7 @@ impl Parser {
                         attributes
                             .get(b"key".as_ref())
                             .and_then(|v| v.as_ref())
-                            .map(|v| v.to_str().into_owned()),
+                            .map(|v| v.to_string()),
                         if row < 0 {
                             CollectionRow::new(-collection_id, (-row) as u32)
                         } else {
@@ -242,26 +243,26 @@ impl Parser {
             attributes.get(b"method".as_ref()),
             attributes.get(b"value".as_ref()),
         ) {
-            let value = value.to_str();
+            let value = value.to_string();
             if value != "" {
-                match method.to_str().as_ref() {
-                    "in" => {
+                match method.as_bytes().as_ref() {
+                    b"in" => {
                         let v: Vec<_> = value.split(',').flat_map(|s| s.parse::<isize>()).collect();
                         if v.len() > 0 {
                             return Some(Condition::Row(search::Number::In(v)));
                         }
                     }
-                    "min" => {
+                    b"min" => {
                         if let Ok(v) = value.parse::<isize>() {
                             return Some(Condition::Row(search::Number::Min(v)));
                         }
                     }
-                    "max" => {
+                    b"max" => {
                         if let Ok(v) = value.parse::<isize>() {
                             return Some(Condition::Row(search::Number::Max(v)));
                         }
                     }
-                    "range" => {
+                    b"range" => {
                         let s: Vec<&str> = value.split("..").collect();
                         if s.len() == 2 {
                             if let (Ok(min), Ok(max)) = (s[0].parse::<u32>(), s[1].parse::<u32>()) {
@@ -281,7 +282,7 @@ impl Parser {
 
     fn condition_uuid(attributes: &AttributeMap) -> Option<Condition> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
-            let value = value.to_str();
+            let value = value.to_string();
             (value != "")
                 .then(|| {
                     let v: Vec<_> = value
@@ -302,23 +303,32 @@ impl Parser {
             attributes.get(b"method".as_ref()),
             attributes.get(b"value".as_ref()),
         ) {
-            let name = name.to_str();
-            let method = method.to_str();
-            let value = value.to_str();
-            (name != "" && method != "" && value != "")
+            let name = name.as_bytes();
+            let method = method.to_string();
+            let value = value.as_bytes();
+            (name.as_ref() != b"" && method != "" && value.as_ref() != b"")
                 .then(|| {
                     let method_pair: Vec<&str> = method.split('!').collect();
                     let len = method_pair.len();
                     let i = len - 1;
                     match method_pair[i] {
-                        "match" => Some(search::Field::Match(value.as_bytes().to_vec())),
-                        "min" => Some(search::Field::Min(value.as_bytes().to_vec())),
-                        "max" => Some(search::Field::Max(value.as_bytes().to_vec())),
-                        "partial" => Some(search::Field::Partial(Arc::new(value.to_string()))),
-                        "forward" => Some(search::Field::Forward(Arc::new(value.to_string()))),
-                        "backward" => Some(search::Field::Backward(Arc::new(value.to_string()))),
+                        "match" => Some(search::Field::Match(value.to_vec())),
+                        "min" => Some(search::Field::Min(value.to_vec())),
+                        "max" => Some(search::Field::Max(value.to_vec())),
+                        "partial" => Some(search::Field::Partial(Arc::new(
+                            unsafe { std::str::from_utf8_unchecked(value.as_ref()) }.to_string(),
+                        ))),
+                        "forward" => Some(search::Field::Forward(Arc::new(
+                            unsafe { std::str::from_utf8_unchecked(value.as_ref()) }.to_string(),
+                        ))),
+                        "backward" => Some(search::Field::Backward(Arc::new(
+                            unsafe { std::str::from_utf8_unchecked(value.as_ref()) }.to_string(),
+                        ))),
                         "range" => {
-                            let s: Vec<&str> = value.split("..").collect();
+                            let s: Vec<&str> =
+                                unsafe { std::str::from_utf8_unchecked(value.as_ref()) }
+                                    .split("..")
+                                    .collect();
                             (s.len() == 2).then(|| {
                                 search::Field::Range(
                                     s[0].as_bytes().to_vec(),
@@ -326,18 +336,23 @@ impl Parser {
                                 )
                             })
                         }
-                        "value_forward" => {
-                            Some(search::Field::ValueForward(Arc::new(value.to_string())))
-                        }
-                        "value_backward" => {
-                            Some(search::Field::ValueBackward(Arc::new(value.to_string())))
-                        }
-                        "value_partial" => {
-                            Some(search::Field::ValuePartial(Arc::new(value.to_string())))
-                        }
+                        "value_forward" => Some(search::Field::ValueForward(Arc::new(
+                            unsafe { std::str::from_utf8_unchecked(value.as_ref()) }.to_string(),
+                        ))),
+                        "value_backward" => Some(search::Field::ValueBackward(Arc::new(
+                            unsafe { std::str::from_utf8_unchecked(value.as_ref()) }.to_string(),
+                        ))),
+                        "value_partial" => Some(search::Field::ValuePartial(Arc::new(
+                            unsafe { std::str::from_utf8_unchecked(value.as_ref()) }.to_string(),
+                        ))),
                         _ => None,
                     }
-                    .map(|method| Condition::Field(name.to_string(), method))
+                    .map(|method| {
+                        Condition::Field(
+                            unsafe { std::str::from_utf8_unchecked(name.as_ref()) }.to_string(),
+                            method,
+                        )
+                    })
                 })
                 .and_then(|v| v)
         } else {

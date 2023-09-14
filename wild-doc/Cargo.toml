@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.88.5"
+version = "0.89.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -30,14 +30,14 @@ chrono = "0.4"
 
 semilattice-database-session = { version = "0.21", path = "../../semilattice-database/semilattice-database-session" }
 
-wild-doc-script = { version = "0.2", path = "../wild-doc-script" }
+wild-doc-script = { version = "0.3", path = "../wild-doc-script" }
 
 [dependencies.wild-doc-script-deno]
-version = "0.2"
+version = "0.3"
 path = "../wild-doc-script-deno"
 optional = true
 
 [dependencies.wild-doc-script-python]
-version = "0.1"
+version = "0.2"
 path = "../wild-doc-script-python"
 optional = true
