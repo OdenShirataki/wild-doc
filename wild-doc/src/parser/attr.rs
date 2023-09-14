@@ -17,7 +17,7 @@ impl Parser {
                 if new_name == b"wd-attr:replace" {
                     if let Some(value) = new_value {
                         r.push(b' ');
-                        r.extend(value.to_str().as_bytes().to_vec());
+                        r.extend(value.to_string().into_bytes());
                     }
                 } else {
                     r.push(b' ');
@@ -25,7 +25,7 @@ impl Parser {
                     if let Some(value) = new_value {
                         Self::output_attribute_value(
                             r,
-                            xml_util::escape_html(&value.to_str()).as_bytes(),
+                            xml_util::escape_html(&value.to_string()).as_bytes(),
                         );
                     } else {
                         Self::output_attribute_value(r, value.as_bytes());
@@ -49,12 +49,7 @@ impl Parser {
                     } else {
                         r.insert(attr.name().to_vec(), {
                             let value = xml_util::quot_unescape(value.as_bytes());
-                            Some(Arc::new(WildDocValue::new(
-                                serde_json::from_str(value.as_str()).map_or_else(
-                                    |_| serde_json::json!(value.as_str()),
-                                    |json_value| json_value,
-                                ),
-                            )))
+                            Some(Arc::new(WildDocValue::from(value.into_bytes())))
                         });
                     }
                 } else {
@@ -72,7 +67,6 @@ impl Parser {
                 .unwrap()
                 .eval(xml_util::quot_unescape(value).as_bytes())
                 .ok()
-                .map(|v| WildDocValue::new(v))
         })
     }
     fn output_attribute_value(r: &mut Vec<u8>, val: &[u8]) {

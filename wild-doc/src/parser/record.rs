@@ -18,11 +18,11 @@ impl Parser {
             attributes.get(b"row".as_ref()),
             attributes.get(b"var".as_ref()),
         ) {
-            let var = var.to_str();
-            if var != "" {
+            let var = var.as_bytes();
+            if var.as_ref() != b"" {
                 let database = self.database.read().unwrap();
                 let mut json_inner = Map::new();
-                if let Some(collection_id) = database.collection_id(&collection.to_str()) {
+                if let Some(collection_id) = database.collection_id(&collection.to_string()) {
                     let mut session_maybe_has_collection = None;
                     for i in (0..self.sessions.len()).rev() {
                         if let Some(temporary_collection) =
@@ -32,7 +32,9 @@ impl Parser {
                             break;
                         }
                     }
-                    if let Some(row) = row.value().as_i64() {
+
+                    if let Ok(row) = row.to_string().parse::<i64>() {
+                        json_inner.insert("row".to_owned(), json!(row));
                         if let Some(temporary_collection) = session_maybe_has_collection {
                             if let Some(entity) = temporary_collection.get(&row) {
                                 json_inner.insert(
@@ -67,7 +69,7 @@ impl Parser {
                                 for (field_name, value) in entity.fields() {
                                     json_field.insert(
                                         field_name.as_str().to_owned(),
-                                        json!(unsafe { std::str::from_utf8_unchecked(value) }),
+                                        serde_json::from_slice(value).unwrap_or_default(),
                                     );
                                 }
                                 json_inner.insert("field".to_owned(), Value::Object(json_field));
@@ -138,11 +140,10 @@ impl Parser {
                                     for field_name in &collection.field_names() {
                                         json_field.insert(
                                             field_name.as_str().to_owned(),
-                                            json!(unsafe {
-                                                std::str::from_utf8_unchecked(
-                                                    collection.field_bytes(row, field_name),
-                                                )
-                                            }),
+                                            serde_json::from_slice(
+                                                collection.field_bytes(row, field_name),
+                                            )
+                                            .unwrap_or_default(),
                                         );
                                     }
                                     json_inner
@@ -153,8 +154,8 @@ impl Parser {
                     }
                 }
                 json.insert(
-                    var.as_bytes().to_vec(),
-                    Arc::new(RwLock::new(WildDocValue::new(Value::Object(json_inner)))),
+                    var.to_vec(),
+                    Arc::new(RwLock::new(WildDocValue::from(Value::Object(json_inner)))),
                 );
             }
         }
