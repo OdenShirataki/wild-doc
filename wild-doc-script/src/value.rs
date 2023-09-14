@@ -55,13 +55,19 @@ impl WildDocValue {
     }
     pub fn as_bytes(&self) -> Cow<[u8]> {
         match self {
-            Self::Json(json) => Cow::Owned(json.to_string().into_bytes()),
+            Self::Json(json) => match json {
+                serde_json::Value::String(s) => Cow::Borrowed(s.as_bytes()),
+                _ => Cow::Owned(json.to_string().into_bytes()),
+            },
             Self::Binary(value) => Cow::Borrowed(value),
         }
     }
     pub fn to_str(&self) -> Cow<str> {
         match self {
-            Self::Json(json) => Cow::Owned(json.to_string()),
+            Self::Json(json) => match json {
+                serde_json::Value::String(s) => Cow::Borrowed(s),
+                _ => Cow::Owned(json.to_string()),
+            },
             Self::Binary(value) => Cow::Borrowed(unsafe { std::str::from_utf8_unchecked(value) }),
         }
     }
