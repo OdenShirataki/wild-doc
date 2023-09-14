@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use base64::engine::general_purpose;
 use chrono::TimeZone;
 use maybe_xml::{
     scanner::{Scanner, State},
@@ -7,7 +8,11 @@ use maybe_xml::{
 use semilattice_database_session::{
     Activity, CollectionRow, Depends, KeyValue, Pend, Record, SessionRecord, Term,
 };
-use std::{collections::HashMap, error, fmt};
+use std::{
+    collections::HashMap,
+    error, fmt,
+    io::{Cursor, Read},
+};
 
 use crate::xml_util;
 
@@ -339,15 +344,29 @@ impl Parser {
                                                 if let Some(Some(field_name)) =
                                                     attributes.get(b"name".as_ref())
                                                 {
-                                                    fields.insert(
-                                                        field_name.to_string(),
-                                                        std::str::from_utf8(inner_xml)?
-                                                            .replace("&gt;", ">")
-                                                            .replace("&lt;", "<")
-                                                            .replace("&#039;", "'")
-                                                            .replace("&quot;", "\"")
-                                                            .replace("&amp;", "&"),
-                                                    );
+                                                    let mut value = std::str::from_utf8(inner_xml)?
+                                                        .replace("&gt;", ">")
+                                                        .replace("&lt;", "<")
+                                                        .replace("&#039;", "'")
+                                                        .replace("&quot;", "\"")
+                                                        .replace("&amp;", "&")
+                                                        .into_bytes();
+                                                    if let Some(Some(base64_decode)) =
+                                                        attributes.get(b"base64".as_ref())
+                                                    {
+                                                        if base64_decode.to_str() == "true" {
+                                                            let mut c = Cursor::new(&value);
+                                                            let mut decoder =
+                                                                base64::read::DecoderReader::new(
+                                                                    &mut c,
+                                                                    &general_purpose::STANDARD,
+                                                                );
+                                                            let mut r = Vec::new();
+                                                            decoder.read_to_end(&mut r).unwrap();
+                                                            value = r;
+                                                        }
+                                                    }
+                                                    fields.insert(field_name.to_string(), value);
                                                 }
                                             }
                                             b"pends" => {
@@ -470,7 +489,7 @@ impl Parser {
                                     term_end,
                                     fields: fields
                                         .iter()
-                                        .map(|(key, value)| KeyValue::new(key, value.as_bytes()))
+                                        .map(|(key, value)| KeyValue::new(key, value.to_vec()))
                                         .collect(),
                                 };
                                 updates.push(if row == 0 {

@@ -69,7 +69,11 @@ impl Parser {
                                 for (field_name, value) in entity.fields() {
                                     json_field.insert(
                                         field_name.as_str().to_owned(),
-                                        serde_json::from_slice(value).unwrap_or_default(),
+                                        if let Ok(str) = std::str::from_utf8(value) {
+                                            serde_json::json!(str)
+                                        } else {
+                                            serde_json::from_slice(value).unwrap_or_default()
+                                        },
                                     );
                                 }
                                 json_inner.insert("field".to_owned(), Value::Object(json_field));
@@ -137,13 +141,16 @@ impl Parser {
                                         .insert("depends".to_owned(), Value::Object(json_depends));
 
                                     let mut json_field = Map::new();
-                                    for field_name in &collection.field_names() {
+                                    for field_name in collection.field_names() {
+                                        let bytes = collection.field_bytes(row, field_name);
+
                                         json_field.insert(
                                             field_name.as_str().to_owned(),
-                                            serde_json::from_slice(
-                                                collection.field_bytes(row, field_name),
-                                            )
-                                            .unwrap_or_default(),
+                                            if let Ok(str) = std::str::from_utf8(bytes) {
+                                                serde_json::json!(str)
+                                            } else {
+                                                serde_json::from_slice(bytes).unwrap_or_default()
+                                            },
                                         );
                                     }
                                     json_inner

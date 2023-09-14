@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.89.0"
+version = "0.89.1"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -27,6 +27,7 @@ toml.workspace = true
 anyhow = "1.0"
 maybe_xml = "0.3"
 chrono = "0.4"
+base64 = "0.21.4"
 
 semilattice-database-session = { version = "0.21", path = "../../semilattice-database/semilattice-database-session" }
 
