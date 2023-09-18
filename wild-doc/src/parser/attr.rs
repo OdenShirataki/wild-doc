@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
+use bson::Bson;
 use maybe_xml::token::prop::Attributes;
-use wild_doc_script::WildDocValue;
 
 use crate::xml_util;
 
@@ -17,7 +17,14 @@ impl Parser {
                 if new_name == b"wd-attr:replace" {
                     if let Some(value) = new_value {
                         r.push(b' ');
-                        r.extend(value.to_string().into_bytes());
+                        r.extend(
+                            if let Some(value) = value.as_str() {
+                                value.to_owned()
+                            } else {
+                                value.to_string()
+                            }
+                            .into_bytes(),
+                        );
                     }
                 } else {
                     r.push(b' ');
@@ -25,7 +32,12 @@ impl Parser {
                     if let Some(value) = new_value {
                         Self::output_attribute_value(
                             r,
-                            xml_util::escape_html(&value.to_string()).as_bytes(),
+                            xml_util::escape_html(&if let Some(value) = value.as_str() {
+                                value.to_owned()
+                            } else {
+                                value.to_string()
+                            })
+                            .as_bytes(),
                         );
                     } else {
                         Self::output_attribute_value(r, value.as_bytes());
@@ -49,7 +61,11 @@ impl Parser {
                     } else {
                         r.insert(attr.name().to_vec(), {
                             let value = xml_util::quot_unescape(value.as_bytes());
-                            Some(Arc::new(WildDocValue::from(value.into_bytes())))
+                            Some(Arc::new(match value.as_str() {
+                                "true" => Bson::from(true),
+                                "false" => Bson::from(false),
+                                _ => Bson::from(value),
+                            }))
                         });
                     }
                 } else {
@@ -60,7 +76,7 @@ impl Parser {
         r
     }
 
-    fn attribute_script<'a>(&mut self, script: &str, value: &[u8]) -> Option<WildDocValue> {
+    fn attribute_script(&mut self, script: &str, value: &[u8]) -> Option<Bson> {
         self.scripts.get(script).and_then(|script| {
             script
                 .lock()
@@ -80,7 +96,7 @@ impl Parser {
         &'a mut self,
         name: &'a [u8],
         value: &[u8],
-    ) -> (&[u8], Option<WildDocValue>) {
+    ) -> (&[u8], Option<Bson>) {
         for key in self.scripts.keys() {
             if name.ends_with((":".to_owned() + key.as_str()).as_bytes()) {
                 return (

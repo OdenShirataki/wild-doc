@@ -125,8 +125,8 @@ fn handler(mut stream: TcpStream, wd: Arc<Mutex<WildDoc>>) -> Result<()> {
                 writer.write_all(&[0])?;
                 writer.write_all(&len.to_be_bytes())?;
                 writer.write_all(body)?;
-                if let Some(json) = r.options_json() {
-                    writer.write_all(json.to_string().as_bytes())?;
+                if let Some(bson) = r.options_bson() {
+                    writer.write_all(bson.to_string().as_bytes())?;
                 } else {
                     writer.write_all(b"")?;
                 }

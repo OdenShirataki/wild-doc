@@ -16,6 +16,7 @@ use std::{
 
 use anyhow::Result;
 
+use bson::Bson;
 use maybe_xml::{
     scanner::{Scanner, State},
     token::{
@@ -24,11 +25,11 @@ use maybe_xml::{
     },
 };
 use semilattice_database_session::{Session, SessionDatabase};
-use wild_doc_script::{WildDocScript, WildDocState, WildDocValue};
+use wild_doc_script::{WildDocScript, WildDocState};
 
 use crate::xml_util;
 
-type AttributeMap = HashMap<Vec<u8>, Option<Arc<WildDocValue>>>;
+type AttributeMap = HashMap<Vec<u8>, Option<Arc<Bson>>>;
 
 struct SessionState {
     session: Session,
@@ -69,11 +70,9 @@ impl Parser {
                     .get(b"value".as_ref())
                     .and_then(|v| v.as_ref())
                     .map(|v| match v.deref() {
-                        WildDocValue::Json(json) => match json {
-                            serde_json::Value::String(s) => s.to_owned().into_bytes(),
-                            _ => json.to_string().into_bytes(),
-                        },
-                        WildDocValue::Binary(v) => v.to_vec(),
+                        Bson::Binary(v) => v.as_raw_binary().bytes.to_vec(),
+                        Bson::String(v) => v.to_owned().into_bytes(),
+                        _ => v.to_string().into_bytes(),
                     }));
             }
             b"global" => {
@@ -82,7 +81,9 @@ impl Parser {
                     attributes.get(b"var".as_ref()),
                     attributes.get(b"value".as_ref()),
                 ) {
-                    self.register_global(&var.to_str(), value.to_json_value().as_ref());
+                    if let Some(var) = var.as_str() {
+                        self.register_global(var, value);
+                    }
                 }
             }
             b"print_escape_html" => {
@@ -90,7 +91,7 @@ impl Parser {
                     .parse_attibutes(attributes)
                     .get(b"value".as_ref())
                     .and_then(|v| v.as_ref())
-                    .map(|v| xml_util::escape_html(&v.to_str()).into_bytes()));
+                    .map(|v| xml_util::escape_html(v.as_str().map_or("", |v| v)).into_bytes()));
             }
             b"include" => {
                 let attributes = self.parse_attibutes(attributes);
@@ -357,9 +358,20 @@ impl Parser {
         for (key, value) in attributes {
             if let Some(value) = value {
                 if key.starts_with(b"wd-tag:name") {
-                    name = value.to_string();
+                    name = if let Some(value) = value.as_str() {
+                        value.to_owned()
+                    } else {
+                        value.to_string()
+                    };
                 } else if key.starts_with(b"wd-attr:replace") {
-                    let attr = xml_util::quot_unescape(value.to_string().as_bytes());
+                    let attr = xml_util::quot_unescape(
+                        if let Some(value) = value.as_str() {
+                            value.to_owned()
+                        } else {
+                            value.to_string()
+                        }
+                        .as_bytes(),
+                    );
                     if attr.len() > 0 {
                         html_attr.push(b' ');
                         html_attr.extend(attr.as_bytes().to_vec());
@@ -371,7 +383,8 @@ impl Parser {
                     html_attr.push(b'"');
                     html_attr.extend(
                         value
-                            .to_str()
+                            .as_str()
+                            .map_or("", |v| v)
                             .replace("&", "&amp;")
                             .replace("<", "&lt;")
                             .replace(">", "&gt;")

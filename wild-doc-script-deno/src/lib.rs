@@ -6,14 +6,15 @@ use std::{
     sync::{Mutex, RwLock},
 };
 
+use bson::Bson;
 use deno_runtime::{
-    deno_core::{self, anyhow::Result, serde_json, serde_v8, ModuleSpecifier},
+    deno_core::{self, anyhow::Result, serde_v8, ModuleSpecifier},
     deno_napi::v8::{self, NewStringType, PropertyAttribute},
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
 };
 
-use wild_doc_script::{IncludeAdaptor, VarsStack, WildDocScript, WildDocState, WildDocValue};
+use wild_doc_script::{IncludeAdaptor, VarsStack, WildDocScript, WildDocState};
 
 use module_loader::WdModuleLoader;
 
@@ -100,23 +101,11 @@ impl WildDocScript for Deno {
                             .to_string(scope)
                             .unwrap()
                             .to_rust_string_lossy(scope);
+
                         for stack in stack.read().unwrap().iter().rev() {
                             if let Some(v) = stack.get(key.as_bytes()) {
-                                match v.read().unwrap().deref() {
-                                    WildDocValue::Json(json) => {
-                                        if let Ok(r) = serde_v8::to_v8(scope, json) {
-                                            retval.set(r.into());
-                                        }
-                                    }
-                                    WildDocValue::Binary(v) => {
-                                        if let Ok(r) = if let Ok(str) = std::str::from_utf8(v) {
-                                            serde_v8::to_v8(scope, str)
-                                        } else {
-                                            serde_v8::to_v8(scope, v)
-                                        } {
-                                            retval.set(r.into());
-                                        }
-                                    }
+                                if let Ok(r) = serde_v8::to_v8(scope, v) {
+                                    retval.set(r.into());
                                 }
                                 break;
                             }
@@ -198,7 +187,7 @@ impl WildDocScript for Deno {
             self.run_event_loop(false).await
         })
     }
-    fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
+    fn eval(&mut self, code: &[u8]) -> Result<Bson> {
         let code = "(".to_owned() + std::str::from_utf8(code)? + ")";
         let scope = &mut self.js_runtime.handle_scope();
 
@@ -207,28 +196,10 @@ impl WildDocScript for Deno {
                 .and_then(|code| v8::Script::compile(scope, code, None))
                 .and_then(|v| v.run(scope))
         {
-            if v.is_array_buffer_view() {
-                if let Ok(a) = v8::Local::<v8::ArrayBufferView>::try_from(v) {
-                    if let Some(b) = a.buffer(scope) {
-                        if let Some(d) = b.data() {
-                            return Ok(WildDocValue::from(
-                                unsafe {
-                                    std::slice::from_raw_parts::<u8>(
-                                        d.as_ptr() as *const u8,
-                                        b.byte_length(),
-                                    )
-                                }
-                                .to_vec(),
-                            ));
-                        }
-                    }
-                }
-            } else {
-                if let Ok(serv) = serde_v8::from_v8::<serde_json::Value>(scope, v) {
-                    return Ok(WildDocValue::from(serv));
-                }
+            if let Ok(serv) = serde_v8::from_v8::<Bson>(scope, v) {
+                return Ok(serv);
             }
         }
-        Ok(WildDocValue::from(vec![]))
+        Ok(Bson::Null)
     }
 }

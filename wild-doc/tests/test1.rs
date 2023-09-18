@@ -26,7 +26,7 @@ fn test1() {
     var="aa" key="key" in:js="(()=>{return {a:1,b:2,c:3};})()"
 ><wd:print value:var="key" /> : <wd:print value:var="aa" />
 </wd:for><wd:session name="logintest">
-    <wd:update commit="0">
+    <wd:update commit="false">
         <collection name="login">
             <field name="test">hoge</field>
             <depend key="account" collection="account" row="1" />
@@ -37,17 +37,19 @@ fn test1() {
     ></wd:search><wd:result
         search="login"
         var="login"
-    ><wd:for var="row" in:var="login.rows">
+    ><wd:print value:js="wd.v('login').rows.length" /><wd:for
+        var="row" in:var="login.rows"
+    ><wd:record var="row" collection="login" row:var="row.row">
         <wd:print value:var="row.row" /> : <wd:print value:var="row.uuid" /> : <wd:print value:var="row.field.test" /> : <wd:print value:var="row.depends.account" />
         <wd:search
             name="account" collection="account"
         ><row in:var="row.depends.account.row"></wd:search><wd:result
             search="account"
             var="account"
-        ><wd:for var="a" in:var="account.rows">
+        ><wd:for var="a" in:var="account.rows"><wd:record var="a" collection="account" row:var="a.row">
             dep:<wd:print value:var="a.field.id" />@<wd:print value:var="a.field.password" />
-        </wd:result></wd:for>
-    </wd:for></wd:result>
+        </wd:result></wd:record></wd:for>
+    </wd:record></wd:for></wd:result>
 </wd:session>"#
         ,b""
     ).unwrap();
@@ -110,15 +112,16 @@ fn test1() {
     //select data.
     let r=wd.run(br#"
     <wd:search name="p" collection="person">
-    </wd:search>
-    <wd:result search="p" var="p">
+    </wd:search><wd:result search="p" var="p">
         <div>
             find <wd:print value:var="p.len" /> persons.
         </div>
         <ul>
-            <wd:for var="person" in:var="p.rows"><li>
+            <wd:for
+                var="person" in:var="p.rows"
+            ><wd:record var="person" collection="person" row:var="person.row"><li>
                 <wd:print value:var="person.row" /> : <wd:print value:var="person.activity" /> : <wd:print value:var="person.uuid" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
-            </li></wd:for>
+            </li></wd:record></wd:for>
         </ul>
     </wd:result>
     <input type="text" name="hoge" />
@@ -130,15 +133,16 @@ fn test1() {
     let r=wd.run(br#"
         <wd:search name="p" collection="person">
             <field name="country" method="match" value="US" />
-        </wd:search>
-        <wd:result var="p" search="p">
+        </wd:search><wd:result var="p" search="p">
             <div>
                 find <wd:print value:var="p.len" /> persons from the US.
             </div>
             <ul>
-                <wd:for var="person" in:var="p.rows"><li>
-                    <wd:print value:var="person.row /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
-                </li></wd:for>
+                <wd:for
+                    var="person" in:var="p.rows"
+                ><wd:record var="person" collection="person" row:var="person.row"><li>
+                    <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
+                </li></wd:record></wd:for>
             </ul>
         </wd:result>
     "#,b"").unwrap();
@@ -173,16 +177,18 @@ fn test1() {
                 find <wd:print value:var="p.len" /> persons from the <wd:print value:js="wd.general.uk" />.
             </div>
             <ul>
-                <wd:for var="person" in:var="p.rows"><li>
+                <wd:for
+                    var="person" in:var="p.rows"
+                ><wd:record var="person" collection="person" row:var="person.row"><li>
                     <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
-                </li></wd:for>
+                </li></wd:record></wd:for>
             </ul>
         </wd:result>
     "#,b"").unwrap();
     println!(
         "{} : {:#?}",
         std::str::from_utf8(r.body()).unwrap(),
-        r.options_json()
+        r.options_bson()
     );
 
     //search in update section.
@@ -192,12 +198,12 @@ fn test1() {
                 name="person"
                 collection="person"
             ></wd:search><wd:result var="p" search="person">
-                <wd:for var="person" in:var="p.rows">
+                <wd:for var="person" in:var="p.rows"><wd:record var="person" collection="person" row:var="person.row">
                     <collection name="person" row:var="person.row">
                         <field name="name">Renamed <wd:print value:var="person.field.name" /></field>
                         <field name="country"><wd:print value:var="person.field.country" /></field>
                     </collection>
-                </wd:for>
+                </wd:record></wd:for>
             </wd:result>
         </wd:update>
     </wd:session>"#,b"").unwrap();
@@ -209,9 +215,9 @@ fn test1() {
                 find <wd:print value:var="p.len" /> persons.
             </div>
             <ul>
-                <wd:for var="person" in:var="p.rows"><li>
+                <wd:for var="person" in:var="p.rows"><wd:record var="person" collection="person" row:var="person.row"><li>
                     <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
-                </li>/wd:for>
+                </li></wd:record></wd:for>
             </ul>
         </wd:result>
     "#,b"").unwrap();
@@ -233,7 +239,7 @@ fn test1() {
             wd.general.result_options.test2=crypto.randomUUID();
         ?>
         a:<wd:print value:js="wd.general.a" />
-        input:<wd:print value:js="wd.input.name" />
+        input:<wd:print value:js="wd.v('input').name" />
         <?js
             wd.general.a="OK2";
             wd.general.b=1>2;
@@ -250,6 +256,6 @@ fn test1() {
     println!(
         "{} : {:#?}",
         std::str::from_utf8(r.body()).unwrap(),
-        r.options_json()
+        r.options_bson()
     );
 }

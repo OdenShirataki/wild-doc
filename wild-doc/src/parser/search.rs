@@ -6,6 +6,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use bson::Bson;
 use chrono::TimeZone;
 use maybe_xml::{
     scanner::{Scanner, State},
@@ -23,27 +24,30 @@ use super::{AttributeMap, Parser};
 impl Parser {
     fn collection_id(&mut self, attributes: &AttributeMap) -> Option<i32> {
         if let Some(Some(collection_name)) = attributes.get(b"collection".as_ref()) {
-            let collection_name = collection_name.to_string();
-            if let Some(collection_id) = self
-                .database
-                .clone()
-                .read()
-                .unwrap()
-                .collection_id(&collection_name)
-            {
-                return Some(collection_id);
-            }
-            if collection_name != "" {
-                if let Some(Some(value)) =
-                    attributes.get(b"create_collection_if_not_exists".as_ref())
+            if let Some(collection_name) = collection_name.as_str() {
+                if let Some(collection_id) = self
+                    .database
+                    .clone()
+                    .read()
+                    .unwrap()
+                    .collection_id(collection_name)
                 {
-                    return (value.to_str() == "true").then(|| {
-                        self.database
-                            .clone()
-                            .write()
-                            .unwrap()
-                            .collection_id_or_create(&collection_name)
-                    });
+                    return Some(collection_id);
+                }
+                if collection_name != "" {
+                    if let Some(Some(value)) =
+                        attributes.get(b"create_collection_if_not_exists".as_ref())
+                    {
+                        if let Some(value) = value.as_bool() {
+                            return value.then(|| {
+                                self.database
+                                    .clone()
+                                    .write()
+                                    .unwrap()
+                                    .collection_id_or_create(&collection_name)
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -57,15 +61,14 @@ impl Parser {
         search_map: &mut HashMap<String, Arc<RwLock<Search>>>,
     ) -> &'a [u8] {
         if let Some(Some(name)) = attributes.get(b"name".as_ref()) {
-            let name = name.to_str();
-            if name != "" {
-                if let Some(collection_id) = self.collection_id(attributes) {
-                    let (last_xml, condition, join) = self.make_conditions(attributes, xml);
-                    search_map.insert(
-                        name.into_owned(),
-                        Arc::new(RwLock::new(Search::new(collection_id, condition, join))),
-                    );
-                    return last_xml;
+            if let Some(name) = name.as_str() {
+                if name != "" {
+                    if let Some(collection_id) = self.collection_id(attributes) {
+                        let (last_xml, condition, join) = self.make_conditions(attributes, xml);
+                        let search = Search::new(collection_id, condition, join);
+                        search_map.insert(name.to_owned(), Arc::new(RwLock::new(search)));
+                        return last_xml;
+                    }
                 }
             }
         }
@@ -80,33 +83,34 @@ impl Parser {
         let (last_xml, mut conditions, join) = self.condition_loop(xml);
 
         if let Some(Some(activity)) = attributes.get(b"activity".as_ref()) {
-            conditions.push(Condition::Activity(
-                if activity.as_bytes().as_ref() == b"inactive" {
+            if let Some(activity) = activity.as_str() {
+                conditions.push(Condition::Activity(if activity == "inactive" {
                     Activity::Inactive
                 } else {
                     Activity::Active
-                },
-            ));
+                }));
+            }
         }
         if let Some(Some(term)) = attributes.get(b"term".as_ref()) {
-            let term = term.to_string();
-            if term != "all" {
-                let term: Vec<&str> = term.split('@').collect();
-                conditions.push(Condition::Term(if term.len() == 2 {
-                    chrono::Local
-                        .datetime_from_str(term[1], "%Y-%m-%d %H:%M:%S")
-                        .map_or_else(
-                            |_| search::Term::default(),
-                            |t| match term[0] {
-                                "in" => search::Term::In(t.timestamp() as u64),
-                                "future" => search::Term::Future(t.timestamp() as u64),
-                                "past" => search::Term::Past(t.timestamp() as u64),
-                                _ => search::Term::default(),
-                            },
-                        )
-                } else {
-                    search::Term::default()
-                }));
+            if let Some(term) = term.as_str() {
+                if term != "all" {
+                    let term: Vec<&str> = term.split('@').collect();
+                    conditions.push(Condition::Term(if term.len() == 2 {
+                        chrono::Local
+                            .datetime_from_str(term[1], "%Y-%m-%d %H:%M:%S")
+                            .map_or_else(
+                                |_| search::Term::default(),
+                                |t| match term[0] {
+                                    "in" => search::Term::In(t.timestamp() as u64),
+                                    "future" => search::Term::Future(t.timestamp() as u64),
+                                    "past" => search::Term::Past(t.timestamp() as u64),
+                                    _ => search::Term::default(),
+                                },
+                            )
+                    } else {
+                        search::Term::default()
+                    }));
+                }
             }
         }
         (last_xml, conditions, join)
@@ -211,28 +215,33 @@ impl Parser {
             attributes.get(b"row".as_ref()),
             attributes.get(b"collection".as_ref()),
         ) {
-            let row = row.to_string();
-            let collection_name = collection_name.to_string();
-            if row != "" && collection_name != "" {
-                if let (Ok(row), Some(collection_id)) = (
-                    row.parse::<i64>(),
-                    self.database
+            if let Some(collection_name) = collection_name.as_str() {
+                let row = match row.as_ref() {
+                    Bson::Int64(v) => *v,
+                    Bson::Int32(v) => *v as i64,
+                    _ => 0,
+                };
+                if row > 0 && collection_name != "" {
+                    if let Some(collection_id) = self
+                        .database
                         .clone()
                         .read()
                         .unwrap()
-                        .collection_id(&collection_name),
-                ) {
-                    return Some(Condition::Depend(
-                        attributes
-                            .get(b"key".as_ref())
-                            .and_then(|v| v.as_ref())
-                            .map(|v| v.to_string()),
-                        if row < 0 {
-                            CollectionRow::new(-collection_id, (-row) as u32)
-                        } else {
-                            CollectionRow::new(collection_id, row as u32)
-                        },
-                    ));
+                        .collection_id(collection_name)
+                    {
+                        return Some(Condition::Depend(
+                            attributes
+                                .get(b"key".as_ref())
+                                .and_then(|v| v.as_ref())
+                                .and_then(|v| v.as_str())
+                                .map(|v| v.to_owned()),
+                            if row < 0 {
+                                CollectionRow::new(-collection_id, (-row) as u32)
+                            } else {
+                                CollectionRow::new(collection_id, row as u32)
+                            },
+                        ));
+                    }
                 }
             }
         }
@@ -243,36 +252,42 @@ impl Parser {
             attributes.get(b"method".as_ref()),
             attributes.get(b"value".as_ref()),
         ) {
-            let value = value.to_string();
-            if value != "" {
-                match method.as_bytes().as_ref() {
-                    b"in" => {
-                        let v: Vec<_> = value.split(',').flat_map(|s| s.parse::<isize>()).collect();
-                        if v.len() > 0 {
-                            return Some(Condition::Row(search::Number::In(v)));
-                        }
-                    }
-                    b"min" => {
-                        if let Ok(v) = value.parse::<isize>() {
-                            return Some(Condition::Row(search::Number::Min(v)));
-                        }
-                    }
-                    b"max" => {
-                        if let Ok(v) = value.parse::<isize>() {
-                            return Some(Condition::Row(search::Number::Max(v)));
-                        }
-                    }
-                    b"range" => {
-                        let s: Vec<&str> = value.split("..").collect();
-                        if s.len() == 2 {
-                            if let (Ok(min), Ok(max)) = (s[0].parse::<u32>(), s[1].parse::<u32>()) {
-                                return Some(Condition::Row(search::Number::Range(
-                                    (min as isize)..=(max as isize),
-                                )));
+            if let Some(value) = value.as_str() {
+                if value != "" {
+                    if let Some(method) = method.as_str() {
+                        match method {
+                            "in" => {
+                                let v: Vec<_> =
+                                    value.split(',').flat_map(|s| s.parse::<isize>()).collect();
+                                if v.len() > 0 {
+                                    return Some(Condition::Row(search::Number::In(v)));
+                                }
                             }
+                            "min" => {
+                                if let Ok(v) = value.parse::<isize>() {
+                                    return Some(Condition::Row(search::Number::Min(v)));
+                                }
+                            }
+                            "max" => {
+                                if let Ok(v) = value.parse::<isize>() {
+                                    return Some(Condition::Row(search::Number::Max(v)));
+                                }
+                            }
+                            "range" => {
+                                let s: Vec<&str> = value.split("..").collect();
+                                if s.len() == 2 {
+                                    if let (Ok(min), Ok(max)) =
+                                        (s[0].parse::<u32>(), s[1].parse::<u32>())
+                                    {
+                                        return Some(Condition::Row(search::Number::Range(
+                                            (min as isize)..=(max as isize),
+                                        )));
+                                    }
+                                }
+                            }
+                            _ => {}
                         }
                     }
-                    _ => {}
                 }
             }
         }
@@ -282,16 +297,19 @@ impl Parser {
 
     fn condition_uuid(attributes: &AttributeMap) -> Option<Condition> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
-            let value = value.to_string();
-            (value != "")
-                .then(|| {
-                    let v: Vec<_> = value
-                        .split(',')
-                        .flat_map(|s| Uuid::from_str(&s).map(|uuid| uuid.as_u128()))
-                        .collect();
-                    (v.len() > 0).then(|| Condition::Uuid(v))
-                })
-                .and_then(|v| v)
+            if let Some(value) = value.as_str() {
+                (value != "")
+                    .then(|| {
+                        let v: Vec<_> = value
+                            .split(',')
+                            .flat_map(|s| Uuid::from_str(&s).map(|uuid| uuid.as_u128()))
+                            .collect();
+                        (v.len() > 0).then(|| Condition::Uuid(v))
+                    })
+                    .and_then(|v| v)
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -303,60 +321,46 @@ impl Parser {
             attributes.get(b"method".as_ref()),
             attributes.get(b"value".as_ref()),
         ) {
-            let name = name.as_bytes();
-            let method = method.to_string();
-            let value = value.as_bytes();
-            (name.as_ref() != b"" && method != "" && value.as_ref() != b"")
-                .then(|| {
-                    let method_pair: Vec<&str> = method.split('!').collect();
-                    let len = method_pair.len();
-                    let i = len - 1;
-                    match method_pair[i] {
-                        "match" => Some(search::Field::Match(value.to_vec())),
-                        "min" => Some(search::Field::Min(value.to_vec())),
-                        "max" => Some(search::Field::Max(value.to_vec())),
-                        "partial" => Some(search::Field::Partial(Arc::new(
-                            unsafe { std::str::from_utf8_unchecked(value.as_ref()) }.to_string(),
-                        ))),
-                        "forward" => Some(search::Field::Forward(Arc::new(
-                            unsafe { std::str::from_utf8_unchecked(value.as_ref()) }.to_string(),
-                        ))),
-                        "backward" => Some(search::Field::Backward(Arc::new(
-                            unsafe { std::str::from_utf8_unchecked(value.as_ref()) }.to_string(),
-                        ))),
-                        "range" => {
-                            let s: Vec<&str> =
-                                unsafe { std::str::from_utf8_unchecked(value.as_ref()) }
-                                    .split("..")
-                                    .collect();
-                            (s.len() == 2).then(|| {
-                                search::Field::Range(
-                                    s[0].as_bytes().to_vec(),
-                                    s[1].as_bytes().to_vec(),
-                                )
-                            })
+            if let (Some(name), Some(value), Some(method)) =
+                (name.as_str(), value.as_str(), method.as_str())
+            {
+                return (name != "" && method != "" && value != "")
+                    .then(|| {
+                        let method_pair: Vec<&str> = method.split('!').collect();
+                        let len = method_pair.len();
+                        let i = len - 1;
+                        match method_pair[i] {
+                            "match" => Some(search::Field::Match(value.as_bytes().to_vec())),
+                            "min" => Some(search::Field::Min(value.as_bytes().to_vec())),
+                            "max" => Some(search::Field::Max(value.as_bytes().to_vec())),
+                            "partial" => Some(search::Field::Partial(Arc::new(value.to_owned()))),
+                            "forward" => Some(search::Field::Forward(Arc::new(value.to_owned()))),
+                            "backward" => Some(search::Field::Backward(Arc::new(value.to_owned()))),
+                            "range" => {
+                                let s: Vec<&str> = value.split("..").collect();
+                                (s.len() == 2).then(|| {
+                                    search::Field::Range(
+                                        s[0].as_bytes().to_vec(),
+                                        s[1].as_bytes().to_vec(),
+                                    )
+                                })
+                            }
+                            "value_forward" => {
+                                Some(search::Field::ValueForward(Arc::new(value.to_owned())))
+                            }
+                            "value_backward" => {
+                                Some(search::Field::ValueBackward(Arc::new(value.to_owned())))
+                            }
+                            "value_partial" => {
+                                Some(search::Field::ValuePartial(Arc::new(value.to_owned())))
+                            }
+                            _ => None,
                         }
-                        "value_forward" => Some(search::Field::ValueForward(Arc::new(
-                            unsafe { std::str::from_utf8_unchecked(value.as_ref()) }.to_string(),
-                        ))),
-                        "value_backward" => Some(search::Field::ValueBackward(Arc::new(
-                            unsafe { std::str::from_utf8_unchecked(value.as_ref()) }.to_string(),
-                        ))),
-                        "value_partial" => Some(search::Field::ValuePartial(Arc::new(
-                            unsafe { std::str::from_utf8_unchecked(value.as_ref()) }.to_string(),
-                        ))),
-                        _ => None,
-                    }
-                    .map(|method| {
-                        Condition::Field(
-                            unsafe { std::str::from_utf8_unchecked(name.as_ref()) }.to_string(),
-                            method,
-                        )
+                        .map(|method| Condition::Field(name.to_owned(), method))
                     })
-                })
-                .and_then(|v| v)
-        } else {
-            None
+                    .and_then(|v| v);
+            }
         }
+        None
     }
 }

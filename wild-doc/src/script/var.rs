@@ -5,13 +5,14 @@ use std::{
 
 use anyhow::Result;
 
-use wild_doc_script::{VarsStack, WildDocScript, WildDocValue};
+use bson::Bson;
+use wild_doc_script::{VarsStack, WildDocScript};
 
 pub struct Var {
     stack: Arc<RwLock<VarsStack>>,
 }
 impl Var {
-    fn search_stack(&self, key: &[u8]) -> Option<Arc<RwLock<WildDocValue>>> {
+    fn search_stack(&self, key: &[u8]) -> Option<Arc<RwLock<Bson>>> {
         for stack in self.stack.read().unwrap().iter().rev() {
             if let Some(v) = stack.get(key) {
                 return Some(v.clone());
@@ -34,22 +35,13 @@ impl WildDocScript for Var {
         Ok(())
     }
 
-    fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
-        let mut value = serde_json::json!("");
+    fn eval(&mut self, code: &[u8]) -> Result<Bson> {
+        let mut value = Bson::Null;
 
         let mut splited = code.split(|c| *c == b'.');
         if let Some(root) = splited.next() {
             if let Some(root) = self.search_stack(root) {
-                let next_value = match root.read().unwrap().deref() {
-                    WildDocValue::Json(json) => json.clone(),
-                    WildDocValue::Binary(v) => {
-                        if let Ok(s) = std::str::from_utf8(v) {
-                            serde_json::json!(s)
-                        } else {
-                            serde_json::json!(v)
-                        }
-                    }
-                };
+                let next_value = root.read().unwrap().deref().clone();
                 let mut next_value = &next_value;
                 while {
                     splited.next().map_or_else(
@@ -58,28 +50,27 @@ impl WildDocScript for Var {
                             false
                         },
                         |next| match next_value {
-                            serde_json::Value::Object(map) => map
+                            Bson::Document(map) => map
                                 .get(unsafe { std::str::from_utf8_unchecked(next) })
                                 .map_or(false, |v| {
                                     next_value = v;
                                     true
                                 }),
-                            serde_json::Value::Array(map) => {
-                                unsafe { std::str::from_utf8_unchecked(next) }
-                                    .parse::<usize>()
-                                    .ok()
-                                    .and_then(|v| map.get(v))
-                                    .map_or(false, |v| {
-                                        next_value = v;
-                                        true
-                                    })
-                            }
+                            Bson::Array(map) => unsafe { std::str::from_utf8_unchecked(next) }
+                                .parse::<usize>()
+                                .ok()
+                                .and_then(|v| map.get(v))
+                                .map_or(false, |v| {
+                                    next_value = v;
+                                    true
+                                }),
                             _ => false,
                         },
                     )
                 } {}
             }
         }
-        Ok(WildDocValue::from(value))
+        
+        Ok(value)
     }
 }

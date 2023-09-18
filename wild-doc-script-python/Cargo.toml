@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-script-python"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -15,8 +15,9 @@ keywords = ["database","xml","html","Python"]
 categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
 
 [dependencies]
-wild-doc-script = { version = "0.3", path = "../wild-doc-script" }
+bson.workspace = true
+wild-doc-script = { version = "0.4", path = "../wild-doc-script" }
 
 [dependencies.pyo3]
 version = "0.19.2"
-features = ["auto-initialize"]
+features = ["auto-initialize" , "serde"]

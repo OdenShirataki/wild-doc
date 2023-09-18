@@ -3,27 +3,33 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use wild_doc_script::WildDocValue;
+use bson::Bson;
 
 use super::{AttributeMap, Parser};
 
 impl Parser {
     pub(super) fn collections(&mut self, attributes: AttributeMap) {
-        let mut json = HashMap::new();
+        let mut bson = HashMap::new();
 
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
-            let var = var.as_bytes();
-            if var.as_ref() != b"" {
-                let collections = self.database.read().unwrap().collections();
-                json.insert(
-                    var.to_vec(),
-                    Arc::new(RwLock::new(WildDocValue::from(
-                        serde_json::json!(collections).to_string().into_bytes(),
-                    ))),
-                );
+            if let Some(var) = var.as_str() {
+                if var != "" {
+                    bson.insert(
+                        var.as_bytes().to_vec(),
+                        Arc::new(RwLock::new(Bson::Array(
+                            self.database
+                                .read()
+                                .unwrap()
+                                .collections()
+                                .iter()
+                                .map(|v| Bson::String(v.clone()))
+                                .collect(),
+                        ))),
+                    );
+                }
             }
         }
-        self.state.stack().write().unwrap().push(json);
+        self.state.stack().write().unwrap().push(bson);
     }
 
     pub(super) fn delete_collection(&mut self, attributes: AttributeMap) {
