@@ -93,6 +93,7 @@ fn main() {
     }
 }
 
+#[inline(always)]
 fn handler(mut stream: TcpStream, wd: Arc<Mutex<WildDoc>>) -> Result<()> {
     stream.write_all(&[0])?;
 

@@ -8,6 +8,7 @@ use bson::Bson;
 use super::{AttributeMap, Parser, SessionState};
 
 impl Parser {
+    #[inline(always)]
     pub(super) fn sessions(&mut self, attributes: &AttributeMap) {
         let mut json = HashMap::new();
 
@@ -42,6 +43,7 @@ impl Parser {
         self.state.stack().write().unwrap().push(json);
     }
 
+    #[inline(always)]
     pub(super) fn session(&mut self, attributes: AttributeMap) {
         if let Some(Some(session_name)) = attributes.get(b"name".as_ref()) {
             if let Some(session_name) = session_name.as_str() {
@@ -96,6 +98,7 @@ impl Parser {
         }
     }
 
+    #[inline(always)]
     pub(super) fn session_sequence(&mut self, attributes: AttributeMap) {
         let mut str_max = attributes
             .get(b"max".as_ref())
@@ -131,6 +134,8 @@ impl Parser {
         }
         self.state.stack().write().unwrap().push(bson);
     }
+
+    #[inline(always)]
     pub(super) fn session_gc(&mut self, attributes: AttributeMap) {
         self.database.write().unwrap().session_gc(
             attributes

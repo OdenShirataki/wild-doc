@@ -9,6 +9,7 @@ use semilattice_database_session::{Activity, CollectionRow, Uuid};
 use super::Parser;
 
 impl Parser {
+    #[inline(always)]
     pub(super) fn record(&mut self, attributes: HashMap<Vec<u8>, Option<Arc<Bson>>>) {
         let mut bsons = HashMap::new();
 

@@ -58,6 +58,7 @@ impl Parser {
         })
     }
 
+    #[inline(always)]
     fn parse_wd_start_or_empty_tag(
         &mut self,
         name: &[u8],
@@ -109,11 +110,14 @@ impl Parser {
         }
         Ok(None)
     }
+
+    #[inline(always)]
     fn is_wd_tag(name: &TagName) -> bool {
         name.namespace_prefix()
             .map_or(false, |v| v.as_bytes() == b"wd")
     }
 
+    #[inline(always)]
     pub fn parse(&mut self, xml: &[u8]) -> Result<Vec<u8>> {
         let mut r: Vec<u8> = Vec::new();
         let mut tag_stack = vec![];
@@ -352,6 +356,7 @@ impl Parser {
         Ok(r)
     }
 
+    #[inline(always)]
     fn custom_tag(&mut self, attributes: AttributeMap) -> (String, Vec<u8>) {
         let mut html_attr = vec![];
         let mut name = "".to_string();

@@ -33,6 +33,7 @@ impl error::Error for DependError {
 }
 
 impl Parser {
+    #[inline(always)]
     pub fn update(&mut self, xml: &[u8], attributes: &AttributeMap) -> Result<()> {
         if let Ok(inner_xml) = self.parse(xml) {
             let updates = self.make_update_struct(inner_xml.as_slice())?;
@@ -159,6 +160,7 @@ impl Parser {
         Ok(())
     }
 
+    #[inline(always)]
     fn update_pends(&mut self, depend: CollectionRow, pends: &Vec<Pend>) -> Vec<CollectionRow> {
         let mut rows = vec![];
         for pend in pends {
@@ -214,6 +216,7 @@ impl Parser {
         rows
     }
 
+    #[inline(always)]
     fn record_new(
         &mut self,
         collection_id: i32,
@@ -245,6 +248,8 @@ impl Parser {
         }
         rows
     }
+
+    #[inline(always)]
     fn record_update(
         &mut self,
         collection_id: i32,
@@ -288,6 +293,7 @@ impl Parser {
         rows
     }
 
+    #[inline(always)]
     fn depend(
         &mut self,
         attributes: &AttributeMap,
@@ -343,6 +349,7 @@ impl Parser {
         Err(DependError)
     }
 
+    #[inline(always)]
     fn make_update_struct(&mut self, xml: &[u8]) -> Result<Vec<SessionRecord>> {
         let mut updates = Vec::new();
         let mut xml = xml;

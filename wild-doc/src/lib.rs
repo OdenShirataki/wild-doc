@@ -33,9 +33,12 @@ pub struct WildDocResult {
     options_bson: Option<Bson>,
 }
 impl WildDocResult {
+    #[inline(always)]
     pub fn body(&self) -> &[u8] {
         &self.body
     }
+
+    #[inline(always)]
     pub fn options_bson(&self) -> &Option<Bson> {
         &self.options_bson
     }
@@ -106,7 +109,7 @@ impl WildDoc {
         {
             bson.insert(b"input".to_vec(), Arc::new(RwLock::new(v)));
         }
-        
+
         let global = Arc::new(RwLock::new(Bson::Document(bson::Document::new())));
         bson.insert(b"global".to_vec(), Arc::clone(&global));
         let stack = Arc::new(RwLock::new(vec![bson]));

@@ -9,6 +9,7 @@ use semilattice_database_session::search::{Join, JoinCondition};
 use crate::parser::{AttributeMap, Parser};
 
 impl Parser {
+    #[inline(always)]
     pub fn join<'a>(
         &mut self,
         xml: &'a [u8],
@@ -29,6 +30,7 @@ impl Parser {
         return xml;
     }
 
+    #[inline(always)]
     fn join_condition_loop<'a>(&mut self, xml: &'a [u8]) -> (&'a [u8], Vec<JoinCondition>) {
         let mut result_conditions = Vec::new();
         let mut xml = xml;
@@ -74,6 +76,7 @@ impl Parser {
         (xml, result_conditions)
     }
 
+    #[inline(always)]
     fn join_condition_pends(attributes: &AttributeMap) -> JoinCondition {
         JoinCondition::Pends {
             key: attributes

@@ -34,12 +34,15 @@ impl WildDocScript for WdPy {
         });
         Ok(WdPy {})
     }
+
+    #[inline(always)]
     fn evaluate_module(&mut self, _: &str, code: &[u8]) -> Result<()> {
         let code = std::str::from_utf8(code)?;
         Python::with_gil(|py| -> PyResult<()> { py.run(code, None, None) })?;
         Ok(())
     }
 
+    #[inline(always)]
     fn eval(&mut self, code: &[u8]) -> Result<Bson> {
         Ok(Bson::String(
             Python::with_gil(|py| -> PyResult<PyObject> {
@@ -55,6 +58,7 @@ impl WildDocScript for WdPy {
     }
 }
 
+#[inline(always)]
 #[pyfunction]
 #[pyo3(name = "v")]
 fn wdv(_py: Python, key: String) -> PyResult<PyObject> {

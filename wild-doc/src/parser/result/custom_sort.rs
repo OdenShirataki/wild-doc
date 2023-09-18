@@ -12,6 +12,7 @@ pub struct WdCustomSort {
 }
 
 impl CustomSort for WdCustomSort {
+    #[inline(always)]
     fn compare(&self, a: u32, b: u32) -> std::cmp::Ordering {
         if let Some(result) = self.result.read().unwrap().as_ref() {
             if let Some(join) = result.join().get(&self.join_name) {
@@ -27,6 +28,8 @@ impl CustomSort for WdCustomSort {
         }
         Ordering::Equal
     }
+
+    #[inline(always)]
     fn asc(&self) -> Vec<u32> {
         if let Some(result) = self.result.read().unwrap().as_ref() {
             if let Some(join) = result.join().get(&self.join_name) {
@@ -48,6 +51,8 @@ impl CustomSort for WdCustomSort {
         }
         vec![]
     }
+
+    #[inline(always)]
     fn desc(&self) -> Vec<u32> {
         if let Some(result) = self.result.read().unwrap().as_ref() {
             if let Some(join) = result.join().get(&self.join_name) {

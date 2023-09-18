@@ -21,6 +21,8 @@ impl Parser {
         }
         None
     }
+
+    #[inline(always)]
     pub(crate) fn register_global(&mut self, name: &str, value: &Bson) {
         if let Some(stack) = self.state.stack().write().unwrap().get(0) {
             if let Some(global) = stack.get(b"global".as_ref()) {
@@ -42,6 +44,7 @@ impl Parser {
         }
     }
 
+    #[inline(always)]
     pub(super) fn local(&mut self, attributes: AttributeMap) {
         self.state.stack().write().unwrap().push(
             attributes

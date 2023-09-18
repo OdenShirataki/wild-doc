@@ -173,6 +173,8 @@ impl WildDocScript for Deno {
         }
         Ok(Self { worker })
     }
+
+    #[inline(always)]
     fn evaluate_module(&mut self, file_name: &str, src: &[u8]) -> Result<()> {
         deno_runtime::tokio_util::create_basic_runtime().block_on(async {
             let script_name = "wd://script".to_owned() + file_name;
@@ -187,6 +189,8 @@ impl WildDocScript for Deno {
             self.run_event_loop(false).await
         })
     }
+
+    #[inline(always)]
     fn eval(&mut self, code: &[u8]) -> Result<Bson> {
         let code = "(".to_owned() + std::str::from_utf8(code)? + ")";
         let scope = &mut self.js_runtime.handle_scope();

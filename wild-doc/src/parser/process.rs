@@ -16,6 +16,7 @@ use crate::xml_util;
 use super::{AttributeMap, Parser};
 
 impl Parser {
+    #[inline(always)]
     pub(super) fn get_include_content(&mut self, attributes: AttributeMap) -> Result<Vec<u8>> {
         if let Some(Some(src)) = attributes.get(b"src".as_ref()) {
             if let Some(src) = src.as_str() {
@@ -58,6 +59,7 @@ impl Parser {
         Ok(b"".to_vec())
     }
 
+    #[inline(always)]
     pub(super) fn case(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         let cmp_src = attributes
             .get(b"value".as_ref())
@@ -108,6 +110,7 @@ impl Parser {
         Ok(vec![])
     }
 
+    #[inline(always)]
     pub(super) fn r#if(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
             match value.as_ref() {
@@ -128,6 +131,7 @@ impl Parser {
         Ok(vec![])
     }
 
+    #[inline(always)]
     pub(super) fn r#for(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         let mut r = Vec::new();
         if let (Some(Some(var)), Some(Some(r#in))) = (
@@ -188,6 +192,8 @@ impl Parser {
         }
         Ok(r)
     }
+
+    #[inline(always)]
     pub(super) fn r#while(
         &mut self,
         attributes: Option<Attributes<'_>>,

@@ -12,6 +12,7 @@ pub struct Var {
     stack: Arc<RwLock<VarsStack>>,
 }
 impl Var {
+    #[inline(always)]
     fn search_stack(&self, key: &[u8]) -> Option<Arc<RwLock<Bson>>> {
         for stack in self.stack.read().unwrap().iter().rev() {
             if let Some(v) = stack.get(key) {
@@ -22,6 +23,7 @@ impl Var {
     }
 }
 impl WildDocScript for Var {
+    #[inline(always)]
     fn new(state: wild_doc_script::WildDocState) -> Result<Self>
     where
         Self: Sized,
@@ -31,10 +33,12 @@ impl WildDocScript for Var {
         })
     }
 
+    #[inline(always)]
     fn evaluate_module(&mut self, _: &str, _: &[u8]) -> Result<()> {
         Ok(())
     }
 
+    #[inline(always)]
     fn eval(&mut self, code: &[u8]) -> Result<Bson> {
         let mut value = Bson::Null;
 
@@ -70,7 +74,7 @@ impl WildDocScript for Var {
                 } {}
             }
         }
-        
+
         Ok(value)
     }
 }
