@@ -12,24 +12,18 @@ impl Parser {
         let mut bson = HashMap::new();
 
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
-            if let Some(var) = var.as_str() {
-                if var != "" {
-                    bson.insert(
-                        var.as_bytes().to_vec(),
-                        Arc::new(RwLock::new(Bson::Array(
-                            self.database
-                                .read()
-                                .unwrap()
-                                .collections()
-                                .iter()
-                                .map(|v| Bson::String(v.clone()))
-                                .collect(),
-                        ))),
-                    );
-                }
+            let var = var.to_str();
+            if var != "" {
+                let collections = self.database.read().unwrap().collections();
+                json.insert(
+                    var.to_string().into_bytes(),
+                    Arc::new(RwLock::new(WildDocValue::from(
+                        serde_json::json!(collections).to_string().into_bytes(),
+                    ))),
+                );
             }
         }
-        self.state.stack().write().unwrap().push(bson);
+        self.state.stack().write().unwrap().push(json);
     }
 
     pub(super) fn delete_collection(&mut self, attributes: AttributeMap) {

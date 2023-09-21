@@ -82,7 +82,7 @@ impl Parser {
                             let attributes = self.parse_attibutes(&token.attributes());
                             if let Some(Some(right)) = attributes.get(b"value".as_ref()) {
                                 if let Some(cmp_src) = cmp_src {
-                                    if cmp_src == right {
+                                    if cmp_src.to_str() == right.to_str() {
                                         return Ok(self.parse(inner_xml)?);
                                     }
                                 }
@@ -113,19 +113,8 @@ impl Parser {
     #[inline(always)]
     pub(super) fn r#if(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
-            match value.as_ref() {
-                Bson::Boolean(v) => {
-                    if *v == true {
-                        return self.parse(xml);
-                    }
-                }
-                _ => {
-                    if let Some(value) = value.as_str() {
-                        if value == "true" {
-                            return self.parse(xml);
-                        }
-                    }
-                }
+            if value.to_str() == "true" {
+                return self.parse(xml);
             }
         }
         Ok(vec![])
@@ -138,55 +127,54 @@ impl Parser {
             attributes.get(b"var".as_ref()),
             attributes.get(b"in".as_ref()),
         ) {
-            if let Some(var) = var.as_str() {
-                if var != "" {
-                    match r#in.as_ref() {
-                        Bson::Document(map) => {
-                            let key_name = attributes.get(b"key".as_ref());
-                            for (key, value) in map {
-                                let mut vars = HashMap::new();
+            let var = var.to_str();
+            if var != "" {
+                match r#in.as_ref() {
+                    WildDocValue::Object(map) => {
+                        let key_name = attributes.get(b"key".as_ref());
+                        for (key, value) in map {
+                            let mut vars = HashMap::new();
+                            vars.insert(
+                                var.to_string().into_bytes(),
+                                Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
+                            );
+                            if let Some(Some(key_name)) = key_name {
                                 vars.insert(
-                                    var.as_bytes().to_vec(),
-                                    Arc::new(RwLock::new(value.clone())),
+                                    key_name.to_string().into_bytes(),
+                                    Arc::new(RwLock::new(WildDocValue::from(serde_json::json!(
+                                        key
+                                    )))),
                                 );
-                                if let Some(Some(key_name)) = key_name {
-                                    vars.insert(
-                                        match key_name.as_ref() {
-                                            Bson::String(v) => v.to_owned(),
-                                            _ => key_name.to_string(),
-                                        }
-                                        .into_bytes(),
-                                        Arc::new(RwLock::new(Bson::String(key.to_owned()))),
-                                    );
-                                }
-                                self.state.stack().write().unwrap().push(vars);
-                                r.extend(self.parse(xml)?);
-                                self.state.stack().write().unwrap().pop();
                             }
+                            self.state.stack().write().unwrap().push(vars);
+                            r.extend(self.parse(xml)?);
+                            self.state.stack().write().unwrap().pop();
                         }
-                        Bson::Array(vec) => {
-                            let key_name = attributes.get(b"key".as_ref());
-                            let mut key = 0;
-                            for value in vec {
-                                let mut vars = HashMap::new();
-                                vars.insert(
-                                    var.as_bytes().to_vec(),
-                                    Arc::new(RwLock::new(value.clone())),
-                                );
-                                if let Some(Some(key_name)) = key_name {
-                                    vars.insert(
-                                        key_name.to_string().into_bytes(),
-                                        Arc::new(RwLock::new(Bson::Int32(key))),
-                                    );
-                                    key += 1;
-                                }
-                                self.state.stack().write().unwrap().push(vars);
-                                r.extend(self.parse(xml)?);
-                                self.state.stack().write().unwrap().pop();
-                            }
-                        }
-                        _ => {}
                     }
+                    WildDocValue::Array(vec) => {
+                        let key_name = attributes.get(b"key".as_ref());
+                        let mut key = 0;
+                        for value in vec {
+                            let mut vars = HashMap::new();
+                            vars.insert(
+                                var.to_string().into_bytes(),
+                                Arc::new(RwLock::new(value.clone())),
+                            );
+                            if let Some(Some(key_name)) = key_name {
+                                vars.insert(
+                                    key_name.to_string().into_bytes(),
+                                    Arc::new(RwLock::new(WildDocValue::Number(
+                                        serde_json::Number::from(key),
+                                    ))),
+                                );
+                                key += 1;
+                            }
+                            self.state.stack().write().unwrap().push(vars);
+                            r.extend(self.parse(xml)?);
+                            self.state.stack().write().unwrap().pop();
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -203,19 +191,7 @@ impl Parser {
         loop {
             let attributes = self.parse_attibutes(&attributes);
             if let Some(Some(cont)) = attributes.get(b"continue".as_ref()) {
-                let mut c = false;
-                match cont.as_ref() {
-                    Bson::Boolean(v) => {
-                        c = *v;
-                    }
-                    _ => {
-                        if let Some(cont) = cont.as_str() {
-                            c = cont == "true";
-                        }
-                    }
-                }
-
-                if c {
+                if cont.to_str() == "true" {
                     r.extend(self.parse(xml)?);
                 } else {
                     break;

@@ -14,6 +14,7 @@ use serde::Deserialize;
 use wild_doc::{DataOption, WildDoc};
 
 use include::{IncludeEmpty, IncludeRemote};
+use wild_doc_script::serde_json;
 
 #[derive(Deserialize)]
 struct Config {
@@ -126,8 +127,13 @@ fn handler(mut stream: TcpStream, wd: Arc<Mutex<WildDoc>>) -> Result<()> {
                 writer.write_all(&[0])?;
                 writer.write_all(&len.to_be_bytes())?;
                 writer.write_all(body)?;
-                if let Some(bson) = r.options_bson() {
-                    writer.write_all(bson.to_string().as_bytes())?;
+
+                if let Some(json) = r
+                    .options()
+                    .as_ref()
+                    .and_then(|options| serde_json::to_string(options).ok())
+                {
+                    writer.write_all(json.as_bytes())?;
                 } else {
                     writer.write_all(b"")?;
                 }

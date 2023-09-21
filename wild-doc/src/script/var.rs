@@ -38,13 +38,13 @@ impl WildDocScript for Var {
         Ok(())
     }
 
-    #[inline(always)]
-    fn eval(&mut self, code: &[u8]) -> Result<Bson> {
-        let mut value = Bson::Null;
+    fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
+        let mut value = WildDocValue::Null;
 
         let mut splited = code.split(|c| *c == b'.');
         if let Some(root) = splited.next() {
             if let Some(root) = self.search_stack(root) {
+                let next_value = root.read().unwrap().deref().clone();
                 let next_value = root.read().unwrap().deref().clone();
                 let mut next_value = &next_value;
                 while {
@@ -54,26 +54,30 @@ impl WildDocScript for Var {
                             false
                         },
                         |next| match next_value {
-                            Bson::Document(map) => map
+                            WildDocValue::Object(map) => map
                                 .get(unsafe { std::str::from_utf8_unchecked(next) })
                                 .map_or(false, |v| {
                                     next_value = v;
                                     true
                                 }),
-                            Bson::Array(map) => unsafe { std::str::from_utf8_unchecked(next) }
-                                .parse::<usize>()
-                                .ok()
-                                .and_then(|v| map.get(v))
-                                .map_or(false, |v| {
-                                    next_value = v;
-                                    true
-                                }),
+                            WildDocValue::Array(map) => {
+                                unsafe { std::str::from_utf8_unchecked(next) }
+                                    .parse::<usize>()
+                                    .ok()
+                                    .and_then(|v| map.get(v))
+                                    .map_or(false, |v| {
+                                        next_value = v;
+                                        true
+                                    })
+                            }
                             _ => false,
                         },
                     )
                 } {}
             }
         }
+
+        Ok(value)
 
         Ok(value)
     }

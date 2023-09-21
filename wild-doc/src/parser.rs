@@ -71,9 +71,9 @@ impl Parser {
                     .get(b"value".as_ref())
                     .and_then(|v| v.as_ref())
                     .map(|v| match v.deref() {
-                        Bson::Binary(v) => v.as_raw_binary().bytes.to_vec(),
-                        Bson::String(v) => v.to_owned().into_bytes(),
-                        _ => v.to_string().into_bytes(),
+                        WildDocValue::String(s) => s.to_owned().into_bytes(),
+                        WildDocValue::Binary(v) => v.to_vec(),
+                        _ => v.deref().to_string().into_bytes(),
                     }));
             }
             b"global" => {
@@ -82,9 +82,7 @@ impl Parser {
                     attributes.get(b"var".as_ref()),
                     attributes.get(b"value".as_ref()),
                 ) {
-                    if let Some(var) = var.as_str() {
-                        self.register_global(var, value);
-                    }
+                    self.register_global(&var.to_str(), value);
                 }
             }
             b"print_escape_html" => {

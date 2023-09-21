@@ -1,19 +1,24 @@
-use anyhow::{anyhow, Result};
-use base64::engine::general_purpose;
-use bson::Document;
-use chrono::TimeZone;
-use maybe_xml::{
-    scanner::{Scanner, State},
-    token,
-};
-use semilattice_database_session::{
-    Activity, CollectionRow, Depends, KeyValue, Pend, Record, SessionRecord, Term,
-};
 use std::{
     collections::HashMap,
     error, fmt,
     io::{Cursor, Read},
 };
+
+use anyhow::{anyhow, Result};
+use base64::engine::general_purpose;
+use bson::Document;
+use chrono::TimeZone;
+use indexmap::IndexMap;
+use maybe_xml::{
+    scanner::{Scanner, State},
+    token,
+};
+
+use semilattice_database_session::{
+    Activity, CollectionRow, Depends, KeyValue, Pend, Record, SessionRecord, Term,
+};
+
+use wild_doc_script::WildDocValue;
 
 use crate::xml_util;
 
@@ -86,23 +91,31 @@ impl Parser {
                     }
                 }
                 if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
-                    if let Some(name) = name.as_str() {
-                        let mut value = Document::new();
-                        value.insert(
-                            "commit_rows",
+                    let mut value = IndexMap::new();
+                    value.insert(
+                        "commit_rows".to_owned(),
+                        WildDocValue::from(
                             commit_rows
                                 .iter()
                                 .map(|v| {
-                                    let mut d = Document::new();
-                                    d.insert("collection_id", v.collection_id());
-                                    d.insert("row", v.row());
-                                    d
+                                    let mut map = IndexMap::new();
+                                    map.insert(
+                                        "collection_id".to_owned(),
+                                        WildDocValue::from(serde_json::Number::from(
+                                            v.collection_id(),
+                                        )),
+                                    );
+                                    map.insert(
+                                        "row".to_owned(),
+                                        WildDocValue::from(serde_json::Number::from(v.row())),
+                                    );
+                                    WildDocValue::from(map)
                                 })
-                                .collect::<Vec<_>>(),
-                        );
-                        value.insert("session_rows", bson::Array::new());
-                        self.register_global(name, &value.into());
-                    }
+                                .collect::<Vec<WildDocValue>>(),
+                        ),
+                    );
+                    value.insert("session_rows".to_owned(), WildDocValue::Array(vec![]));
+                    self.register_global(name.to_str().as_ref(), &value.into());
                 }
             } else {
                 if let Some(ref mut session_state) = self.sessions.last_mut() {
@@ -125,34 +138,52 @@ impl Parser {
                         }
                     }
                     if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
-                        if let Some(name) = name.as_str() {
-                            let mut value = Document::new();
-                            value.insert(
-                                "commit_rows",
+                        let mut value = IndexMap::new();
+                        value.insert(
+                            "commit_rows".to_owned(),
+                            WildDocValue::from(
                                 commit_rows
                                     .iter()
                                     .map(|v| {
-                                        let mut d = Document::new();
-                                        d.insert("collection_id", v.collection_id());
-                                        d.insert("row", v.row());
-                                        d
+                                        let mut map = IndexMap::new();
+                                        map.insert(
+                                            "collection_id".to_owned(),
+                                            WildDocValue::from(serde_json::Number::from(
+                                                v.collection_id(),
+                                            )),
+                                        );
+                                        map.insert(
+                                            "row".to_owned(),
+                                            WildDocValue::from(serde_json::Number::from(v.row())),
+                                        );
+                                        WildDocValue::from(map)
                                     })
-                                    .collect::<Vec<_>>(),
-                            );
-                            value.insert(
-                                "session_rows",
+                                    .collect::<Vec<WildDocValue>>(),
+                            ),
+                        );
+                        value.insert(
+                            "session_rows".to_owned(),
+                            WildDocValue::from(
                                 session_rows
                                     .iter()
                                     .map(|v| {
-                                        let mut d = Document::new();
-                                        d.insert("collection_id", v.collection_id());
-                                        d.insert("row", v.row());
-                                        d
+                                        let mut map = IndexMap::new();
+                                        map.insert(
+                                            "collection_id".to_owned(),
+                                            WildDocValue::from(serde_json::Number::from(
+                                                v.collection_id(),
+                                            )),
+                                        );
+                                        map.insert(
+                                            "row".to_owned(),
+                                            WildDocValue::from(serde_json::Number::from(v.row())),
+                                        );
+                                        WildDocValue::from(map)
                                     })
-                                    .collect::<Vec<_>>(),
-                            );
-                            self.register_global(name, &value.into());
-                        }
+                                    .collect::<Vec<WildDocValue>>(),
+                            ),
+                        );
+                        self.register_global(name.to_str().as_ref(), &value.into());
                     }
                 }
             }

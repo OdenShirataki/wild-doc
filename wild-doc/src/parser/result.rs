@@ -23,80 +23,76 @@ impl Parser {
             attributes.get(b"search".as_ref()),
             attributes.get(b"var".as_ref()),
         ) {
-            if let (Some(search), Some(var)) = (search.as_str(), var.as_str()) {
-                if search != "" && var != "" {
-                    let mut bson_inner = Document::new();
-                    if let Some(search) = search_map.get(search) {
-                        let collection_id = search.read().unwrap().collection_id();
-                        bson_inner.insert("collection_id", collection_id);
-                        let orders = make_order(
-                            search,
-                            &attributes
-                                .get(b"sort".as_ref())
-                                .and_then(|v| v.as_ref())
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_owned(),
-                        );
-                        let mut session_maybe_has_collection = None;
-                        for i in (0..self.sessions.len()).rev() {
-                            if self.sessions[i]
-                                .session
-                                .temporary_collection(collection_id)
-                                .is_some()
-                            {
-                                session_maybe_has_collection = Some(&self.sessions[i].session);
-                                break;
-                            }
+            let search = search.to_str();
+            let var = var.to_str();
+            if search != "" && var != "" {
+                let mut json_inner = Map::new();
+                if let Some(search) = search_map.get(search.as_ref()) {
+                    let collection_id = search.read().unwrap().collection_id();
+                    json_inner.insert("collection_id".to_owned(), json!(collection_id));
+                    let orders = make_order(
+                        search,
+                        &attributes
+                            .get(b"sort".as_ref())
+                            .and_then(|v| v.as_ref())
+                            .map_or_else(|| "".to_owned(), |v| v.to_string()),
+                    );
+                    let mut session_maybe_has_collection = None;
+                    for i in (0..self.sessions.len()).rev() {
+                        if self.sessions[i]
+                            .session
+                            .temporary_collection(collection_id)
+                            .is_some()
+                        {
+                            session_maybe_has_collection = Some(&self.sessions[i].session);
+                            break;
                         }
-                        let bson_rows: Vec<_> = session_maybe_has_collection.map_or_else(
-                            || {
-                                search
-                                    .write()
-                                    .unwrap()
-                                    .result(&self.database.read().unwrap())
-                                    .read()
-                                    .unwrap()
-                                    .as_ref()
-                                    .map_or(vec![], |v| {
-                                        v.sort(&self.database.read().unwrap(), &orders)
-                                    })
-                                    .iter()
-                                    .map(|row| {
-                                        Bson::Document({
-                                            let mut bson_row = Document::new();
-                                            bson_row.insert("row", row);
-                                            bson_row
-                                        })
-                                    })
-                                    .collect()
-                            },
-                            |session| {
-                                session
-                                    .search(&search)
-                                    .result(&self.database.read().unwrap(), &orders)
-                                    .iter()
-                                    .map(|row| {
-                                        let mut bson_row = Document::new();
-                                        bson_row.insert("row", row);
-                                        Bson::Document(bson_row)
-                                    })
-                                    .collect()
-                            },
-                        );
-                        let len = bson_rows.len();
-                        bson_inner.insert("rows", bson_rows);
-                        bson_inner.insert("len", len as i64);
-
-                        bsons.insert(
-                            var.as_bytes().to_vec(),
-                            Arc::new(RwLock::new(Bson::Document(bson_inner))),
-                        );
                     }
+                    let json_rows: Vec<_> = session_maybe_has_collection.map_or_else(
+                        || {
+                            search
+                                .write()
+                                .unwrap()
+                                .result(&self.database.read().unwrap())
+                                .read()
+                                .unwrap()
+                                .as_ref()
+                                .map_or(vec![], |v| v.sort(&self.database.read().unwrap(), &orders))
+                                .iter()
+                                .map(|row| {
+                                    Value::Object({
+                                        let mut json_row = Map::new();
+                                        json_row.insert("row".to_owned(), json!(row));
+                                        json_row
+                                    })
+                                })
+                                .collect()
+                        },
+                        |session| {
+                            session
+                                .search(&search)
+                                .result(&self.database.read().unwrap(), &orders)
+                                .iter()
+                                .map(|row| {
+                                    let mut json_row = Map::new();
+                                    json_row.insert("row".to_owned(), json!(row));
+                                    Value::Object(json_row)
+                                })
+                                .collect()
+                        },
+                    );
+                    let len = json_rows.len();
+                    json_inner.insert("rows".to_owned(), Value::Array(json_rows));
+                    json_inner.insert("len".to_owned(), json!(len));
+
+                    json.insert(
+                        var.to_string().into_bytes(),
+                        Arc::new(RwLock::new(WildDocValue::from(Value::Object(json_inner)))),
+                    );
                 }
             }
         }
-        self.state.stack().write().unwrap().push(bsons);
+        self.state.stack().write().unwrap().push(json);
     }
 }
 

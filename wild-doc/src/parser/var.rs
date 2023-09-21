@@ -1,42 +1,45 @@
 use std::{
     collections::VecDeque,
+    ops::DerefMut,
     sync::{Arc, RwLock},
 };
 
-use bson::{Bson, Document};
+use indexmap::IndexMap;
+
+use wild_doc_script::WildDocValue;
 
 use super::{AttributeMap, Parser};
 
 impl Parser {
-    fn route_doc<'a, 'b>(doc: &mut Document, mut keys: VecDeque<&str>) -> Option<&'a mut Document> {
+    fn route_map<'a, 'b>(
+        map: &mut IndexMap<String, WildDocValue>,
+        mut keys: VecDeque<&str>,
+    ) -> Option<&'a mut IndexMap<String, WildDocValue>> {
         if let Some(key) = keys.pop_front() {
-            if let Ok(next) = doc.get_document_mut(key) {
-                return Self::route_doc(next, keys);
+            if let Some(WildDocValue::Object(next)) = map.get_mut(key) {
+                return Self::route_map(next, keys);
             } else {
-                doc.insert(key, Document::new());
-                if let Ok(next) = doc.get_document_mut(key) {
-                    return Self::route_doc(next, keys);
-                }
+                let mut next = IndexMap::new();
+                let r = Self::route_map(&mut next, keys);
+                map.insert(key.to_string(), WildDocValue::Object(next));
+                return r;
             }
         }
         None
     }
 
-    #[inline(always)]
-    pub(crate) fn register_global(&mut self, name: &str, value: &Bson) {
+    pub(crate) fn register_global(&mut self, name: &str, value: &WildDocValue) {
         if let Some(stack) = self.state.stack().write().unwrap().get(0) {
             if let Some(global) = stack.get(b"global".as_ref()) {
-                if let Ok(mut global) = global.write() {
-                    if let Some(doc) = global.as_document_mut() {
-                        let mut splited: VecDeque<_> = name.split('.').collect();
-                        if let Some(last) = splited.pop_back() {
-                            if splited.len() > 0 {
-                                if let Some(doc) = Self::route_doc(doc, splited) {
-                                    doc.insert(last, value);
-                                }
-                            } else {
-                                doc.insert(last, value);
+                if let WildDocValue::Object(ref mut map) = global.write().unwrap().deref_mut() {
+                    let mut splited: VecDeque<_> = name.split('.').collect();
+                    if let Some(last) = splited.pop_back() {
+                        if splited.len() > 0 {
+                            if let Some(map) = Self::route_map(map, splited) {
+                                map.insert(last.to_owned(), value.clone());
                             }
+                        } else {
+                            map.insert(last.to_owned(), value.clone());
                         }
                     }
                 }

@@ -13,31 +13,13 @@ impl Parser {
         let mut json = HashMap::new();
 
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
-            if let Some(var) = var.as_str() {
-                if var != "" {
-                    let sessions = self.database.read().unwrap().sessions();
-                    json.insert(
-                        var.as_bytes().to_vec(),
-                        Arc::new(RwLock::new(Bson::Array(
-                            sessions
-                                .iter()
-                                .map(|v| {
-                                    let mut doc = bson::Document::new();
-                                    doc.insert("name", v.name().clone());
-                                    doc.insert(
-                                        "access_at",
-                                        bson::Timestamp {
-                                            time: v.access_at() as u32,
-                                            increment: 0,
-                                        },
-                                    );
-                                    doc.insert("expire", v.expire());
-                                    Bson::Document(doc)
-                                })
-                                .collect(),
-                        ))),
-                    );
-                }
+            let var = var.to_str();
+            if var != "" {
+                let sessions = self.database.read().unwrap().sessions();
+                json.insert(
+                    var.to_string().into_bytes(),
+                    Arc::new(RwLock::new(WildDocValue::from(json!(sessions)))),
+                );
             }
         }
         self.state.stack().write().unwrap().push(json);
@@ -103,32 +85,30 @@ impl Parser {
         let mut str_max = attributes
             .get(b"max".as_ref())
             .and_then(|v| v.as_ref())
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        if str_max == "" {
-            str_max = "session_sequence_max";
+            .map_or(Cow::Borrowed(""), |v| v.to_str());
+        if str_max.as_ref() == "" {
+            str_max = Cow::Borrowed("session_sequence_max");
         }
 
         let mut str_current = attributes
             .get(b"current".as_ref())
             .and_then(|v| v.as_ref())
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        if str_current == "" {
-            str_current = "session_sequence_current";
+            .map_or(Cow::Borrowed(""), |v| v.to_str());
+        if str_current.as_ref() == "" {
+            str_current = Cow::Borrowed("session_sequence_current");
         }
 
         let mut bson = HashMap::new();
         if let Some(session_state) = self.sessions.last() {
             if let Some(cursor) = session_state.session.sequence_cursor() {
-                bson.insert(
-                    str_max.as_bytes().to_vec(),
-                    Arc::new(RwLock::new(Bson::Int32(cursor.max as i32))),
+                json.insert(
+                    str_max.to_string().into_bytes(),
+                    Arc::new(RwLock::new(WildDocValue::from(json!(cursor.max)))),
                 );
 
-                bson.insert(
-                    str_current.as_bytes().to_vec(),
-                    Arc::new(RwLock::new(Bson::Int32(cursor.current as i32))),
+                json.insert(
+                    str_current.to_string().into_bytes(),
+                    Arc::new(RwLock::new(WildDocValue::from(json!(cursor.current)))),
                 );
             }
         }

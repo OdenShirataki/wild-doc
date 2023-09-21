@@ -86,13 +86,11 @@ impl Parser {
         let (last_xml, mut conditions, join) = self.condition_loop(xml);
 
         if let Some(Some(activity)) = attributes.get(b"activity".as_ref()) {
-            if let Some(activity) = activity.as_str() {
-                conditions.push(Condition::Activity(if activity == "inactive" {
-                    Activity::Inactive
-                } else {
-                    Activity::Active
-                }));
-            }
+            conditions.push(Condition::Activity(if activity.to_str() == "inactive" {
+                Activity::Inactive
+            } else {
+                Activity::Active
+            }));
         }
         if let Some(Some(term)) = attributes.get(b"term".as_ref()) {
             if let Some(term) = term.as_str() {
@@ -259,42 +257,36 @@ impl Parser {
             attributes.get(b"method".as_ref()),
             attributes.get(b"value".as_ref()),
         ) {
-            if let Some(value) = value.as_str() {
-                if value != "" {
-                    if let Some(method) = method.as_str() {
-                        match method {
-                            "in" => {
-                                let v: Vec<_> =
-                                    value.split(',').flat_map(|s| s.parse::<isize>()).collect();
-                                if v.len() > 0 {
-                                    return Some(Condition::Row(search::Number::In(v)));
-                                }
-                            }
-                            "min" => {
-                                if let Ok(v) = value.parse::<isize>() {
-                                    return Some(Condition::Row(search::Number::Min(v)));
-                                }
-                            }
-                            "max" => {
-                                if let Ok(v) = value.parse::<isize>() {
-                                    return Some(Condition::Row(search::Number::Max(v)));
-                                }
-                            }
-                            "range" => {
-                                let s: Vec<&str> = value.split("..").collect();
-                                if s.len() == 2 {
-                                    if let (Ok(min), Ok(max)) =
-                                        (s[0].parse::<u32>(), s[1].parse::<u32>())
-                                    {
-                                        return Some(Condition::Row(search::Number::Range(
-                                            (min as isize)..=(max as isize),
-                                        )));
-                                    }
-                                }
-                            }
-                            _ => {}
+            let value = value.to_string();
+            if value != "" {
+                match method.to_str().as_ref() {
+                    "in" => {
+                        let v: Vec<_> = value.split(',').flat_map(|s| s.parse::<isize>()).collect();
+                        if v.len() > 0 {
+                            return Some(Condition::Row(search::Number::In(v)));
                         }
                     }
+                    "min" => {
+                        if let Ok(v) = value.parse::<isize>() {
+                            return Some(Condition::Row(search::Number::Min(v)));
+                        }
+                    }
+                    "max" => {
+                        if let Ok(v) = value.parse::<isize>() {
+                            return Some(Condition::Row(search::Number::Max(v)));
+                        }
+                    }
+                    "range" => {
+                        let s: Vec<&str> = value.split("..").collect();
+                        if s.len() == 2 {
+                            if let (Ok(min), Ok(max)) = (s[0].parse::<u32>(), s[1].parse::<u32>()) {
+                                return Some(Condition::Row(search::Number::Range(
+                                    (min as isize)..=(max as isize),
+                                )));
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -330,46 +322,46 @@ impl Parser {
             attributes.get(b"method".as_ref()),
             attributes.get(b"value".as_ref()),
         ) {
-            if let (Some(name), Some(value), Some(method)) =
-                (name.as_str(), value.as_str(), method.as_str())
-            {
-                return (name != "" && method != "" && value != "")
-                    .then(|| {
-                        let method_pair: Vec<&str> = method.split('!').collect();
-                        let len = method_pair.len();
-                        let i = len - 1;
-                        match method_pair[i] {
-                            "match" => Some(search::Field::Match(value.as_bytes().to_vec())),
-                            "min" => Some(search::Field::Min(value.as_bytes().to_vec())),
-                            "max" => Some(search::Field::Max(value.as_bytes().to_vec())),
-                            "partial" => Some(search::Field::Partial(Arc::new(value.to_owned()))),
-                            "forward" => Some(search::Field::Forward(Arc::new(value.to_owned()))),
-                            "backward" => Some(search::Field::Backward(Arc::new(value.to_owned()))),
-                            "range" => {
-                                let s: Vec<&str> = value.split("..").collect();
-                                (s.len() == 2).then(|| {
-                                    search::Field::Range(
-                                        s[0].as_bytes().to_vec(),
-                                        s[1].as_bytes().to_vec(),
-                                    )
-                                })
-                            }
-                            "value_forward" => {
-                                Some(search::Field::ValueForward(Arc::new(value.to_owned())))
-                            }
-                            "value_backward" => {
-                                Some(search::Field::ValueBackward(Arc::new(value.to_owned())))
-                            }
-                            "value_partial" => {
-                                Some(search::Field::ValuePartial(Arc::new(value.to_owned())))
-                            }
-                            _ => None,
+            let name = name.to_str();
+            let method = method.to_string();
+            let value = value.to_str();
+            (name != "" && method != "" && value != "")
+                .then(|| {
+                    let method_pair: Vec<&str> = method.split('!').collect();
+                    let len = method_pair.len();
+                    let i = len - 1;
+                    match method_pair[i] {
+                        "match" => Some(search::Field::Match(value.to_string().into_bytes())),
+                        "min" => Some(search::Field::Min(value.to_string().into_bytes())),
+                        "max" => Some(search::Field::Max(value.to_string().into_bytes())),
+                        "partial" => Some(search::Field::Partial(Arc::new(value.to_string()))),
+                        "forward" => Some(search::Field::Forward(Arc::new(value.to_string()))),
+                        "backward" => Some(search::Field::Backward(Arc::new(value.to_string()))),
+                        "range" => {
+                            let s: Vec<&str> = value.split("..").collect();
+                            (s.len() == 2).then(|| {
+                                search::Field::Range(
+                                    s[0].as_bytes().to_vec(),
+                                    s[1].as_bytes().to_vec(),
+                                )
+                            })
                         }
-                        .map(|method| Condition::Field(name.to_owned(), method))
-                    })
-                    .and_then(|v| v);
-            }
+                        "value_forward" => {
+                            Some(search::Field::ValueForward(Arc::new(value.to_string())))
+                        }
+                        "value_backward" => {
+                            Some(search::Field::ValueBackward(Arc::new(value.to_string())))
+                        }
+                        "value_partial" => {
+                            Some(search::Field::ValuePartial(Arc::new(value.to_string())))
+                        }
+                        _ => None,
+                    }
+                    .map(|method| Condition::Field(name.to_string(), method))
+                })
+                .and_then(|v| v)
+        } else {
+            None
         }
-        None
     }
 }

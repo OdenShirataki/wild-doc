@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-script-deno"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -15,10 +15,11 @@ keywords = ["database","xml","html","javascript","TypeScript"]
 categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
 
 [dependencies]
-bson.workspace = true
+serde_json.workspace = true
+indexmap.workspace = true
 
 ring = "0.16.20"
 deno_runtime = "0.126"
 deno_ast = { version = "0.28.0", features = ["transpiling"] }
 
-wild-doc-script = { version = "0.4", path = "../wild-doc-script" }
+wild-doc-script = { version = "0.5", path = "../wild-doc-script" }
