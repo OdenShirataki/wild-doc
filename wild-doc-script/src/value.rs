@@ -58,31 +58,6 @@ impl From<serde_json::Number> for WildDocValue {
         WildDocValue::Number(value)
     }
 }
-impl From<bool> for WildDocValue {
-    fn from(value: bool) -> Self {
-        WildDocValue::Bool(value)
-    }
-}
-impl From<String> for WildDocValue {
-    fn from(value: String) -> Self {
-        WildDocValue::String(value)
-    }
-}
-impl From<Vec<WildDocValue>> for WildDocValue {
-    fn from(value: Vec<WildDocValue>) -> Self {
-        WildDocValue::Array(value)
-    }
-}
-impl From<IndexMap<String, WildDocValue>> for WildDocValue {
-    fn from(value: IndexMap<String, WildDocValue>) -> Self {
-        WildDocValue::Object(value)
-    }
-}
-impl From<Vec<u8>> for WildDocValue {
-    fn from(value: Vec<u8>) -> Self {
-        WildDocValue::Binary(value)
-    }
-}
 
 impl std::fmt::Display for WildDocValue {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -93,22 +68,34 @@ impl std::fmt::Display for WildDocValue {
             }
             Self::Bool(v) => v.fmt(f),
             Self::Number(v) => v.fmt(f),
-            //Self::String(v) => v.fmt(f),
-            Self::String(v) => {
-                write!(f, "{}", v)?;
-                Ok(())
+            Self::String(v) => v.fmt(f),
+            Self::Array(v) => {
+                write!(f, "[")?;
+                let mut iter = v.iter();
+                if let Some(i) = iter.next() {
+                    i.fmt(f)?;
+                }
+                for i in iter {
+                    write!(f, " , ")?;
+                    i.fmt(f)?;
+                }
+                write!(f, "]")
             }
-            Self::Array(_) => {
-                write!(f, "array")?;
-                Ok(())
-            }
-            Self::Object(_) => {
-                write!(f, "object")?;
-                Ok(())
+            Self::Object(v) => {
+                write!(f, "{{")?;
+                let mut iter = v.iter();
+                if let Some((k, v)) = iter.next() {
+                    write!(f, "\"{}\" : ", k)?;
+                    v.fmt(f)?;
+                }
+                for (k, v) in iter {
+                    write!(f, " , \"{}\" : ", k)?;
+                    v.fmt(f)?;
+                }
+                write!(f, "}}")
             }
             Self::Binary(v) => {
-                write!(f, "{}", std::str::from_utf8(v).map_or_else(|_| "", |v| v))?;
-                Ok(())
+                write!(f, "{:?}", v)
             }
         }
     }
