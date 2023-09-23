@@ -6,7 +6,7 @@ use base64::{
     engine::{self, general_purpose},
     Engine,
 };
-use chrono::TimeZone;
+use chrono::DateTime;
 use indexmap::IndexMap;
 use maybe_xml::{
     scanner::{Scanner, State},
@@ -536,9 +536,9 @@ impl Parser {
                                 {
                                     let str = str.to_str();
                                     if str != "" {
-                                        if let Ok(t) = chrono::Local
-                                            .datetime_from_str(&str, "%Y-%m-%d %H:%M:%S")
-                                            .map(|v| v.timestamp())
+                                        if let Ok(t) =
+                                            DateTime::parse_from_str(&str, "%Y-%m-%d %H:%M:%S")
+                                                .map(|v| v.timestamp())
                                         {
                                             term_begin = Term::Overwrite(t as u64)
                                         }
@@ -549,9 +549,9 @@ impl Parser {
                                 {
                                     let str = str.to_str();
                                     if str != "" {
-                                        if let Ok(t) = chrono::Local
-                                            .datetime_from_str(&str, "%Y-%m-%d %H:%M:%S")
-                                            .map(|v| v.timestamp())
+                                        if let Ok(t) =
+                                            DateTime::parse_from_str(&str, "%Y-%m-%d %H:%M:%S")
+                                                .map(|v| v.timestamp())
                                         {
                                             term_end = Term::Overwrite(t as u64)
                                         }

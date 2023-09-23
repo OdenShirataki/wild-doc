@@ -6,7 +6,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use chrono::TimeZone;
+use chrono::DateTime;
 use maybe_xml::{
     scanner::{Scanner, State},
     token,
@@ -91,17 +91,15 @@ impl Parser {
             if term != "all" {
                 let term: Vec<&str> = term.split('@').collect();
                 conditions.push(Condition::Term(if term.len() == 2 {
-                    chrono::Local
-                        .datetime_from_str(term[1], "%Y-%m-%d %H:%M:%S")
-                        .map_or_else(
-                            |_| search::Term::default(),
-                            |t| match term[0] {
-                                "in" => search::Term::In(t.timestamp() as u64),
-                                "future" => search::Term::Future(t.timestamp() as u64),
-                                "past" => search::Term::Past(t.timestamp() as u64),
-                                _ => search::Term::default(),
-                            },
-                        )
+                    DateTime::parse_from_str(term[1], "%Y-%m-%d %H:%M:%S").map_or_else(
+                        |_| search::Term::default(),
+                        |t| match term[0] {
+                            "in" => search::Term::In(t.timestamp() as u64),
+                            "future" => search::Term::Future(t.timestamp() as u64),
+                            "past" => search::Term::Past(t.timestamp() as u64),
+                            _ => search::Term::default(),
+                        },
+                    )
                 } else {
                     search::Term::default()
                 }));
