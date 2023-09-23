@@ -125,36 +125,46 @@ impl Parser {
             if var != "" {
                 match r#in.as_ref() {
                     WildDocValue::Object(map) => {
-                        let key_name = attributes.get(b"key".as_ref());
-                        for (key, value) in map {
-                            let mut vars = HashMap::new();
-                            vars.insert(
-                                var.to_string().into_bytes(),
-                                Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
-                            );
-                            if let Some(Some(key_name)) = key_name {
+                        if let Some(Some(key_name)) = attributes.get(b"key".as_ref()) {
+                            for (key, value) in map {
+                                let mut vars = HashMap::new();
+                                vars.insert(
+                                    var.to_string().into_bytes(),
+                                    Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
+                                );
                                 vars.insert(
                                     key_name.to_string().into_bytes(),
                                     Arc::new(RwLock::new(WildDocValue::from(serde_json::json!(
                                         key
                                     )))),
                                 );
+                                self.state.stack().write().unwrap().push(vars);
+                                r.extend(self.parse(xml)?);
+                                self.state.stack().write().unwrap().pop();
                             }
-                            self.state.stack().write().unwrap().push(vars);
-                            r.extend(self.parse(xml)?);
-                            self.state.stack().write().unwrap().pop();
+                        } else {
+                            for (_, value) in map {
+                                let mut vars = HashMap::new();
+                                vars.insert(
+                                    var.to_string().into_bytes(),
+                                    Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
+                                );
+                                self.state.stack().write().unwrap().push(vars);
+                                r.extend(self.parse(xml)?);
+                                self.state.stack().write().unwrap().pop();
+                            }
                         }
                     }
                     WildDocValue::Array(vec) => {
                         let key_name = attributes.get(b"key".as_ref());
-                        let mut key = 0;
-                        for value in vec {
-                            let mut vars = HashMap::new();
-                            vars.insert(
-                                var.to_string().into_bytes(),
-                                Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
-                            );
-                            if let Some(Some(key_name)) = key_name {
+                        if let Some(Some(key_name)) = key_name {
+                            let mut key = 0;
+                            for value in vec {
+                                let mut vars = HashMap::new();
+                                vars.insert(
+                                    var.to_string().into_bytes(),
+                                    Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
+                                );
                                 vars.insert(
                                     key_name.to_string().into_bytes(),
                                     Arc::new(RwLock::new(WildDocValue::from(serde_json::json!(
@@ -162,10 +172,21 @@ impl Parser {
                                     )))),
                                 );
                                 key += 1;
+                                self.state.stack().write().unwrap().push(vars);
+                                r.extend(self.parse(xml)?);
+                                self.state.stack().write().unwrap().pop();
                             }
-                            self.state.stack().write().unwrap().push(vars);
-                            r.extend(self.parse(xml)?);
-                            self.state.stack().write().unwrap().pop();
+                        } else {
+                            for value in vec {
+                                let mut vars = HashMap::new();
+                                vars.insert(
+                                    var.to_string().into_bytes(),
+                                    Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
+                                );
+                                self.state.stack().write().unwrap().push(vars);
+                                r.extend(self.parse(xml)?);
+                                self.state.stack().write().unwrap().pop();
+                            }
                         }
                     }
                     _ => {}
