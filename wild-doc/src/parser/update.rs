@@ -430,13 +430,12 @@ impl Parser {
                                                             .cloned()
                                                             .unwrap_or(false)
                                                         {
-                                                            let buf = engine::GeneralPurpose::new(
-                                                                &alphabet::URL_SAFE,
-                                                                general_purpose::PAD,
+                                                            value = engine::GeneralPurpose::new(
+                                                                &alphabet::STANDARD,
+                                                                general_purpose::NO_PAD,
                                                             )
                                                             .decode(value)
                                                             .unwrap();
-                                                            value = buf;
                                                         }
                                                     }
                                                     fields.insert(field_name.to_string(), value);
