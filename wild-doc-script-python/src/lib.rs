@@ -3,13 +3,12 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use bson::Bson;
 use pyo3::{
     pyfunction,
     types::{PyCapsule, PyDict, PyModule},
     wrap_pyfunction, PyObject, PyResult, Python,
 };
-use wild_doc_script::{VarsStack, WildDocScript, WildDocState};
+use wild_doc_script::{VarsStack, WildDocScript, WildDocState, WildDocValue};
 
 use wild_doc_script::anyhow::Result;
 
@@ -34,17 +33,14 @@ impl WildDocScript for WdPy {
         });
         Ok(WdPy {})
     }
-
-    #[inline(always)]
     fn evaluate_module(&mut self, _: &str, code: &[u8]) -> Result<()> {
         let code = std::str::from_utf8(code)?;
         Python::with_gil(|py| -> PyResult<()> { py.run(code, None, None) })?;
         Ok(())
     }
 
-    #[inline(always)]
-    fn eval(&mut self, code: &[u8]) -> Result<Bson> {
-        Ok(Bson::String(
+    fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
+        Ok(WildDocValue::from(
             Python::with_gil(|py| -> PyResult<PyObject> {
                 py.eval(
                     ("(".to_owned() + std::str::from_utf8(code)? + ")").as_str(),
@@ -53,12 +49,12 @@ impl WildDocScript for WdPy {
                 )?
                 .extract()
             })?
-            .to_string(),
+            .to_string()
+            .into_bytes(),
         ))
     }
 }
 
-#[inline(always)]
 #[pyfunction]
 #[pyo3(name = "v")]
 fn wdv(_py: Python, key: String) -> PyResult<PyObject> {

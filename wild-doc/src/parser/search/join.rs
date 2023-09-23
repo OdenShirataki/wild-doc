@@ -9,7 +9,6 @@ use semilattice_database_session::search::{Join, JoinCondition};
 use crate::parser::{AttributeMap, Parser};
 
 impl Parser {
-    #[inline(always)]
     pub fn join<'a>(
         &mut self,
         xml: &'a [u8],
@@ -17,20 +16,18 @@ impl Parser {
         search_map: &mut HashMap<String, Join>,
     ) -> &'a [u8] {
         if let Some(Some(name)) = attributes.get(b"name".as_ref()) {
-            if let Some(name) = name.as_str() {
-                if name != "" {
-                    if let Some(collection_id) = self.collection_id(attributes) {
-                        let (last_xml, condition) = self.join_condition_loop(xml);
-                        search_map.insert(name.to_owned(), Join::new(collection_id, condition));
-                        return last_xml;
-                    }
+            let name = name.to_str();
+            if name.as_ref() != "" {
+                if let Some(collection_id) = self.collection_id(attributes) {
+                    let (last_xml, condition) = self.join_condition_loop(xml);
+                    search_map.insert(name.to_string(), Join::new(collection_id, condition));
+                    return last_xml;
                 }
             }
         }
         return xml;
     }
 
-    #[inline(always)]
     fn join_condition_loop<'a>(&mut self, xml: &'a [u8]) -> (&'a [u8], Vec<JoinCondition>) {
         let mut result_conditions = Vec::new();
         let mut xml = xml;
@@ -76,13 +73,12 @@ impl Parser {
         (xml, result_conditions)
     }
 
-    #[inline(always)]
     fn join_condition_pends(attributes: &AttributeMap) -> JoinCondition {
         JoinCondition::Pends {
             key: attributes
                 .get(b"key".as_ref())
                 .and_then(|v| v.as_ref())
-                .map(|v| v.as_str().unwrap_or("").to_owned()),
+                .map(|v| v.to_string()),
         }
     }
 }

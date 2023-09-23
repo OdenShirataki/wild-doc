@@ -5,7 +5,6 @@ use std::{
 
 use anyhow::Result;
 
-use bson::Bson;
 use maybe_xml::{
     scanner::{Scanner, State},
     token::{self, prop::Attributes},
@@ -13,53 +12,48 @@ use maybe_xml::{
 
 use crate::xml_util;
 
-use super::{AttributeMap, Parser};
+use super::{AttributeMap, Parser, WildDocValue};
 
 impl Parser {
-    #[inline(always)]
     pub(super) fn get_include_content(&mut self, attributes: AttributeMap) -> Result<Vec<u8>> {
         if let Some(Some(src)) = attributes.get(b"src".as_ref()) {
-            if let Some(src) = src.as_str() {
-                let (xml, filename) = self
-                    .state
-                    .include_adaptor()
-                    .lock()
-                    .unwrap()
-                    .include(src.into())
-                    .map_or_else(
-                        || {
-                            let mut r = (None, "".to_owned());
-                            if let Some(Some(substitute)) = attributes.get(b"substitute".as_ref()) {
-                                if let Some(substitute) = substitute.as_str() {
-                                    if let Some(xml) = self
-                                        .state
-                                        .include_adaptor()
-                                        .lock()
-                                        .unwrap()
-                                        .include(substitute.into())
-                                    {
-                                        r = (Some(xml), substitute.to_owned());
-                                    }
-                                }
+            let src = &src.to_string();
+            let (xml, filename) = self
+                .state
+                .include_adaptor()
+                .lock()
+                .unwrap()
+                .include(src.into())
+                .map_or_else(
+                    || {
+                        let mut r = (None, "".to_owned());
+                        if let Some(Some(substitute)) = attributes.get(b"substitute".as_ref()) {
+                            if let Some(xml) = self
+                                .state
+                                .include_adaptor()
+                                .lock()
+                                .unwrap()
+                                .include(substitute.to_str().into_owned().into())
+                            {
+                                r = (Some(xml), substitute.to_str().into_owned());
                             }
-                            r
-                        },
-                        |xml| (Some(xml), src.to_owned().into()),
-                    );
-                if let Some(xml) = xml {
-                    if xml.len() > 0 {
-                        self.include_stack.push(filename);
-                        let r = self.parse(xml.as_slice())?;
-                        self.include_stack.pop();
-                        return Ok(r);
-                    }
+                        }
+                        r
+                    },
+                    |xml| (Some(xml), src.to_owned().into()),
+                );
+            if let Some(xml) = xml {
+                if xml.len() > 0 {
+                    self.include_stack.push(filename);
+                    let r = self.parse(xml.as_slice())?;
+                    self.include_stack.pop();
+                    return Ok(r);
                 }
             }
         }
         Ok(b"".to_vec())
     }
 
-    #[inline(always)]
     pub(super) fn case(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         let cmp_src = attributes
             .get(b"value".as_ref())
@@ -110,17 +104,17 @@ impl Parser {
         Ok(vec![])
     }
 
-    #[inline(always)]
     pub(super) fn r#if(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
-            if value.to_str() == "true" {
-                return self.parse(xml);
+            if let WildDocValue::Bool(v) = value.as_ref() {
+                if *v {
+                    return self.parse(xml);
+                }
             }
         }
         Ok(vec![])
     }
 
-    #[inline(always)]
     pub(super) fn r#for(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         let mut r = Vec::new();
         if let (Some(Some(var)), Some(Some(r#in))) = (
@@ -158,14 +152,14 @@ impl Parser {
                             let mut vars = HashMap::new();
                             vars.insert(
                                 var.to_string().into_bytes(),
-                                Arc::new(RwLock::new(value.clone())),
+                                Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
                             );
                             if let Some(Some(key_name)) = key_name {
                                 vars.insert(
                                     key_name.to_string().into_bytes(),
-                                    Arc::new(RwLock::new(WildDocValue::Number(
-                                        serde_json::Number::from(key),
-                                    ))),
+                                    Arc::new(RwLock::new(WildDocValue::from(serde_json::json!(
+                                        key
+                                    )))),
                                 );
                                 key += 1;
                             }
@@ -180,8 +174,6 @@ impl Parser {
         }
         Ok(r)
     }
-
-    #[inline(always)]
     pub(super) fn r#while(
         &mut self,
         attributes: Option<Attributes<'_>>,
@@ -191,8 +183,12 @@ impl Parser {
         loop {
             let attributes = self.parse_attibutes(&attributes);
             if let Some(Some(cont)) = attributes.get(b"continue".as_ref()) {
-                if cont.to_str() == "true" {
-                    r.extend(self.parse(xml)?);
+                if let WildDocValue::Bool(v) = cont.as_ref() {
+                    if *v {
+                        r.extend(self.parse(xml)?);
+                    } else {
+                        break;
+                    }
                 } else {
                     break;
                 }

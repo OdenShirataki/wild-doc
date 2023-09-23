@@ -6,7 +6,6 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use bson::Bson;
 use chrono::TimeZone;
 use maybe_xml::{
     scanner::{Scanner, State},
@@ -22,40 +21,35 @@ use crate::xml_util;
 use super::{AttributeMap, Parser};
 
 impl Parser {
-    #[inline(always)]
     fn collection_id(&mut self, attributes: &AttributeMap) -> Option<i32> {
         if let Some(Some(collection_name)) = attributes.get(b"collection".as_ref()) {
-            if let Some(collection_name) = collection_name.as_str() {
-                if let Some(collection_id) = self
-                    .database
-                    .clone()
-                    .read()
-                    .unwrap()
-                    .collection_id(collection_name)
+            let collection_name = collection_name.to_string();
+            if let Some(collection_id) = self
+                .database
+                .clone()
+                .read()
+                .unwrap()
+                .collection_id(&collection_name)
+            {
+                return Some(collection_id);
+            }
+            if collection_name != "" {
+                if let Some(Some(value)) =
+                    attributes.get(b"create_collection_if_not_exists".as_ref())
                 {
-                    return Some(collection_id);
-                }
-                if collection_name != "" {
-                    if let Some(Some(value)) =
-                        attributes.get(b"create_collection_if_not_exists".as_ref())
-                    {
-                        if let Some(value) = value.as_bool() {
-                            return value.then(|| {
-                                self.database
-                                    .clone()
-                                    .write()
-                                    .unwrap()
-                                    .collection_id_or_create(&collection_name)
-                            });
-                        }
-                    }
+                    return (value.as_bool().cloned().unwrap_or(false)).then(|| {
+                        self.database
+                            .clone()
+                            .write()
+                            .unwrap()
+                            .collection_id_or_create(&collection_name)
+                    });
                 }
             }
         }
         None
     }
 
-    #[inline(always)]
     pub(crate) fn search<'a>(
         &mut self,
         xml: &'a [u8],
@@ -63,21 +57,21 @@ impl Parser {
         search_map: &mut HashMap<String, Arc<RwLock<Search>>>,
     ) -> &'a [u8] {
         if let Some(Some(name)) = attributes.get(b"name".as_ref()) {
-            if let Some(name) = name.as_str() {
-                if name != "" {
-                    if let Some(collection_id) = self.collection_id(attributes) {
-                        let (last_xml, condition, join) = self.make_conditions(attributes, xml);
-                        let search = Search::new(collection_id, condition, join);
-                        search_map.insert(name.to_owned(), Arc::new(RwLock::new(search)));
-                        return last_xml;
-                    }
+            let name = name.to_str();
+            if name != "" {
+                if let Some(collection_id) = self.collection_id(attributes) {
+                    let (last_xml, condition, join) = self.make_conditions(attributes, xml);
+                    search_map.insert(
+                        name.into_owned(),
+                        Arc::new(RwLock::new(Search::new(collection_id, condition, join))),
+                    );
+                    return last_xml;
                 }
             }
         }
         return xml;
     }
 
-    #[inline(always)]
     fn make_conditions<'a>(
         &mut self,
         attributes: &AttributeMap,
@@ -93,31 +87,29 @@ impl Parser {
             }));
         }
         if let Some(Some(term)) = attributes.get(b"term".as_ref()) {
-            if let Some(term) = term.as_str() {
-                if term != "all" {
-                    let term: Vec<&str> = term.split('@').collect();
-                    conditions.push(Condition::Term(if term.len() == 2 {
-                        chrono::Local
-                            .datetime_from_str(term[1], "%Y-%m-%d %H:%M:%S")
-                            .map_or_else(
-                                |_| search::Term::default(),
-                                |t| match term[0] {
-                                    "in" => search::Term::In(t.timestamp() as u64),
-                                    "future" => search::Term::Future(t.timestamp() as u64),
-                                    "past" => search::Term::Past(t.timestamp() as u64),
-                                    _ => search::Term::default(),
-                                },
-                            )
-                    } else {
-                        search::Term::default()
-                    }));
-                }
+            let term = term.to_string();
+            if term != "all" {
+                let term: Vec<&str> = term.split('@').collect();
+                conditions.push(Condition::Term(if term.len() == 2 {
+                    chrono::Local
+                        .datetime_from_str(term[1], "%Y-%m-%d %H:%M:%S")
+                        .map_or_else(
+                            |_| search::Term::default(),
+                            |t| match term[0] {
+                                "in" => search::Term::In(t.timestamp() as u64),
+                                "future" => search::Term::Future(t.timestamp() as u64),
+                                "past" => search::Term::Past(t.timestamp() as u64),
+                                _ => search::Term::default(),
+                            },
+                        )
+                } else {
+                    search::Term::default()
+                }));
             }
         }
         (last_xml, conditions, join)
     }
 
-    #[inline(always)]
     fn condition_loop<'a>(
         &mut self,
         xml: &'a [u8],
@@ -212,54 +204,47 @@ impl Parser {
         (xml, result_conditions, join)
     }
 
-    #[inline(always)]
     fn condition_depend(&mut self, attributes: &AttributeMap) -> Option<Condition> {
         if let (Some(Some(row)), Some(Some(collection_name))) = (
             attributes.get(b"row".as_ref()),
             attributes.get(b"collection".as_ref()),
         ) {
-            if let Some(collection_name) = collection_name.as_str() {
-                let row = match row.as_ref() {
-                    Bson::Int64(v) => *v,
-                    Bson::Int32(v) => *v as i64,
-                    _ => 0,
-                };
-                if row > 0 && collection_name != "" {
-                    if let Some(collection_id) = self
-                        .database
+            let row = row.to_string();
+            let collection_name = collection_name.to_string();
+            if row != "" && collection_name != "" {
+                if let (Ok(row), Some(collection_id)) = (
+                    row.parse::<i64>(),
+                    self.database
                         .clone()
                         .read()
                         .unwrap()
-                        .collection_id(collection_name)
-                    {
-                        return Some(Condition::Depend(
-                            attributes
-                                .get(b"key".as_ref())
-                                .and_then(|v| v.as_ref())
-                                .and_then(|v| v.as_str())
-                                .map(|v| v.to_owned()),
-                            if row < 0 {
-                                CollectionRow::new(-collection_id, (-row) as u32)
-                            } else {
-                                CollectionRow::new(collection_id, row as u32)
-                            },
-                        ));
-                    }
+                        .collection_id(&collection_name),
+                ) {
+                    return Some(Condition::Depend(
+                        attributes
+                            .get(b"key".as_ref())
+                            .and_then(|v| v.as_ref())
+                            .map(|v| v.to_string()),
+                        if row < 0 {
+                            CollectionRow::new(-collection_id, (-row) as u32)
+                        } else {
+                            CollectionRow::new(collection_id, row as u32)
+                        },
+                    ));
                 }
             }
         }
         None
     }
-
-    #[inline(always)]
     fn condition_row(attributes: &AttributeMap) -> Option<Condition> {
         if let (Some(Some(method)), Some(Some(value))) = (
             attributes.get(b"method".as_ref()),
             attributes.get(b"value".as_ref()),
         ) {
-            let value = value.to_string();
+            let value = value.to_str();
             if value != "" {
-                match method.to_str().as_ref() {
+                let method = method.to_str();
+                match method.as_ref() {
                     "in" => {
                         let v: Vec<_> = value.split(',').flat_map(|s| s.parse::<isize>()).collect();
                         if v.len() > 0 {
@@ -294,28 +279,23 @@ impl Parser {
         None
     }
 
-    #[inline(always)]
     fn condition_uuid(attributes: &AttributeMap) -> Option<Condition> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
-            if let Some(value) = value.as_str() {
-                (value != "")
-                    .then(|| {
-                        let v: Vec<_> = value
-                            .split(',')
-                            .flat_map(|s| Uuid::from_str(&s).map(|uuid| uuid.as_u128()))
-                            .collect();
-                        (v.len() > 0).then(|| Condition::Uuid(v))
-                    })
-                    .and_then(|v| v)
-            } else {
-                None
-            }
+            let value = value.to_string();
+            (value != "")
+                .then(|| {
+                    let v: Vec<_> = value
+                        .split(',')
+                        .flat_map(|s| Uuid::from_str(&s).map(|uuid| uuid.as_u128()))
+                        .collect();
+                    (v.len() > 0).then(|| Condition::Uuid(v))
+                })
+                .and_then(|v| v)
         } else {
             None
         }
     }
 
-    #[inline(always)]
     fn condition_field(attributes: &AttributeMap) -> Option<Condition> {
         if let (Some(Some(name)), Some(Some(method)), Some(Some(value))) = (
             attributes.get(b"name".as_ref()),
@@ -323,7 +303,7 @@ impl Parser {
             attributes.get(b"value".as_ref()),
         ) {
             let name = name.to_str();
-            let method = method.to_string();
+            let method = method.to_str();
             let value = value.to_str();
             (name != "" && method != "" && value != "")
                 .then(|| {
