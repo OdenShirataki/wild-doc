@@ -19,4 +19,4 @@ wild-doc-script = { version = "0.5", path = "../wild-doc-script" }
 
 [dependencies.pyo3]
 version = "0.19.2"
-features = ["auto-initialize" , "serde"]
+features = ["auto-initialize"]

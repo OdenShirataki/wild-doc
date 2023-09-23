@@ -15,8 +15,7 @@ keywords = ["database","xml","html"]
 categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
 
 [dependencies]
-indexmap.workspace = true
 anyhow.workspace = true
-serde.workspace = true
 serde_json.workspace = true
-bson.workspace = true
+serde.workspace = true
+indexmap.workspace = true

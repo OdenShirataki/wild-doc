@@ -1,6 +1,5 @@
 use maybe_xml::scanner::{Scanner, State};
 
-#[inline(always)]
 pub(crate) fn inner<'a>(xml: &'a [u8]) -> (&[u8], usize) {
     let mut pos = 0;
     let mut deps = 0;
@@ -32,13 +31,11 @@ pub(crate) fn inner<'a>(xml: &'a [u8]) -> (&[u8], usize) {
     (&xml[..0], 0)
 }
 
-#[inline(always)]
 pub(crate) fn quot_unescape(value: &[u8]) -> String {
     let str = unsafe { std::str::from_utf8_unchecked(value) };
     str.replace("&#039;", "'").replace("&quot;", "\"")
 }
 
-#[inline(always)]
 pub(crate) fn escape_html(s: &str) -> String {
     s.replace("&", "&amp;")
         .replace("<", "&lt;")

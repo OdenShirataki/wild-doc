@@ -5,9 +5,9 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum WildDocValue {
     Null,
     Bool(bool),
@@ -93,6 +93,7 @@ impl std::fmt::Display for WildDocValue {
             }
             Self::Bool(v) => v.fmt(f),
             Self::Number(v) => v.fmt(f),
+            //Self::String(v) => v.fmt(f),
             Self::String(v) => {
                 write!(f, "{}", v)?;
                 Ok(())
@@ -125,6 +126,18 @@ impl WildDocValue {
         match self {
             Self::Object(_) => true,
             _ => false,
+        }
+    }
+    pub fn is_null(&self) -> bool {
+        match self {
+            Self::Null => true,
+            _ => false,
+        }
+    }
+    pub fn as_bool(&self) -> Option<&bool> {
+        match self {
+            Self::Bool(v) => Some(v),
+            _ => None,
         }
     }
 }

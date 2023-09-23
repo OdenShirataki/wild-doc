@@ -1,6 +1,6 @@
 mod custom_sort;
 
-use bson::{Bson, Document};
+use indexmap::IndexMap;
 use semilattice_database_session::{search::Search, Order, OrderKey};
 use std::{
     collections::HashMap,
@@ -9,16 +9,15 @@ use std::{
 
 use self::custom_sort::WdCustomSort;
 
-use super::{AttributeMap, Parser};
+use super::{AttributeMap, Parser, WildDocValue};
 
 impl Parser {
-    #[inline(always)]
     pub(super) fn result(
         &mut self,
         attributes: &AttributeMap,
         search_map: &HashMap<String, Arc<RwLock<Search>>>,
     ) {
-        let mut bsons = HashMap::new();
+        let mut vars = HashMap::new();
         if let (Some(Some(search)), Some(Some(var))) = (
             attributes.get(b"search".as_ref()),
             attributes.get(b"var".as_ref()),
@@ -26,10 +25,13 @@ impl Parser {
             let search = search.to_str();
             let var = var.to_str();
             if search != "" && var != "" {
-                let mut json_inner = Map::new();
+                let mut inner = IndexMap::new();
                 if let Some(search) = search_map.get(search.as_ref()) {
                     let collection_id = search.read().unwrap().collection_id();
-                    json_inner.insert("collection_id".to_owned(), json!(collection_id));
+                    inner.insert(
+                        "collection_id".to_owned(),
+                        WildDocValue::Number(serde_json::Number::from(collection_id)),
+                    );
                     let orders = make_order(
                         search,
                         &attributes
@@ -48,7 +50,7 @@ impl Parser {
                             break;
                         }
                     }
-                    let json_rows: Vec<_> = session_maybe_has_collection.map_or_else(
+                    let rows: Vec<_> = session_maybe_has_collection.map_or_else(
                         || {
                             search
                                 .write()
@@ -60,10 +62,13 @@ impl Parser {
                                 .map_or(vec![], |v| v.sort(&self.database.read().unwrap(), &orders))
                                 .iter()
                                 .map(|row| {
-                                    Value::Object({
-                                        let mut json_row = Map::new();
-                                        json_row.insert("row".to_owned(), json!(row));
-                                        json_row
+                                    WildDocValue::Object({
+                                        let mut r = IndexMap::new();
+                                        r.insert(
+                                            "row".to_owned(),
+                                            WildDocValue::Number(serde_json::Number::from(*row)),
+                                        );
+                                        r
                                     })
                                 })
                                 .collect()
@@ -74,29 +79,36 @@ impl Parser {
                                 .result(&self.database.read().unwrap(), &orders)
                                 .iter()
                                 .map(|row| {
-                                    let mut json_row = Map::new();
-                                    json_row.insert("row".to_owned(), json!(row));
-                                    Value::Object(json_row)
+                                    WildDocValue::Object({
+                                        let mut r = IndexMap::new();
+                                        r.insert(
+                                            "row".to_owned(),
+                                            WildDocValue::Number(serde_json::Number::from(*row)),
+                                        );
+                                        r
+                                    })
                                 })
                                 .collect()
                         },
                     );
-                    let len = json_rows.len();
-                    json_inner.insert("rows".to_owned(), Value::Array(json_rows));
-                    json_inner.insert("len".to_owned(), json!(len));
+                    let len = rows.len();
+                    inner.insert("rows".to_owned(), WildDocValue::Array(rows));
+                    inner.insert(
+                        "len".to_owned(),
+                        WildDocValue::Number(serde_json::Number::from(len)),
+                    );
 
-                    json.insert(
+                    vars.insert(
                         var.to_string().into_bytes(),
-                        Arc::new(RwLock::new(WildDocValue::from(Value::Object(json_inner)))),
+                        Arc::new(RwLock::new(WildDocValue::Object(inner))),
                     );
                 }
             }
         }
-        self.state.stack().write().unwrap().push(json);
+        self.state.stack().write().unwrap().push(vars);
     }
 }
 
-#[inline(always)]
 fn make_order<'a>(search: &Arc<RwLock<Search>>, sort: &str) -> Vec<Order> {
     let mut orders = vec![];
     if sort.len() > 0 {

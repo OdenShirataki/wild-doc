@@ -28,103 +28,102 @@ let r=wd.run(br#"<?js
     var="aa" key="key" in:js="(()=>{return {a:1,b:2,c:3};})()"
 ><wd:print value:var="key" /> : <wd:print value:var="aa" />
 </wd:for><wd:session name="logintest">
-    <wd:update commit="0">
-        <collection name="login">
-            <field name="test">hoge</field>
-            <depend key="account" collection="account" row="1" />
-        </collection>
-    </wd:update>
+<wd:update commit="false">
+    <collection name="login">
+        <field name="test">hoge</field>
+        <depend key="account" collection="account" row="1" />
+    </collection>
+</wd:update>
+<wd:search
+    name="login" collection="login"
+></wd:search><wd:result
+    search="login"
+    var="login"
+><wd:for var="row" in:var="login.rows"><wd:record var="row" collection="login" row:var="row.row">
+    <wd:print value:var="row.row" /> : <wd:print value:var="row.uuid" /> : <wd:print value:var="row.field.test" /> : <wd:print value:var="row.depends.account" />
     <wd:search
-        name="login" collection="login"
-    ></wd:search><wd:result
-        search="login"
-        var="login"
-    ><wd:for var="row" in:var="login.rows"><wd:record var="row" collection="login" row:var="row.row">
-        <wd:print value:var="row.row" /> : <wd:print value:var="row.uuid" /> : <wd:print value:var="row.field.test" /> : <wd:print value:var="row.depends.account" />
-        <wd:search
-            name="account" collection="account"
-        ><row in:var="row.depends.account.row"></wd:search><wd:result
-            search="account"
-            var="account"
-        ><wd:for var="a" in:var="account.rows"><wd:record var="a" collection="account" row:var="a.row">
-            dep:<wd:print value:var="a.field.id" />@<wd:print value:var="a.field.password" />
-        </wd:record></wd:for></wd:result>
+        name="account" collection="account"
+    ><row in:var="row.depends.account.row"></wd:search><wd:result
+        search="account"
+        var="account"
+    ><wd:for var="a" in:var="account.rows"><wd:record var="a" collection="account" row:var="a.row">
+        dep:<wd:print value:var="a.field.id" />@<wd:print value:var="a.field.password" />
     </wd:record></wd:for></wd:result>
+</wd:record></wd:for></wd:result>
 </wd:session>"#
-        ,b""
-    ).unwrap();
+    ,b""
+).unwrap();
 println!("{}", std::str::from_utf8(r.body()).unwrap());
 
 let update_xml = br#"<wd:session name="logintest" clear_on_close="true"></wd:session>"#;
 wd.run(update_xml, b"").unwrap();
 
-    //update data.
-    /*wd.run(r#"<wd:session name="hoge">
-        <wd:update commit="true">
-            <collection name="person">
-                <field name="name">Noah</field>
-                <field name="country">US</field>
-            </collection>
-            <collection name="person">
-                <field name="name">Liam</field>
-                <field name="country">US</field>
-            </collection>
-            <collection name="person">
-                <field name="name">Olivia</field>
-                <field name="country">UK</field>
-            </collection>
-        </wd:update>
-    </wd:session>"#,b"").unwrap();*/
-
-let update_xml = br#"<wd:session name="hoge">
+//update data.
+/*wd.run(r#"<wd:session name="hoge">
     <wd:update commit="true">
         <collection name="person">
-            <field name="name"><wd:print value:var="input.name" /></field>
-            <field name="country"><wd:print value:var="input.from" /></field>
+            <field name="name">Noah</field>
+            <field name="country">US</field>
+        </collection>
+        <collection name="person">
+            <field name="name">Liam</field>
+            <field name="country">US</field>
+        </collection>
+        <collection name="person">
+            <field name="name">Olivia</field>
+            <field name="country">UK</field>
         </collection>
     </wd:update>
-</wd:session>"#;
-    wd.run(
-        update_xml,
-        br#"{
-    "name":"Noah"
-    ,"from":"US"
-}"#,
-    )
-    .unwrap();
-    wd.run(
-        update_xml,
-        br#"{
-    "name":"Liam"
-    ,"from":"US"
-}"#,
-    )
-    .unwrap();
-    wd.run(
-        update_xml,
-        br#"{
-    "name":"Olivia"
-    ,"from":"UK"
-}"#,
-    )
-    .unwrap();
+</wd:session>"#,b"").unwrap();*/
 
-    //select data.
+let update_xml = br#"<wd:session name="hoge">
+<wd:update commit="true">
+    <collection name="person">
+        <field name="name"><wd:print value:var="input.name" /></field>
+        <field name="country"><wd:print value:var="input.from" /></field>
+    </collection>
+</wd:update>
+</wd:session>"#;
+wd.run(
+    update_xml,
+    br#"{
+"name":"Noah"
+,"from":"US"
+}"#,
+)
+.unwrap();
+wd.run(
+    update_xml,
+    br#"{
+"name":"Liam"
+,"from":"US"
+}"#,
+)
+.unwrap();
+wd.run(
+    update_xml,
+    br#"{
+"name":"Olivia"
+,"from":"UK"
+}"#,
+)
+.unwrap();
+
+//select data.
 let r=wd.run(br#"
-    <wd:search name="p" collection="person">
-    </wd:search>
-    <wd:result search="p" var="p">
-        <div>
-            find <wd:print value:var="p.len" /> persons.
-        </div>
-        <ul>
-            <wd:for var="person" in:var="p.rows"><wd:record var="person" collection="person" row:var="person.row"><li>
-                <wd:print value:var="person.row" /> : <wd:print value:var="person.activity" /> : <wd:print value:var="person.uuid" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
-            </li></wd:record></wd:for>
-        </ul>
-    </wd:result>
-    <input type="text" name="hoge" />
-    <wd:include src="body.xml" />
+<wd:search name="p" collection="person">
+</wd:search><wd:result search="p" var="p">
+    <div>
+        find <wd:print value:var="p.len" /> persons.
+    </div>
+    <ul>
+        <wd:for var="person" in:var="p.rows"><wd:record var="person" collection="person" row:var="person.row"><li>
+            <wd:print value:var="person.row" /> : <wd:print value:var="person.activity" /> : <wd:print value:var="person.uuid" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
+        </li></wd:record></wd:for>
+    </ul>
+</wd:result>
+<input type="text" name="hoge" />
+<wd:include src="body.xml" />
 "#,b"").unwrap();
 println!("{}", std::str::from_utf8(r.body()).unwrap());
 
@@ -132,8 +131,7 @@ println!("{}", std::str::from_utf8(r.body()).unwrap());
 let r=wd.run(br#"
     <wd:search name="p" collection="person">
         <field name="country" method="match" value="US" />
-    </wd:search>
-    <wd:result var="p" search="p">
+    </wd:search><wd:result var="p" search="p">
         <div>
             find <wd:print value:var="p.len" /> persons from the US.
         </div>
@@ -261,4 +259,58 @@ println!(
     std::str::from_utf8(r.body()).unwrap(),
     r.options()
 );
+```
+
+## Include file
+### layout.xml
+```xml
+<html>
+    <head>
+        <title>HTML include test</title>
+    </head>
+    <body>
+        <wd:include src:var="body_path" />
+    </body>
+</html>
+```
+### body.xml
+```xml
+BODY
+```
+
+### rust
+```rust
+let r=wd.run(br#"<wd:local body_path="body.xml">
+    <wd:include src="layout.xml" />
+<wd:local>"#,b"");
+    println!("{}",r);
+```
+
+### output
+```html
+<html>
+    <head>
+        <title>HTML include test</title>
+    </head>
+    <body>
+        BODY
+    </body>
+</html>
+```
+
+## Use python
+
+Specify features in Cargo.toml.
+```toml
+wild-doc = { version = "x" , path = "../wild-doc" ,features=[ "js","py" ] }
+```
+
+### code
+```rust
+//use WebAPI
+let r=wd.run(br#"<?py
+hoge=100
+def get_200():
+    return 200
+?><wd:print value:py="get_200()" />"#,b"").unwrap();
 ```

@@ -5,15 +5,13 @@ use std::{
 
 use anyhow::Result;
 
-use bson::Bson;
-use wild_doc_script::{VarsStack, WildDocScript};
+use wild_doc_script::{VarsStack, WildDocScript, WildDocValue};
 
 pub struct Var {
     stack: Arc<RwLock<VarsStack>>,
 }
 impl Var {
-    #[inline(always)]
-    fn search_stack(&self, key: &[u8]) -> Option<Arc<RwLock<Bson>>> {
+    fn search_stack(&self, key: &[u8]) -> Option<Arc<RwLock<WildDocValue>>> {
         for stack in self.stack.read().unwrap().iter().rev() {
             if let Some(v) = stack.get(key) {
                 return Some(v.clone());
@@ -23,7 +21,6 @@ impl Var {
     }
 }
 impl WildDocScript for Var {
-    #[inline(always)]
     fn new(state: wild_doc_script::WildDocState) -> Result<Self>
     where
         Self: Sized,
@@ -33,7 +30,6 @@ impl WildDocScript for Var {
         })
     }
 
-    #[inline(always)]
     fn evaluate_module(&mut self, _: &str, _: &[u8]) -> Result<()> {
         Ok(())
     }
@@ -44,7 +40,6 @@ impl WildDocScript for Var {
         let mut splited = code.split(|c| *c == b'.');
         if let Some(root) = splited.next() {
             if let Some(root) = self.search_stack(root) {
-                let next_value = root.read().unwrap().deref().clone();
                 let next_value = root.read().unwrap().deref().clone();
                 let mut next_value = &next_value;
                 while {
@@ -76,8 +71,6 @@ impl WildDocScript for Var {
                 } {}
             }
         }
-
-        Ok(value)
 
         Ok(value)
     }

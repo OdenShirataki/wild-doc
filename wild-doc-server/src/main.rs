@@ -94,7 +94,6 @@ fn main() {
     }
 }
 
-#[inline(always)]
 fn handler(mut stream: TcpStream, wd: Arc<Mutex<WildDoc>>) -> Result<()> {
     stream.write_all(&[0])?;
 
@@ -127,7 +126,6 @@ fn handler(mut stream: TcpStream, wd: Arc<Mutex<WildDoc>>) -> Result<()> {
                 writer.write_all(&[0])?;
                 writer.write_all(&len.to_be_bytes())?;
                 writer.write_all(body)?;
-
                 if let Some(json) = r
                     .options()
                     .as_ref()

@@ -12,7 +12,6 @@ pub struct IncludeLocal {
     cache: HashMap<PathBuf, Arc<Vec<u8>>>,
 }
 impl IncludeLocal {
-    #[inline(always)]
     pub fn new<P: AsRef<Path>>(dir: P) -> Self {
         Self {
             dir: dir.as_ref().to_path_buf(),
@@ -21,7 +20,6 @@ impl IncludeLocal {
     }
 }
 impl IncludeAdaptor for IncludeLocal {
-    #[inline(always)]
     fn include(&mut self, path: PathBuf) -> Option<Arc<Vec<u8>>> {
         if !self.cache.contains_key(&path) {
             let mut file_path = self.dir.clone();

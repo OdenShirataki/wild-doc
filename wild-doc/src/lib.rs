@@ -3,7 +3,6 @@ mod parser;
 mod script;
 mod xml_util;
 
-use bson::Bson;
 pub use include::IncludeLocal;
 pub use semilattice_database_session::DataOption;
 
@@ -18,7 +17,7 @@ use anyhow::Result;
 
 use semilattice_database_session::SessionDatabase;
 
-use wild_doc_script::{IncludeAdaptor, WildDocScript, WildDocState};
+use wild_doc_script::{IncludeAdaptor, WildDocScript, WildDocState, WildDocValue};
 
 use parser::Parser;
 use script::Var;
@@ -34,7 +33,6 @@ pub struct WildDocResult {
     options: Option<WildDocValue>,
 }
 impl WildDocResult {
-    #[inline(always)]
     pub fn body(&self) -> &[u8] {
         &self.body
     }

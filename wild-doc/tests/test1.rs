@@ -45,7 +45,6 @@ fn test1() {
             search="account"
             var="account"
         ><wd:for var="a" in:var="account.rows"><wd:record var="a" collection="account" row:var="a.row">
-        ><wd:for var="a" in:var="account.rows"><wd:record var="a" collection="account" row:var="a.row">
             dep:<wd:print value:var="a.field.id" />@<wd:print value:var="a.field.password" />
         </wd:record></wd:for></wd:result>
     </wd:record></wd:for></wd:result>
@@ -119,7 +118,6 @@ fn test1() {
             <wd:for var="person" in:var="p.rows"><wd:record var="person" collection="person" row:var="person.row"><li>
                 <wd:print value:var="person.row" /> : <wd:print value:var="person.activity" /> : <wd:print value:var="person.uuid" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
             </li></wd:record></wd:for>
-            </li></wd:record></wd:for>
         </ul>
     </wd:result>
     <input type="text" name="hoge" />
@@ -179,7 +177,6 @@ fn test1() {
                 <wd:for var="person" in:var="p.rows"><wd:record var="person" collection="person" row:var="person.row"><li>
                     <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
                 </li></wd:record></wd:for>
-                </li></wd:record></wd:for>
             </ul>
         </wd:result>
     "#,b"").unwrap();
@@ -204,7 +201,6 @@ fn test1() {
                         <field name="country"><wd:print value:var="person.field.country" /></field>
                     </collection>
                 </wd:record></wd:for>
-                </wd:record></wd:for>
             </wd:result>
         </wd:update>
     </wd:session>"#,b"").unwrap();
@@ -220,7 +216,6 @@ fn test1() {
                     var="person" in:var="p.rows"
                 ><wd:record var="person" collection="person" row:var="person.row"><li>
                     <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
-                </li></wd:record></wd:for>
                 </li></wd:record></wd:for>
             </ul>
         </wd:result>
