@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.91.0"
+version = "0.91.1"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -26,7 +26,7 @@ toml.workspace = true
 indexmap.workspace = true
 
 anyhow = "1.0"
-maybe_xml = "0.3"
+maybe_xml = "0.4"
 chrono = "0.4"
 base64 = "0.21"
 
