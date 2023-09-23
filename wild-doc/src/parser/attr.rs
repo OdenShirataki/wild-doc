@@ -55,10 +55,11 @@ impl Parser {
                     } else {
                         r.insert(attr.name().to_vec(), {
                             let value = xml_util::quot_unescape(value.as_bytes());
-                            Some(Arc::new(match value.as_str() {
-                                "true" => WildDocValue::Bool(true),
-                                "false" => WildDocValue::Bool(false),
-                                _ => WildDocValue::from(value),
+                            let json = serde_json::from_str::<serde_json::Value>(value.as_str());
+                            Some(Arc::new(if let Ok(json) = json {
+                                WildDocValue::from(json)
+                            } else {
+                                WildDocValue::String(value)
                             }))
                         });
                     }
