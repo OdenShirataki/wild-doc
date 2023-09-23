@@ -83,15 +83,34 @@ impl Parser {
                                 inner.insert("depends".to_owned(), WildDocValue::Object(depends));
 
                                 let mut field = IndexMap::new();
-                                for (field_name, value) in entity.fields() {
-                                    field.insert(
-                                        field_name.as_str().to_owned(),
-                                        if let Ok(str) = std::str::from_utf8(value) {
-                                            WildDocValue::String(str.to_owned())
-                                        } else {
-                                            WildDocValue::Binary(value.to_owned())
-                                        },
-                                    );
+                                if let Some(Some(field_mask)) = attributes.get(b"fields".as_ref()) {
+                                    if let WildDocValue::Array(field_mask) = field_mask.as_ref() {
+                                        let entities = entity.fields();
+                                        for field_name in field_mask {
+                                            let field_name = field_name.to_str();
+                                            if let Some(bytes) = entities.get(field_name.as_ref()) {
+                                                field.insert(
+                                                    field_name.to_string(),
+                                                    if let Ok(str) = std::str::from_utf8(bytes) {
+                                                        WildDocValue::String(str.to_owned())
+                                                    } else {
+                                                        WildDocValue::Binary(bytes.to_owned())
+                                                    },
+                                                );
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    for (field_name, value) in entity.fields() {
+                                        field.insert(
+                                            field_name.as_str().to_owned(),
+                                            if let Ok(str) = std::str::from_utf8(value) {
+                                                WildDocValue::String(str.to_owned())
+                                            } else {
+                                                WildDocValue::Binary(value.to_owned())
+                                            },
+                                        );
+                                    }
                                 }
                                 inner.insert("field".to_owned(), WildDocValue::Object(field));
                             }
@@ -180,17 +199,39 @@ impl Parser {
                                     );
 
                                     let mut field = IndexMap::new();
-                                    for field_name in &collection.field_names() {
-                                        let bytes = collection.field_bytes(row, field_name);
-                                        field.insert(
-                                            field_name.as_str().to_owned(),
-                                            if let Ok(str) = std::str::from_utf8(bytes) {
-                                                WildDocValue::String(str.to_owned())
-                                            } else {
-                                                WildDocValue::Binary(bytes.to_owned())
-                                            },
-                                        );
+                                    if let Some(Some(field_mask)) =
+                                        attributes.get(b"fields".as_ref())
+                                    {
+                                        if let WildDocValue::Array(field_mask) = field_mask.as_ref()
+                                        {
+                                            for field_name in field_mask {
+                                                let field_name = field_name.to_str();
+                                                let bytes = collection
+                                                    .field_bytes(row, field_name.as_ref());
+                                                field.insert(
+                                                    field_name.to_string(),
+                                                    if let Ok(str) = std::str::from_utf8(bytes) {
+                                                        WildDocValue::String(str.to_owned())
+                                                    } else {
+                                                        WildDocValue::Binary(bytes.to_owned())
+                                                    },
+                                                );
+                                            }
+                                        }
+                                    } else {
+                                        for field_name in collection.field_names() {
+                                            let bytes = collection.field_bytes(row, field_name);
+                                            field.insert(
+                                                field_name.clone(),
+                                                if let Ok(str) = std::str::from_utf8(bytes) {
+                                                    WildDocValue::String(str.to_owned())
+                                                } else {
+                                                    WildDocValue::Binary(bytes.to_owned())
+                                                },
+                                            );
+                                        }
                                     }
+
                                     inner.insert("field".to_owned(), WildDocValue::Object(field));
                                 }
                             }
