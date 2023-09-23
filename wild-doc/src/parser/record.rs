@@ -87,9 +87,9 @@ impl Parser {
                                     field.insert(
                                         field_name.as_str().to_owned(),
                                         if let Ok(str) = std::str::from_utf8(value) {
-                                            WildDocValue::from(str.to_owned())
+                                            WildDocValue::String(str.to_owned())
                                         } else {
-                                            WildDocValue::from(value.to_owned())
+                                            WildDocValue::Binary(value.to_owned())
                                         },
                                     );
                                 }
@@ -185,9 +185,9 @@ impl Parser {
                                         field.insert(
                                             field_name.as_str().to_owned(),
                                             if let Ok(str) = std::str::from_utf8(bytes) {
-                                                WildDocValue::from(str.to_owned())
+                                                WildDocValue::String(str.to_owned())
                                             } else {
-                                                WildDocValue::from(bytes.to_owned())
+                                                WildDocValue::Binary(bytes.to_owned())
                                             },
                                         );
                                     }

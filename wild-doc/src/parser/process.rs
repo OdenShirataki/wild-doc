@@ -106,10 +106,8 @@ impl Parser {
 
     pub(super) fn r#if(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
-            if let WildDocValue::Bool(v) = value.as_ref() {
-                if *v {
-                    return self.parse(xml);
-                }
+            if value.as_bool().cloned().unwrap_or(false) {
+                return self.parse(xml);
             }
         }
         Ok(vec![])
@@ -204,12 +202,8 @@ impl Parser {
         loop {
             let attributes = self.parse_attibutes(&attributes);
             if let Some(Some(cont)) = attributes.get(b"continue".as_ref()) {
-                if let WildDocValue::Bool(v) = cont.as_ref() {
-                    if *v {
-                        r.extend(self.parse(xml)?);
-                    } else {
-                        break;
-                    }
+                if cont.as_bool().cloned().unwrap_or(false) {
+                    r.extend(self.parse(xml)?);
                 } else {
                     break;
                 }

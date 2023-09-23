@@ -227,6 +227,13 @@ pub(super) async fn request(
                                                     ) {
                                                         response_headers.insert(k, v);
                                                     }
+                                                } else {
+                                                    if let (Ok(k), Ok(v)) = (
+                                                        HeaderName::from_bytes(k.as_bytes()),
+                                                        HeaderValue::from_str(&v.to_string()),
+                                                    ) {
+                                                        response_headers.insert(k, v);
+                                                    }
                                                 }
                                             }
                                         }

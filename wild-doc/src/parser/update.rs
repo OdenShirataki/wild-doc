@@ -1,11 +1,7 @@
 use std::{collections::HashMap, error, fmt};
 
 use anyhow::{anyhow, Result};
-use base64::{
-    alphabet,
-    engine::{self, general_purpose},
-    Engine,
-};
+use base64::{engine::general_purpose, Engine};
 use chrono::DateTime;
 use indexmap::IndexMap;
 use maybe_xml::{
@@ -94,7 +90,7 @@ impl Parser {
                     let mut value = IndexMap::new();
                     value.insert(
                         "commit_rows".to_owned(),
-                        WildDocValue::from(
+                        WildDocValue::Array(
                             commit_rows
                                 .iter()
                                 .map(|v| {
@@ -109,13 +105,13 @@ impl Parser {
                                         "row".to_owned(),
                                         WildDocValue::from(serde_json::Number::from(v.row())),
                                     );
-                                    WildDocValue::from(map)
+                                    WildDocValue::Object(map)
                                 })
                                 .collect::<Vec<WildDocValue>>(),
                         ),
                     );
                     value.insert("session_rows".to_owned(), WildDocValue::Array(vec![]));
-                    self.register_global(name.to_str().as_ref(), &value.into());
+                    self.register_global(name.to_str().as_ref(), &WildDocValue::Object(value));
                 }
             } else {
                 if let Some(ref mut session_state) = self.sessions.last_mut() {
@@ -139,7 +135,7 @@ impl Parser {
                         let mut value = IndexMap::new();
                         value.insert(
                             "commit_rows".to_owned(),
-                            WildDocValue::from(
+                            WildDocValue::Array(
                                 commit_rows
                                     .iter()
                                     .map(|v| {
@@ -154,14 +150,14 @@ impl Parser {
                                             "row".to_owned(),
                                             WildDocValue::from(serde_json::Number::from(v.row())),
                                         );
-                                        WildDocValue::from(map)
+                                        WildDocValue::Object(map)
                                     })
                                     .collect::<Vec<WildDocValue>>(),
                             ),
                         );
                         value.insert(
                             "session_rows".to_owned(),
-                            WildDocValue::from(
+                            WildDocValue::Array(
                                 session_rows
                                     .iter()
                                     .map(|v| {
@@ -176,12 +172,12 @@ impl Parser {
                                             "row".to_owned(),
                                             WildDocValue::from(serde_json::Number::from(v.row())),
                                         );
-                                        WildDocValue::from(map)
+                                        WildDocValue::Object(map)
                                     })
                                     .collect::<Vec<WildDocValue>>(),
                             ),
                         );
-                        self.register_global(name.to_str().as_ref(), &value.into());
+                        self.register_global(name.to_str().as_ref(), &WildDocValue::Object(value));
                     }
                 }
             }
@@ -430,12 +426,10 @@ impl Parser {
                                                             .cloned()
                                                             .unwrap_or(false)
                                                         {
-                                                            value = engine::GeneralPurpose::new(
-                                                                &alphabet::STANDARD,
-                                                                general_purpose::NO_PAD,
-                                                            )
-                                                            .decode(value)
-                                                            .unwrap();
+                                                            value =
+                                                                general_purpose::STANDARD_NO_PAD
+                                                                    .decode(value)
+                                                                    .unwrap();
                                                         }
                                                     }
                                                     fields.insert(field_name.to_string(), value);

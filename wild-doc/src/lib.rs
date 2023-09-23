@@ -4,6 +4,7 @@ mod script;
 mod xml_util;
 
 pub use include::IncludeLocal;
+use indexmap::IndexMap;
 pub use semilattice_database_session::DataOption;
 
 use std::{
@@ -104,7 +105,7 @@ impl WildDoc {
             WildDocValue::from(serde_json::from_slice(input_json).unwrap_or(serde_json::json!({})));
         vars.insert(b"input".to_vec(), Arc::new(RwLock::new(input)));
 
-        let global = Arc::new(RwLock::new(WildDocValue::from(serde_json::json!({}))));
+        let global = Arc::new(RwLock::new(WildDocValue::Object(IndexMap::new())));
         vars.insert(b"global".to_vec(), Arc::clone(&global));
 
         let stack = Arc::new(RwLock::new(vec![vars]));

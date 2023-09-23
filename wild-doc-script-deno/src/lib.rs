@@ -198,7 +198,7 @@ impl WildDocScript for Deno {
                 if let Ok(a) = v8::Local::<v8::ArrayBufferView>::try_from(v) {
                     if let Some(b) = a.buffer(scope) {
                         if let Some(d) = b.data() {
-                            return Ok(WildDocValue::from(
+                            return Ok(WildDocValue::Binary(
                                 unsafe {
                                     std::slice::from_raw_parts::<u8>(
                                         d.as_ptr() as *const u8,

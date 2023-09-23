@@ -40,7 +40,7 @@ impl WildDocScript for WdPy {
     }
 
     fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
-        Ok(WildDocValue::from(
+        Ok(WildDocValue::Binary(
             Python::with_gil(|py| -> PyResult<PyObject> {
                 py.eval(
                     ("(".to_owned() + std::str::from_utf8(code)? + ")").as_str(),
