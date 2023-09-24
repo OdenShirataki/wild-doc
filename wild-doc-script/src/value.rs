@@ -7,7 +7,7 @@ use std::{
 use indexmap::IndexMap;
 use serde::Serialize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum WildDocValue {
     Null,
     Bool(bool),

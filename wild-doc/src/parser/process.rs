@@ -76,7 +76,7 @@ impl Parser {
                             let attributes = self.parse_attibutes(&token.attributes());
                             if let Some(Some(right)) = attributes.get(b"value".as_ref()) {
                                 if let Some(cmp_src) = cmp_src {
-                                    if cmp_src.to_str() == right.to_str() {
+                                    if cmp_src == right {
                                         return Ok(self.parse(inner_xml)?);
                                     }
                                 }
