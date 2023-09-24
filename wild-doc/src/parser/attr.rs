@@ -71,7 +71,7 @@ impl Parser {
         r
     }
 
-    fn attribute_script<'a>(&mut self, script: &str, value: &[u8]) -> Option<WildDocValue> {
+    fn attribute_script(&mut self, script: &str, value: &[u8]) -> Option<WildDocValue> {
         self.scripts.get(script).and_then(|script| {
             script
                 .lock()

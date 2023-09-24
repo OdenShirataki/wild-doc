@@ -109,7 +109,7 @@ impl Parser {
     }
 }
 
-fn make_order<'a>(search: &Arc<RwLock<Search>>, sort: &str) -> Vec<Order> {
+fn make_order(search: &Arc<RwLock<Search>>, sort: &str) -> Vec<Order> {
     let mut orders = vec![];
     if sort.len() > 0 {
         for o in sort.trim().split(",") {

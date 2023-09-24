@@ -1,6 +1,6 @@
 use maybe_xml::scanner::{Scanner, State};
 
-pub(crate) fn inner<'a>(xml: &'a [u8]) -> (&[u8], usize) {
+pub(crate) fn inner(xml: &[u8]) -> (&[u8], usize) {
     let mut pos = 0;
     let mut deps = 0;
     let mut scanner = Scanner::new();
