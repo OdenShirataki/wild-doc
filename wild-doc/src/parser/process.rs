@@ -1,5 +1,7 @@
 use std::{
+    borrow::Cow,
     collections::HashMap,
+    path::Path,
     sync::{Arc, RwLock},
 };
 
@@ -17,34 +19,35 @@ use super::{AttributeMap, Parser, WildDocValue};
 impl Parser {
     pub(super) fn get_include_content(&mut self, attributes: AttributeMap) -> Result<Vec<u8>> {
         if let Some(Some(src)) = attributes.get(b"src".as_ref()) {
-            let src = &src.to_string();
+            let src = src.to_str();
             let (xml, filename) = self
                 .state
                 .include_adaptor()
                 .lock()
                 .unwrap()
-                .include(src.into())
+                .include(Path::new(src.as_ref()))
                 .map_or_else(
                     || {
-                        let mut r = (None, "".to_owned());
+                        let mut r = (None, Cow::Borrowed(""));
                         if let Some(Some(substitute)) = attributes.get(b"substitute".as_ref()) {
+                            let substitute = substitute.to_str();
                             if let Some(xml) = self
                                 .state
                                 .include_adaptor()
                                 .lock()
                                 .unwrap()
-                                .include(substitute.to_str().into_owned().into())
+                                .include(Path::new(substitute.as_ref()))
                             {
-                                r = (Some(xml), substitute.to_str().into_owned());
+                                r = (Some(xml), substitute);
                             }
                         }
                         r
                     },
-                    |xml| (Some(xml), src.to_owned().into()),
+                    |xml| (Some(xml), src),
                 );
             if let Some(xml) = xml {
                 if xml.len() > 0 {
-                    self.include_stack.push(filename);
+                    self.include_stack.push(filename.to_string());
                     let r = self.parse(xml.as_slice())?;
                     self.include_stack.pop();
                     return Ok(r);
@@ -200,13 +203,15 @@ impl Parser {
     ) -> Result<Vec<u8>> {
         let mut r = Vec::new();
         loop {
-            let attributes = self.parse_attibutes(&attributes);
-            if let Some(Some(cont)) = attributes.get(b"continue".as_ref()) {
-                if cont.as_bool().cloned().unwrap_or(false) {
-                    r.extend(self.parse(xml)?);
-                } else {
-                    break;
-                }
+            if self
+                .parse_attibutes(&attributes)
+                .get(b"continue".as_ref())
+                .and_then(|v| v.as_ref())
+                .and_then(|v| v.as_bool())
+                .cloned()
+                .unwrap_or(false)
+            {
+                r.extend(self.parse(xml)?);
             } else {
                 break;
             }

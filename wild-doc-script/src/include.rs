@@ -1,5 +1,5 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 pub trait IncludeAdaptor {
-    fn include(&mut self, path: PathBuf) -> Option<Arc<Vec<u8>>>;
+    fn include(&mut self, path: &Path) -> Option<Arc<Vec<u8>>>;
 }

@@ -20,10 +20,10 @@ impl IncludeLocal {
     }
 }
 impl IncludeAdaptor for IncludeLocal {
-    fn include(&mut self, path: PathBuf) -> Option<Arc<Vec<u8>>> {
-        if !self.cache.contains_key(&path) {
+    fn include(&mut self, path: &Path) -> Option<Arc<Vec<u8>>> {
+        if !self.cache.contains_key(path) {
             let mut file_path = self.dir.clone();
-            file_path.push(&path);
+            file_path.push(path);
             if let Ok(mut f) = std::fs::File::open(file_path) {
                 let mut contents = Vec::new();
                 if let Ok(_) = f.read_to_end(&mut contents) {
@@ -31,6 +31,6 @@ impl IncludeAdaptor for IncludeLocal {
                 }
             }
         }
-        self.cache.get(&path).map(|v| v.clone())
+        self.cache.get(path).map(|v| v.clone())
     }
 }

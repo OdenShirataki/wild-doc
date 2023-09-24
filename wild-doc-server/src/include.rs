@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     io::{BufReader, Read, Write},
     net::TcpStream,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -15,7 +15,7 @@ impl IncludeEmpty {
     }
 }
 impl IncludeAdaptor for IncludeEmpty {
-    fn include(&mut self, _: PathBuf) -> Option<Arc<Vec<u8>>> {
+    fn include(&mut self, _: &Path) -> Option<Arc<Vec<u8>>> {
         None
     }
 }
@@ -33,8 +33,8 @@ impl IncludeRemote {
     }
 }
 impl IncludeAdaptor for IncludeRemote {
-    fn include(&mut self, path: PathBuf) -> Option<Arc<Vec<u8>>> {
-        if !self.cache.contains_key(&path) {
+    fn include(&mut self, path: &Path) -> Option<Arc<Vec<u8>>> {
+        if !self.cache.contains_key(path) {
             if let Some(path_str) = path.to_str() {
                 if path_str.len() > 0 {
                     self.stream
@@ -65,6 +65,6 @@ impl IncludeAdaptor for IncludeRemote {
                 }
             }
         }
-        self.cache.get(&path).map(|v| v.clone())
+        self.cache.get(path).map(|v| v.clone())
     }
 }

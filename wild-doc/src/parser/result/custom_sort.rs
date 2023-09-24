@@ -32,7 +32,7 @@ impl CustomSort for WdCustomSort {
             if let Some(join) = result.join().get(&self.join_name) {
                 match self.property.as_str() {
                     "len" => {
-                        let mut sorted = result.rows().iter().map(|&x| x).collect::<Vec<u32>>();
+                        let mut sorted = result.rows().iter().cloned().collect::<Vec<u32>>();
                         sorted.sort_by(|a, b| {
                             if let (Some(a), Some(b)) = (join.get(a), join.get(b)) {
                                 a.rows().len().cmp(&b.rows().len())
@@ -53,7 +53,7 @@ impl CustomSort for WdCustomSort {
             if let Some(join) = result.join().get(&self.join_name) {
                 match self.property.as_str() {
                     "len" => {
-                        let mut sorted = result.rows().iter().map(|&x| x).collect::<Vec<u32>>();
+                        let mut sorted = result.rows().iter().cloned().collect::<Vec<u32>>();
                         sorted.sort_by(|a, b| {
                             if let (Some(a), Some(b)) = (join.get(a), join.get(b)) {
                                 b.rows().len().cmp(&a.rows().len())

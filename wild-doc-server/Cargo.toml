@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-server"
-version = "0.9.2"
+version = "0.9.3"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -20,4 +20,4 @@ toml.workspace = true
 serde.workspace = true
 
 wild-doc = { version = "0.92" , path = "../wild-doc" ,features=[ "js","py" ] }
-wild-doc-script = { version = "0.6", path = "../wild-doc-script" }
+wild-doc-script = { version = "0.7", path = "../wild-doc-script" }

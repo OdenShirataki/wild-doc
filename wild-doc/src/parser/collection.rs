@@ -14,11 +14,13 @@ impl Parser {
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
             let var = var.to_str();
             if var != "" {
-                let collections = self.database.read().unwrap().collections();
                 vars.insert(
                     var.to_string().into_bytes(),
                     Arc::new(RwLock::new(WildDocValue::Array(
-                        collections
+                        self.database
+                            .read()
+                            .unwrap()
+                            .collections()
                             .iter()
                             .map(|v| WildDocValue::String(v.to_owned()))
                             .collect(),
@@ -35,7 +37,7 @@ impl Parser {
                 .clone()
                 .write()
                 .unwrap()
-                .delete_collection(&collection.to_string());
+                .delete_collection(collection.to_str().as_ref());
         }
     }
 }

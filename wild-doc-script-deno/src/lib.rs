@@ -3,6 +3,7 @@ pub mod module_loader;
 use std::{
     ffi::c_void,
     ops::{Deref, DerefMut},
+    path::Path,
     sync::{Mutex, RwLock},
 };
 
@@ -71,8 +72,10 @@ impl WildDocScript for Deno {
                             &mut *(v8::Local::<v8::External>::cast(include_adaptor).value()
                                 as *mut Mutex<Box<dyn IncludeAdaptor + Send>>)
                         };
-                        if let Some(contents) =
-                            include_adaptor.lock().unwrap().include(filename.into())
+                        if let Some(contents) = include_adaptor
+                            .lock()
+                            .unwrap()
+                            .include(Path::new(filename.as_str()))
                         {
                             if let Ok(r) = serde_v8::to_v8(scope, contents) {
                                 retval.set(r.into());
