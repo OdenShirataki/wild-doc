@@ -4,7 +4,6 @@ mod script;
 mod xml_util;
 
 pub use include::IncludeLocal;
-use indexmap::IndexMap;
 pub use semilattice_database_session::DataOption;
 
 use std::{
@@ -13,6 +12,8 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
 };
+
+use indexmap::IndexMap;
 
 use anyhow::Result;
 
@@ -72,8 +73,9 @@ impl WildDoc {
     fn setup_scripts(
         &mut self,
         state: WildDocState,
-    ) -> Result<HashMap<String, Arc<Mutex<dyn WildDocScript>>>> {
-        let mut scripts: HashMap<String, Arc<Mutex<dyn WildDocScript>>> = HashMap::new();
+    ) -> Result<hashbrown::HashMap<String, Arc<Mutex<dyn WildDocScript>>>> {
+        let mut scripts: hashbrown::HashMap<String, Arc<Mutex<dyn WildDocScript>>> =
+            hashbrown::HashMap::new();
 
         scripts.insert(
             "var".to_owned(),
@@ -99,7 +101,7 @@ impl WildDoc {
         input_json: &[u8],
         include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
     ) -> Result<WildDocResult> {
-        let mut vars = HashMap::new();
+        let mut vars = hashbrown::HashMap::new();
 
         let input =
             WildDocValue::from(serde_json::from_slice(input_json).unwrap_or(serde_json::json!({})));

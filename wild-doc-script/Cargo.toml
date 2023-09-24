@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-script"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -15,6 +15,7 @@ keywords = ["database","xml","html"]
 categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
 
 [dependencies]
+hashbrown.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
 serde.workspace = true

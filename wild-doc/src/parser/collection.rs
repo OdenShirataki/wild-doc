@@ -1,7 +1,6 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
+
+use hashbrown::HashMap;
 
 use wild_doc_script::WildDocValue;
 

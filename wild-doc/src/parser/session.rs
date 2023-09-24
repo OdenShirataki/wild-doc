@@ -1,9 +1,9 @@
 use std::{
     borrow::Cow,
-    collections::HashMap,
     sync::{Arc, RwLock},
 };
 
+use hashbrown::HashMap;
 use serde_json::json;
 
 use wild_doc_script::WildDocValue;

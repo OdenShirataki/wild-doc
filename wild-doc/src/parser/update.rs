@@ -1,8 +1,9 @@
-use std::{collections::HashMap, error, fmt};
+use std::{error, fmt};
 
 use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose, Engine};
 use chrono::DateTime;
+use hashbrown::HashMap;
 use indexmap::IndexMap;
 use maybe_xml::{
     scanner::{Scanner, State},

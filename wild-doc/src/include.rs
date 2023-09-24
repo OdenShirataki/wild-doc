@@ -1,9 +1,10 @@
 use std::{
-    collections::HashMap,
     io::Read,
     path::{Path, PathBuf},
     sync::Arc,
 };
+
+use hashbrown::HashMap;
 
 use wild_doc_script::IncludeAdaptor;
 

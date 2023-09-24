@@ -1,11 +1,11 @@
 use std::{
     borrow::Cow,
-    collections::HashMap,
     path::Path,
     sync::{Arc, RwLock},
 };
 
 use anyhow::Result;
+use hashbrown::HashMap;
 
 use maybe_xml::{
     scanner::{Scanner, State},

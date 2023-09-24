@@ -1,11 +1,10 @@
 mod custom_sort;
 
+use std::sync::{Arc, RwLock};
+
+use hashbrown::HashMap;
 use indexmap::IndexMap;
 use semilattice_database_session::{search::Search, Order, OrderKey};
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
 
 use self::custom_sort::WdCustomSort;
 

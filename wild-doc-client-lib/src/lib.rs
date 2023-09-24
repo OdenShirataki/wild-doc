@@ -1,9 +1,10 @@
 use std::{
-    collections::HashMap,
     io::{BufRead, BufReader, Read, Write},
     net::TcpStream,
     path::{Path, PathBuf},
 };
+
+use hashbrown::HashMap;
 
 pub struct WildDocResult {
     body: Vec<u8>,
@@ -209,7 +210,9 @@ mod tests {
             </wd:result>
         "#);
         */
-        client.exec(r#"<wd:session name="hoge">
+        client
+            .exec(
+                r#"<wd:session name="hoge">
             <wd:update commit="true">
                 <wd:search name="person" collection="person"></wd:search>
                 <wd:result var="q" search="person">
@@ -221,7 +224,10 @@ mod tests {
                     </wd:for>
                 </wd:result>
             </wd:update>
-        </wd:session>"#,"").unwrap();
+        </wd:session>"#,
+                "",
+            )
+            .unwrap();
         let r=client.exec(r#"
             <wd:search name="p" collection="person"></wd:search>
             <wd:result var="q" search="p">

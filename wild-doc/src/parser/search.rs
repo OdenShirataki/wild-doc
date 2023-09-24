@@ -1,12 +1,12 @@
 mod join;
 
 use std::{
-    collections::HashMap,
     str::FromStr,
     sync::{Arc, RwLock},
 };
 
 use chrono::DateTime;
+use hashbrown::HashMap;
 use maybe_xml::{
     scanner::{Scanner, State},
     token,

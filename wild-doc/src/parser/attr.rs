@@ -1,5 +1,6 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
+use hashbrown::HashMap;
 use maybe_xml::token::prop::Attributes;
 use wild_doc_script::WildDocValue;
 

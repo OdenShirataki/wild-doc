@@ -1,8 +1,6 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
+use hashbrown::HashMap;
 use indexmap::IndexMap;
 use semilattice_database_session::{Activity, CollectionRow, Uuid};
 use wild_doc_script::WildDocValue;

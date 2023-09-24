@@ -9,12 +9,12 @@ mod update;
 mod var;
 
 use std::{
-    collections::HashMap,
     ops::Deref,
     sync::{Arc, Mutex, RwLock},
 };
 
 use anyhow::Result;
+use hashbrown::HashMap;
 
 use maybe_xml::{
     scanner::{Scanner, State},
