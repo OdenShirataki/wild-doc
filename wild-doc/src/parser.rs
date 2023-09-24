@@ -106,6 +106,8 @@ impl Parser {
         }
         Ok(None)
     }
+
+    #[inline(always)]
     fn is_wd_tag(name: &TagName) -> bool {
         name.namespace_prefix()
             .map_or(false, |v| v.as_bytes() == b"wd")
@@ -349,6 +351,7 @@ impl Parser {
         Ok(r)
     }
 
+    #[inline(always)]
     fn custom_tag(&mut self, attributes: AttributeMap) -> (String, Vec<u8>) {
         let mut html_attr = vec![];
         let mut name = "".to_string();

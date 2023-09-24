@@ -24,12 +24,18 @@ impl WildDocState {
             include_adaptor,
         }
     }
+
+    #[inline(always)]
     pub fn cache_dir(&self) -> &Path {
         &self.cache_dir
     }
+
+    #[inline(always)]
     pub fn stack(&self) -> Arc<RwLock<VarsStack>> {
         self.stack.clone()
     }
+
+    #[inline(always)]
     pub fn include_adaptor(&self) -> &Mutex<Box<dyn IncludeAdaptor + Send>> {
         &self.include_adaptor
     }

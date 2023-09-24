@@ -21,6 +21,7 @@ use crate::xml_util;
 use super::{AttributeMap, Parser};
 
 impl Parser {
+    #[inline(always)]
     fn collection_id(&mut self, attributes: &AttributeMap) -> Option<i32> {
         if let Some(Some(collection_name)) = attributes.get(b"collection".as_ref()) {
             let collection_name = collection_name.to_string();
@@ -50,6 +51,7 @@ impl Parser {
         None
     }
 
+    #[inline(always)]
     pub(crate) fn search<'a>(
         &mut self,
         xml: &'a [u8],
@@ -72,6 +74,7 @@ impl Parser {
         return xml;
     }
 
+    #[inline(always)]
     fn make_conditions<'a>(
         &mut self,
         attributes: &AttributeMap,
@@ -202,6 +205,7 @@ impl Parser {
         (xml, result_conditions, join)
     }
 
+    #[inline(always)]
     fn condition_depend(&mut self, attributes: &AttributeMap) -> Option<Condition> {
         if let (Some(Some(row)), Some(Some(collection_name))) = (
             attributes.get(b"row".as_ref()),
@@ -234,6 +238,8 @@ impl Parser {
         }
         None
     }
+
+    #[inline(always)]
     fn condition_row(attributes: &AttributeMap) -> Option<Condition> {
         if let (Some(Some(method)), Some(Some(value))) = (
             attributes.get(b"method".as_ref()),
@@ -277,6 +283,7 @@ impl Parser {
         None
     }
 
+    #[inline(always)]
     fn condition_uuid(attributes: &AttributeMap) -> Option<Condition> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
             let value = value.to_string();
@@ -294,6 +301,7 @@ impl Parser {
         }
     }
 
+    #[inline(always)]
     fn condition_field(attributes: &AttributeMap) -> Option<Condition> {
         if let (Some(Some(name)), Some(Some(method)), Some(Some(value))) = (
             attributes.get(b"name".as_ref()),

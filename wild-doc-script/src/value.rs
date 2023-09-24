@@ -24,13 +24,13 @@ impl Serialize for WildDocValue {
         S: serde::Serializer,
     {
         match self {
-            WildDocValue::Null => serializer.serialize_none(),
-            WildDocValue::Bool(v) => v.serialize(serializer),
-            WildDocValue::Number(v) => v.serialize(serializer),
-            WildDocValue::String(v) => v.serialize(serializer),
-            WildDocValue::Array(v) => v.serialize(serializer),
-            WildDocValue::Object(v) => v.serialize(serializer),
-            WildDocValue::Binary(v) => v.serialize(serializer),
+            Self::Null => serializer.serialize_none(),
+            Self::Bool(v) => v.serialize(serializer),
+            Self::Number(v) => v.serialize(serializer),
+            Self::String(v) => v.serialize(serializer),
+            Self::Array(v) => v.serialize(serializer),
+            Self::Object(v) => v.serialize(serializer),
+            Self::Binary(v) => v.serialize(serializer),
         }
     }
 }
@@ -55,7 +55,7 @@ impl From<serde_json::Value> for WildDocValue {
 }
 impl From<serde_json::Number> for WildDocValue {
     fn from(value: serde_json::Number) -> Self {
-        WildDocValue::Number(value)
+        Self::Number(value)
     }
 }
 
@@ -102,6 +102,7 @@ impl std::fmt::Display for WildDocValue {
 }
 
 impl WildDocValue {
+    #[inline(always)]
     pub fn to_str(&self) -> Cow<str> {
         match self {
             Self::String(s) => Cow::Borrowed(s),
@@ -109,18 +110,24 @@ impl WildDocValue {
             _ => Cow::Owned(self.to_string()),
         }
     }
+
+    #[inline(always)]
     pub fn is_object(&self) -> bool {
         match self {
             Self::Object(_) => true,
             _ => false,
         }
     }
+
+    #[inline(always)]
     pub fn is_null(&self) -> bool {
         match self {
             Self::Null => true,
             _ => false,
         }
     }
+
+    #[inline(always)]
     pub fn as_bool(&self) -> Option<&bool> {
         match self {
             Self::Bool(v) => Some(v),

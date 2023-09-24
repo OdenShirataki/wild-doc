@@ -12,21 +12,28 @@ pub struct WdCustomSort {
 }
 
 impl CustomSort for WdCustomSort {
+    #[inline(always)]
     fn compare(&self, a: u32, b: u32) -> std::cmp::Ordering {
-        if let Some(result) = self.result.read().unwrap().as_ref() {
-            if let Some(join) = result.join().get(&self.join_name) {
-                match self.property.as_str() {
-                    "len" => {
-                        if let (Some(a), Some(b)) = (join.get(&a), join.get(&b)) {
-                            return a.rows().len().cmp(&b.rows().len());
-                        }
+        if let Some(join) = self
+            .result
+            .read()
+            .unwrap()
+            .as_ref()
+            .and_then(|v| v.join().get(&self.join_name))
+        {
+            match self.property.as_str() {
+                "len" => {
+                    if let (Some(a), Some(b)) = (join.get(&a), join.get(&b)) {
+                        return a.rows().len().cmp(&b.rows().len());
                     }
-                    _ => {}
                 }
+                _ => {}
             }
         }
         Ordering::Equal
     }
+
+    #[inline(always)]
     fn asc(&self) -> Vec<u32> {
         if let Some(result) = self.result.read().unwrap().as_ref() {
             if let Some(join) = result.join().get(&self.join_name) {
@@ -48,6 +55,8 @@ impl CustomSort for WdCustomSort {
         }
         vec![]
     }
+
+    #[inline(always)]
     fn desc(&self) -> Vec<u32> {
         if let Some(result) = self.result.read().unwrap().as_ref() {
             if let Some(join) = result.join().get(&self.join_name) {

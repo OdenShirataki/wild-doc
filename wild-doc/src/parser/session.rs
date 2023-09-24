@@ -115,6 +115,7 @@ impl Parser {
         }
         self.state.stack().write().unwrap().push(json);
     }
+
     pub(super) fn session_gc(&mut self, attributes: AttributeMap) {
         self.database.write().unwrap().session_gc(
             attributes

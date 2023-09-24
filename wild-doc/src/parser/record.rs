@@ -8,6 +8,7 @@ use wild_doc_script::WildDocValue;
 use super::Parser;
 
 impl Parser {
+    #[inline(always)]
     pub(super) fn record(&mut self, attributes: HashMap<Vec<u8>, Option<Arc<WildDocValue>>>) {
         let mut json = HashMap::new();
 

@@ -11,6 +11,7 @@ use self::custom_sort::WdCustomSort;
 use super::{AttributeMap, Parser, WildDocValue};
 
 impl Parser {
+    #[inline(always)]
     pub(super) fn result(
         &mut self,
         attributes: &AttributeMap,
@@ -108,6 +109,7 @@ impl Parser {
     }
 }
 
+#[inline(always)]
 fn make_order(search: &Arc<RwLock<Search>>, sort: &str) -> Vec<Order> {
     let mut orders = vec![];
     if sort.len() > 0 {

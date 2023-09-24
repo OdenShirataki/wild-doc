@@ -9,6 +9,7 @@ use crate::xml_util;
 use super::{AttributeMap, Parser};
 
 impl Parser {
+    #[inline(always)]
     pub(super) fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes) {
         attributes.iter().for_each(|attr| {
             let name = attr.name();
@@ -44,6 +45,7 @@ impl Parser {
         });
     }
 
+    #[inline(always)]
     pub(super) fn parse_attibutes(&mut self, attributes: &Option<Attributes>) -> AttributeMap {
         let mut r: AttributeMap = HashMap::new();
         if let Some(attributes) = attributes {
@@ -72,6 +74,7 @@ impl Parser {
         r
     }
 
+    #[inline(always)]
     fn attribute_script(&mut self, script: &str, value: &[u8]) -> Option<WildDocValue> {
         self.scripts.get(script).and_then(|script| {
             script
@@ -81,6 +84,8 @@ impl Parser {
                 .ok()
         })
     }
+
+    #[inline(always)]
     fn output_attribute_value(r: &mut Vec<u8>, val: &[u8]) {
         r.push(b'=');
         r.push(b'"');
@@ -88,6 +93,7 @@ impl Parser {
         r.push(b'"');
     }
 
+    #[inline(always)]
     fn attibute_var_or_script<'a>(
         &mut self,
         name: &'a [u8],

@@ -72,6 +72,7 @@ impl Parser {
         (xml, result_conditions)
     }
 
+    #[inline(always)]
     fn join_condition_pends(attributes: &AttributeMap) -> JoinCondition {
         JoinCondition::Pends {
             key: attributes

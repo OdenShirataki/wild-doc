@@ -271,6 +271,7 @@ impl Parser {
         }
         rows
     }
+
     fn record_update(
         &mut self,
         collection_id: i32,

@@ -2,7 +2,7 @@ pub mod module_loader;
 
 use std::{
     ffi::c_void,
-    ops::{Deref, DerefMut},
+    ops::Deref,
     path::Path,
     sync::{Mutex, RwLock},
 };
@@ -21,18 +21,7 @@ use module_loader::WdModuleLoader;
 pub struct Deno {
     worker: MainWorker,
 }
-impl Deref for Deno {
-    type Target = MainWorker;
 
-    fn deref(&self) -> &Self::Target {
-        &self.worker
-    }
-}
-impl DerefMut for Deno {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.worker
-    }
-}
 impl WildDocScript for Deno {
     fn new(state: WildDocState) -> Result<Self> {
         let mut worker = MainWorker::bootstrap_from_options(
@@ -178,6 +167,7 @@ impl WildDocScript for Deno {
         deno_runtime::tokio_util::create_basic_runtime().block_on(async {
             let script_name = "wd://script".to_owned() + file_name;
             let mod_id = self
+                .worker
                 .js_runtime
                 .load_side_module(
                     &ModuleSpecifier::parse(&script_name)?,
@@ -185,12 +175,12 @@ impl WildDocScript for Deno {
                 )
                 .await?;
             MainWorker::evaluate_module(&mut self.worker, mod_id).await?;
-            self.run_event_loop(false).await
+            self.worker.run_event_loop(false).await
         })
     }
     fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
         let code = "(".to_owned() + std::str::from_utf8(code)? + ")";
-        let scope = &mut self.js_runtime.handle_scope();
+        let scope = &mut self.worker.js_runtime.handle_scope();
 
         if let Some(v) =
             v8::String::new_from_one_byte(scope, code.as_bytes(), NewStringType::Normal)

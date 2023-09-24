@@ -14,37 +14,43 @@ impl Parser {
         map: &mut IndexMap<String, WildDocValue>,
         mut keys: VecDeque<&str>,
     ) -> Option<&'a mut IndexMap<String, WildDocValue>> {
-        if let Some(key) = keys.pop_front() {
-            if let Some(WildDocValue::Object(next)) = map.get_mut(key) {
-                return Self::route_map(next, keys);
-            } else {
+        keys.pop_front().and_then(|key| match map.get_mut(key) {
+            Some(WildDocValue::Object(next)) => Self::route_map(next, keys),
+            _ => {
                 let mut next = IndexMap::new();
                 let r = Self::route_map(&mut next, keys);
                 map.insert(key.to_string(), WildDocValue::Object(next));
-                return r;
+                r
             }
-        }
-        None
+        })
     }
+
+    #[inline(always)]
     pub(crate) fn register_global(&mut self, name: &str, value: &WildDocValue) {
-        if let Some(stack) = self.state.stack().write().unwrap().get(0) {
-            if let Some(global) = stack.get(b"global".as_ref()) {
-                if let WildDocValue::Object(ref mut map) = global.write().unwrap().deref_mut() {
-                    let mut splited: VecDeque<_> = name.split('.').collect();
-                    if let Some(last) = splited.pop_back() {
-                        if splited.len() > 0 {
-                            if let Some(map) = Self::route_map(map, splited) {
-                                map.insert(last.to_owned(), value.clone());
-                            }
-                        } else {
+        if let Some(global) = self
+            .state
+            .stack()
+            .write()
+            .unwrap()
+            .get(0)
+            .and_then(|v| v.get(b"global".as_ref()))
+        {
+            if let WildDocValue::Object(ref mut map) = global.write().unwrap().deref_mut() {
+                let mut splited: VecDeque<_> = name.split('.').collect();
+                if let Some(last) = splited.pop_back() {
+                    if splited.len() > 0 {
+                        if let Some(map) = Self::route_map(map, splited) {
                             map.insert(last.to_owned(), value.clone());
                         }
+                    } else {
+                        map.insert(last.to_owned(), value.clone());
                     }
                 }
             }
         }
     }
 
+    #[inline(always)]
     pub(super) fn local(&mut self, attributes: AttributeMap) {
         self.state.stack().write().unwrap().push(
             attributes
