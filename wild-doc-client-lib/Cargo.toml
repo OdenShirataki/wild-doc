@@ -1,11 +1,11 @@
 [package]
 name = "wild-doc-client-lib"
-version = "0.3.4"
+version = "0.3.3"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
 
-description = ""
+description = "client lib for wild-doc-server"
 
 repository = "https://github.com/OdenShirataki/wild-doc"
 
