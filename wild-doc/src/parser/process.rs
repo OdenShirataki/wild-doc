@@ -109,7 +109,7 @@ impl Parser {
 
     pub(super) fn r#if(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
-            if value.as_bool().cloned().unwrap_or(false) {
+            if value.as_bool().map_or(false, |v| *v) {
                 return self.parse(xml);
             }
         }
@@ -208,8 +208,7 @@ impl Parser {
                 .get(b"continue".as_ref())
                 .and_then(|v| v.as_ref())
                 .and_then(|v| v.as_bool())
-                .cloned()
-                .unwrap_or(false)
+                .map_or(false, |v| *v)
             {
                 r.extend(self.parse(xml)?);
             } else {

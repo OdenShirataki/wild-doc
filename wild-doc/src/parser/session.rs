@@ -35,15 +35,13 @@ impl Parser {
                     .get(b"commit_on_close".as_ref())
                     .and_then(|v| v.as_ref())
                     .and_then(|v| v.as_bool())
-                    .cloned()
-                    .unwrap_or(false);
+                    .map_or(false, |v| *v);
 
                 let clear_on_close = attributes
                     .get(b"clear_on_close".as_ref())
                     .and_then(|v| v.as_ref())
                     .and_then(|v| v.as_bool())
-                    .cloned()
-                    .unwrap_or(false);
+                    .map_or(false, |v| *v);
 
                 let expire = attributes
                     .get(b"expire".as_ref())
@@ -64,7 +62,7 @@ impl Parser {
                     }
                 }
                 if let Some(Some(initialize)) = attributes.get(b"initialize".as_ref()) {
-                    if initialize.as_bool().cloned().unwrap_or(false) {
+                    if initialize.as_bool().map_or(false, |v| *v) {
                         self.database
                             .clone()
                             .read()

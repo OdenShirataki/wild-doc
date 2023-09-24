@@ -89,10 +89,10 @@ impl Parser {
     }
 
     fn attibute_var_or_script<'a>(
-        &'a mut self,
+        &mut self,
         name: &'a [u8],
         value: &[u8],
-    ) -> (&[u8], Option<WildDocValue>) {
+    ) -> (&'a [u8], Option<WildDocValue>) {
         for key in self.scripts.keys() {
             if name.ends_with((":".to_owned() + key.as_str()).as_bytes()) {
                 return (

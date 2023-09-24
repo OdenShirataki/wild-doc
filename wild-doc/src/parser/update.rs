@@ -43,8 +43,7 @@ impl Parser {
                     .get(b"without_session".as_ref())
                     .and_then(|v| v.as_ref())
                     .and_then(|v| v.as_bool())
-                    .cloned()
-                    .unwrap_or(false)
+                    .map_or(false, |v| *v)
             {
                 let mut commit_rows = vec![];
                 for record in updates {
@@ -124,7 +123,7 @@ impl Parser {
                         .update(&mut session_state.session, updates);
                     let mut commit_rows = vec![];
                     if let Some(Some(commit)) = attributes.get(b"commit".as_ref()) {
-                        if commit.as_bool().cloned().unwrap_or(false) {
+                        if commit.as_bool().map_or(false, |v| *v) {
                             commit_rows = self
                                 .database
                                 .write()
@@ -424,8 +423,7 @@ impl Parser {
                                                     {
                                                         if base64_decode
                                                             .as_bool()
-                                                            .cloned()
-                                                            .unwrap_or(false)
+                                                            .map_or(false, |v| *v)
                                                         {
                                                             value =
                                                                 general_purpose::STANDARD_NO_PAD
@@ -507,8 +505,7 @@ impl Parser {
                                 .get(b"delete".as_ref())
                                 .and_then(|v| v.as_ref())
                                 .and_then(|v| v.as_bool())
-                                .cloned()
-                                .unwrap_or(false);
+                                .map_or(false, |v| *v);
                             let (collection_id, row) = if row < 0 {
                                 (-collection_id, (-row) as u32)
                             } else {
@@ -572,7 +569,7 @@ impl Parser {
                                     let inherit_depend_if_empty = if let Some(Some(str)) =
                                         token_attributes.get(b"inherit_depend_if_empty".as_ref())
                                     {
-                                        str.as_bool().cloned().unwrap_or(false)
+                                        str.as_bool().map_or(false, |v| *v)
                                     } else {
                                         false
                                     };

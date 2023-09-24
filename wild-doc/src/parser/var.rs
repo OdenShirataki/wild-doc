@@ -10,7 +10,7 @@ use wild_doc_script::WildDocValue;
 use super::{AttributeMap, Parser};
 
 impl Parser {
-    fn route_map<'a, 'b>(
+    fn route_map<'a>(
         map: &mut IndexMap<String, WildDocValue>,
         mut keys: VecDeque<&str>,
     ) -> Option<&'a mut IndexMap<String, WildDocValue>> {

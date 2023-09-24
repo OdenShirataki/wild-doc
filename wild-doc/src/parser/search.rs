@@ -37,7 +37,7 @@ impl Parser {
                 if let Some(Some(value)) =
                     attributes.get(b"create_collection_if_not_exists".as_ref())
                 {
-                    return (value.as_bool().cloned().unwrap_or(false)).then(|| {
+                    return (value.as_bool().map_or(false, |v| *v)).then(|| {
                         self.database
                             .clone()
                             .write()
