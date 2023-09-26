@@ -103,7 +103,7 @@ impl Parser {
                                     );
                                     map.insert(
                                         "row".to_owned(),
-                                        WildDocValue::from(serde_json::Number::from(v.row())),
+                                        WildDocValue::from(serde_json::Number::from(v.row().get())),
                                     );
                                     WildDocValue::Object(map)
                                 })
@@ -148,7 +148,9 @@ impl Parser {
                                         );
                                         map.insert(
                                             "row".to_owned(),
-                                            WildDocValue::from(serde_json::Number::from(v.row())),
+                                            WildDocValue::from(serde_json::Number::from(
+                                                v.row().get(),
+                                            )),
                                         );
                                         WildDocValue::Object(map)
                                     })
@@ -170,7 +172,9 @@ impl Parser {
                                         );
                                         map.insert(
                                             "row".to_owned(),
-                                            WildDocValue::from(serde_json::Number::from(v.row())),
+                                            WildDocValue::from(serde_json::Number::from(
+                                                v.row().get(),
+                                            )),
                                         );
                                         WildDocValue::Object(map)
                                     })
@@ -254,7 +258,7 @@ impl Parser {
                 .write()
                 .unwrap()
                 .collection_mut(collection_id)
-                .map(|v| CollectionRow::new(collection_id, v.create_row(record)));
+                .map(|v| CollectionRow::new(collection_id, v.create_row(record).get()));
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
                     for (depend_key, depend_row) in depends {

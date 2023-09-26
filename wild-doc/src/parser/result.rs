@@ -66,7 +66,9 @@ impl Parser {
                                         let mut r = IndexMap::new();
                                         r.insert(
                                             "row".to_owned(),
-                                            WildDocValue::Number(serde_json::Number::from(*row)),
+                                            WildDocValue::Number(serde_json::Number::from(
+                                                row.get(),
+                                            )),
                                         );
                                         r
                                     })

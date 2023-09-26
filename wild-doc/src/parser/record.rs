@@ -73,7 +73,9 @@ impl Parser {
                                     );
                                     depend.insert(
                                         "row".to_owned(),
-                                        WildDocValue::Number(serde_json::Number::from(d.row())),
+                                        WildDocValue::Number(serde_json::Number::from(
+                                            d.row().get(),
+                                        )),
                                     );
 
                                     depends
@@ -183,7 +185,7 @@ impl Parser {
                                             depend.insert(
                                                 "row".to_owned(),
                                                 WildDocValue::Number(serde_json::Number::from(
-                                                    d.row(),
+                                                    d.row().get(),
                                                 )),
                                             );
                                             depends.insert(
