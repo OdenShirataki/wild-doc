@@ -1,6 +1,7 @@
 mod join;
 
 use std::{
+    num::NonZeroI32,
     str::FromStr,
     sync::{Arc, RwLock},
 };
@@ -22,7 +23,7 @@ use super::{AttributeMap, Parser};
 
 impl Parser {
     #[inline(always)]
-    fn collection_id(&mut self, attributes: &AttributeMap) -> Option<i32> {
+    fn collection_id(&mut self, attributes: &AttributeMap) -> Option<NonZeroI32> {
         if let Some(Some(collection_name)) = attributes.get(b"collection".as_ref()) {
             let collection_name = collection_name.to_string();
             if let Some(collection_id) = self

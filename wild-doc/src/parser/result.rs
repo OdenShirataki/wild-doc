@@ -30,7 +30,7 @@ impl Parser {
                     let collection_id = search.read().unwrap().collection_id();
                     inner.insert(
                         "collection_id".to_owned(),
-                        WildDocValue::Number(serde_json::Number::from(collection_id)),
+                        WildDocValue::Number(serde_json::Number::from(collection_id.get())),
                     );
                     let orders = make_order(
                         search,

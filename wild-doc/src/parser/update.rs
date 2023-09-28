@@ -1,4 +1,7 @@
-use std::{error, fmt};
+use std::{
+    error, fmt,
+    num::{NonZeroI32, NonZeroU32},
+};
 
 use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose, Engine};
@@ -70,14 +73,14 @@ impl Parser {
                         } => {
                             commit_rows.extend(self.record_update(
                                 collection_id,
-                                row,
+                                NonZeroU32::new(row).unwrap(),
                                 &record,
                                 &depends,
                                 &pends,
                             ));
                         }
                         SessionRecord::Delete { collection_id, row } => {
-                            if collection_id > 0 {
+                            if collection_id.get() > 0 {
                                 self.database
                                     .write()
                                     .unwrap()
@@ -98,7 +101,7 @@ impl Parser {
                                     map.insert(
                                         "collection_id".to_owned(),
                                         WildDocValue::from(serde_json::Number::from(
-                                            v.collection_id(),
+                                            v.collection_id().get(),
                                         )),
                                     );
                                     map.insert(
@@ -143,7 +146,7 @@ impl Parser {
                                         map.insert(
                                             "collection_id".to_owned(),
                                             WildDocValue::from(serde_json::Number::from(
-                                                v.collection_id(),
+                                                v.collection_id().get(),
                                             )),
                                         );
                                         map.insert(
@@ -167,7 +170,7 @@ impl Parser {
                                         map.insert(
                                             "collection_id".to_owned(),
                                             WildDocValue::from(serde_json::Number::from(
-                                                v.collection_id(),
+                                                v.collection_id().get(),
                                             )),
                                         );
                                         map.insert(
@@ -231,7 +234,7 @@ impl Parser {
 
                         rows.extend(self.record_update(
                             *collection_id,
-                            *row,
+                            NonZeroU32::new(*row).unwrap(),
                             record,
                             &Depends::Overwrite(depends),
                             pends,
@@ -246,13 +249,13 @@ impl Parser {
 
     fn record_new(
         &mut self,
-        collection_id: i32,
+        collection_id: NonZeroI32,
         record: &Record,
         depends: &Depends,
         pends: &Vec<Pend>,
     ) -> Vec<CollectionRow> {
         let mut rows = vec![];
-        if collection_id > 0 {
+        if collection_id.get() > 0 {
             let collection_row = self
                 .database
                 .write()
@@ -278,22 +281,22 @@ impl Parser {
 
     fn record_update(
         &mut self,
-        collection_id: i32,
-        row: u32,
+        collection_id: NonZeroI32,
+        row: NonZeroU32,
         record: &Record,
         depends: &Depends,
         pends: &Vec<Pend>,
     ) -> Vec<CollectionRow> {
         let mut rows = vec![];
-        if collection_id > 0 {
+        if collection_id.get() > 0 {
             let collection_row = self
                 .database
                 .write()
                 .unwrap()
                 .collection_mut(collection_id)
                 .map(|v| {
-                    v.update_row(row, record);
-                    CollectionRow::new(collection_id, row)
+                    v.update_row(row.get(), record);
+                    CollectionRow::new(collection_id, row.get())
                 });
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
