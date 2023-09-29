@@ -11,7 +11,7 @@ use super::{AttributeMap, Parser};
 impl Parser {
     #[inline(always)]
     pub(super) fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes) {
-        attributes.iter().for_each(|attr| {
+        attributes.into_iter().for_each(|attr| {
             let name = attr.name();
             if let Some(value) = attr.value() {
                 let (new_name, new_value) =
@@ -40,7 +40,7 @@ impl Parser {
                     }
                 }
             } else {
-                r.extend(attr.to_vec());
+                r.extend(attr.as_bytes());
             };
         });
     }
@@ -49,14 +49,14 @@ impl Parser {
     pub(super) fn parse_attibutes(&mut self, attributes: &Option<Attributes>) -> AttributeMap {
         let mut r: AttributeMap = HashMap::new();
         if let Some(attributes) = attributes {
-            attributes.iter().for_each(|attr| {
+            attributes.into_iter().for_each(|attr| {
                 if let Some(value) = attr.value() {
                     if let (prefix, Some(value)) =
                         self.attibute_var_or_script(attr.name().as_bytes(), value.as_bytes())
                     {
                         r.insert(prefix.to_vec(), Some(Arc::new(value)));
                     } else {
-                        r.insert(attr.name().to_vec(), {
+                        r.insert(attr.name().as_bytes().to_vec(), {
                             let value = xml_util::quot_unescape(value.as_bytes());
                             let json = serde_json::from_str::<serde_json::Value>(value.as_str());
                             Some(Arc::new(if let Ok(json) = json {
@@ -67,7 +67,7 @@ impl Parser {
                         });
                     }
                 } else {
-                    r.insert(attr.name().to_vec(), None);
+                    r.insert(attr.name().as_bytes().to_vec(), None);
                 }
             });
         }

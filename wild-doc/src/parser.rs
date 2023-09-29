@@ -244,7 +244,7 @@ impl Parser {
                         }
                     } else {
                         r.push(b'<');
-                        r.extend(name.to_vec());
+                        r.extend(name.as_bytes());
                         if let Some(attributes) = token.attributes() {
                             self.output_attributes(&mut r, attributes)
                         }
@@ -275,7 +275,7 @@ impl Parser {
                             }
                         } else {
                             r.push(b'<');
-                            r.extend(name.to_vec());
+                            r.extend(name.as_bytes());
                             if let Some(attributes) = token.attributes() {
                                 self.output_attributes(&mut r, attributes)
                             }
