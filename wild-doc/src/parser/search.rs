@@ -1,7 +1,7 @@
 mod join;
 
 use std::{
-    num::NonZeroI32,
+    num::{NonZeroI32, NonZeroI64},
     str::FromStr,
     sync::{Arc, RwLock},
 };
@@ -216,7 +216,7 @@ impl Parser {
             let collection_name = collection_name.to_string();
             if row != "" && collection_name != "" {
                 if let (Ok(row), Some(collection_id)) = (
-                    row.parse::<i64>(),
+                    row.parse::<NonZeroI64>(),
                     self.database
                         .clone()
                         .read()
@@ -228,10 +228,10 @@ impl Parser {
                             .get(b"key".as_ref())
                             .and_then(|v| v.as_ref())
                             .map(|v| v.to_string()),
-                        if row < 0 {
-                            CollectionRow::new(-collection_id, (-row) as u32)
+                        if row.get() < 0 {
+                            CollectionRow::new(-collection_id, (-row).try_into().unwrap())
                         } else {
-                            CollectionRow::new(collection_id, row as u32)
+                            CollectionRow::new(collection_id, row.try_into().unwrap())
                         },
                     ));
                 }

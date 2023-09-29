@@ -1,6 +1,6 @@
 use std::{
     error, fmt,
-    num::{NonZeroI32, NonZeroU32},
+    num::{NonZeroI32, NonZeroI64, NonZeroU32},
 };
 
 use anyhow::{anyhow, Result};
@@ -73,7 +73,7 @@ impl Parser {
                         } => {
                             commit_rows.extend(self.record_update(
                                 collection_id,
-                                NonZeroU32::new(row).unwrap(),
+                                row,
                                 &record,
                                 &depends,
                                 &pends,
@@ -234,7 +234,7 @@ impl Parser {
 
                         rows.extend(self.record_update(
                             *collection_id,
-                            NonZeroU32::new(*row).unwrap(),
+                            *row,
                             record,
                             &Depends::Overwrite(depends),
                             pends,
@@ -261,7 +261,7 @@ impl Parser {
                 .write()
                 .unwrap()
                 .collection_mut(collection_id)
-                .map(|v| CollectionRow::new(collection_id, v.create_row(record).get()));
+                .map(|v| CollectionRow::new(collection_id, v.create_row(record)));
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
                     for (depend_key, depend_row) in depends {
@@ -295,8 +295,8 @@ impl Parser {
                 .unwrap()
                 .collection_mut(collection_id)
                 .map(|v| {
-                    v.update_row(row.get(), record);
-                    CollectionRow::new(collection_id, row.get())
+                    v.update_row(row, record);
+                    CollectionRow::new(collection_id, row)
                 });
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
@@ -333,43 +333,39 @@ impl Parser {
             attributes.get(b"row".as_ref()),
         ) {
             if let (Ok(row), Some(collection_id)) = (
-                row.to_str().parse::<i64>(),
+                row.to_str().parse::<NonZeroI64>(),
                 self.database
                     .clone()
                     .read()
                     .unwrap()
                     .collection_id(&collection.to_str()),
             ) {
-                return if row == 0 {
-                    Err(DependError)
-                } else {
-                    let in_session = row < 0;
-                    if in_session {
-                        let mut valid = false;
-                        if let Some(session_state) = self.sessions.pop() {
-                            if let Some(temporary_collection) =
-                                session_state.session.temporary_collection(collection_id)
-                            {
-                                if temporary_collection.get(&row).is_some() {
-                                    valid = true;
-                                }
+                let in_session = row.get() < 0;
+                if in_session {
+                    let mut valid = false;
+                    if let Some(session_state) = self.sessions.pop() {
+                        if let Some(temporary_collection) =
+                            session_state.session.temporary_collection(collection_id)
+                        {
+                            if temporary_collection.get(&row).is_some() {
+                                valid = true;
                             }
-                            self.sessions.push(session_state);
                         }
-                        if !valid {
-                            return Err(DependError);
-                        }
+                        self.sessions.push(session_state);
                     }
-                    depends.push((
-                        key.to_string(),
-                        if in_session {
-                            CollectionRow::new(-collection_id, (-row) as u32)
-                        } else {
-                            CollectionRow::new(collection_id, row as u32)
-                        },
-                    ));
-                    Ok(())
-                };
+                    if !valid {
+                        return Err(DependError);
+                    }
+                }
+                depends.push((
+                    key.to_string(),
+                    if in_session {
+                        CollectionRow::new(-collection_id, (-row).try_into().unwrap())
+                    } else {
+                        CollectionRow::new(collection_id, row.try_into().unwrap())
+                    },
+                ));
+                return Ok(());
             }
         }
         Err(DependError)
@@ -509,18 +505,23 @@ impl Parser {
                                 .and_then(|v| v.to_str().parse::<i64>().ok())
                                 .unwrap_or(0);
 
-                            let is_delete = token_attributes
-                                .get(b"delete".as_ref())
-                                .and_then(|v| v.as_ref())
-                                .and_then(|v| v.as_bool())
-                                .map_or(false, |v| *v);
                             let (collection_id, row) = if row < 0 {
                                 (-collection_id, (-row) as u32)
                             } else {
                                 (collection_id, row as u32)
                             };
-                            if is_delete {
-                                updates.push(SessionRecord::Delete { collection_id, row });
+                            if token_attributes
+                                .get(b"delete".as_ref())
+                                .and_then(|v| v.as_ref())
+                                .and_then(|v| v.as_bool())
+                                .map_or(false, |v| *v)
+                            {
+                                if row != 0 {
+                                    updates.push(SessionRecord::Delete {
+                                        collection_id,
+                                        row: unsafe { NonZeroU32::new_unchecked(row) },
+                                    });
+                                }
                             } else {
                                 let mut activity = Activity::Active;
                                 if let Some(Some(str)) = token_attributes.get(b"activity".as_ref())
@@ -583,7 +584,7 @@ impl Parser {
                                     };
                                     SessionRecord::Update {
                                         collection_id,
-                                        row,
+                                        row: unsafe { NonZeroU32::new_unchecked(row) },
                                         record,
                                         depends: if inherit_depend_if_empty && depends.len() == 0 {
                                             Depends::Default

@@ -1,4 +1,7 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    num::{NonZeroI64, NonZeroU32},
+    sync::{Arc, RwLock},
+};
 
 use hashbrown::HashMap;
 use indexmap::IndexMap;
@@ -32,10 +35,10 @@ impl Parser {
                         }
                     }
 
-                    if let Ok(row) = row.to_string().parse::<i64>() {
+                    if let Ok(row) = row.to_string().parse::<NonZeroI64>() {
                         inner.insert(
                             "row".to_owned(),
-                            WildDocValue::Number(serde_json::Number::from(row)),
+                            WildDocValue::Number(serde_json::Number::from(row.get())),
                         );
                         if let Some(temporary_collection) = session_maybe_has_collection {
                             if let Some(entity) = temporary_collection.get(&row) {
@@ -116,20 +119,23 @@ impl Parser {
                                 inner.insert("field".to_owned(), WildDocValue::Object(field));
                             }
                         } else {
-                            if row > 0 {
+                            if row.get() > 0 {
                                 if let Some(collection) =
                                     self.database.read().unwrap().collection(collection_id)
                                 {
-                                    if let Some(uuid) = collection.uuid_string(row as u32) {
+                                    let row =
+                                        unsafe { NonZeroU32::new_unchecked(row.get() as u32) };
+
+                                    if let Some(uuid) = collection.uuid_string(row) {
                                         inner.insert("uuid".to_owned(), WildDocValue::String(uuid));
                                     }
-                                    if let Some(activity) = collection.activity(row as u32) {
+                                    if let Some(activity) = collection.activity(row) {
                                         inner.insert(
                                             "activity".to_owned(),
                                             WildDocValue::Bool(activity == Activity::Active),
                                         );
                                     };
-                                    if let Some(term_begin) = collection.term_begin(row as u32) {
+                                    if let Some(term_begin) = collection.term_begin(row) {
                                         inner.insert(
                                             "term_begin".to_owned(),
                                             WildDocValue::Number(serde_json::Number::from(
@@ -137,7 +143,7 @@ impl Parser {
                                             )),
                                         );
                                     }
-                                    if let Some(term_end) = collection.term_end(row as u32) {
+                                    if let Some(term_end) = collection.term_end(row) {
                                         inner.insert(
                                             "term_end".to_owned(),
                                             WildDocValue::Number(serde_json::Number::from(
@@ -145,8 +151,7 @@ impl Parser {
                                             )),
                                         );
                                     }
-                                    if let Some(last_updated) = collection.last_updated(row as u32)
-                                    {
+                                    if let Some(last_updated) = collection.last_updated(row) {
                                         inner.insert(
                                             "last_updated".to_owned(),
                                             WildDocValue::Number(serde_json::Number::from(
@@ -162,10 +167,7 @@ impl Parser {
                                         .relation()
                                         .read()
                                         .unwrap()
-                                        .depends(
-                                            None,
-                                            &CollectionRow::new(collection_id, row as u32),
-                                        )
+                                        .depends(None, &CollectionRow::new(collection_id, row))
                                     {
                                         let mut depend = IndexMap::new();
 
@@ -210,7 +212,7 @@ impl Parser {
                                             for field_name in field_mask {
                                                 let field_name = field_name.to_str();
                                                 let bytes = collection
-                                                    .field_bytes(row as u32, field_name.as_ref());
+                                                    .field_bytes(row, field_name.as_ref());
                                                 field.insert(
                                                     field_name.to_string(),
                                                     if let Ok(str) = std::str::from_utf8(bytes) {
@@ -223,8 +225,7 @@ impl Parser {
                                         }
                                     } else {
                                         for field_name in collection.field_names() {
-                                            let bytes =
-                                                collection.field_bytes(row as u32, field_name);
+                                            let bytes = collection.field_bytes(row, field_name);
                                             field.insert(
                                                 field_name.clone(),
                                                 if let Ok(str) = std::str::from_utf8(bytes) {
