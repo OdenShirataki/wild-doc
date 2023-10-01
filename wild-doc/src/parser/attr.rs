@@ -76,13 +76,9 @@ impl Parser {
 
     #[inline(always)]
     fn attribute_script(&mut self, script: &str, value: &[u8]) -> Option<WildDocValue> {
-        self.scripts.get(script).and_then(|script| {
-            script
-                .lock()
-                .unwrap()
-                .eval(xml_util::quot_unescape(value).as_bytes())
-                .ok()
-        })
+        self.scripts
+            .get(script)
+            .and_then(|script| script.eval(xml_util::quot_unescape(value).as_bytes()).ok())
     }
 
     #[inline(always)]

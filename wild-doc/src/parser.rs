@@ -10,7 +10,7 @@ mod var;
 
 use std::{
     ops::Deref,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
 };
 
 use anyhow::Result;
@@ -35,17 +35,18 @@ struct SessionState {
     commit_on_close: bool,
     clear_on_close: bool,
 }
+
 pub struct Parser {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<SessionState>,
-    scripts: Arc<HashMap<String, Arc<Mutex<dyn WildDocScript>>>>,
+    scripts: Arc<HashMap<String, Arc<dyn WildDocScript>>>,
     state: WildDocState,
     include_stack: Vec<String>,
 }
 impl Parser {
     pub fn new(
         database: Arc<RwLock<SessionDatabase>>,
-        scripts: Arc<HashMap<String, Arc<Mutex<dyn WildDocScript>>>>,
+        scripts: Arc<HashMap<String, Arc<dyn WildDocScript>>>,
         state: WildDocState,
     ) -> Result<Self> {
         Ok(Self {
@@ -129,7 +130,7 @@ impl Parser {
                     let target = token.target();
                     if let Some(script) = self.scripts.get(target.to_str()?) {
                         if let Some(i) = token.instructions() {
-                            if let Err(e) = script.lock().unwrap().evaluate_module(
+                            if let Err(e) = script.evaluate_module(
                                 self.include_stack.last().map_or("", |v| v),
                                 i.as_bytes(),
                             ) {

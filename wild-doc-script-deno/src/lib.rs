@@ -19,8 +19,10 @@ use wild_doc_script::{IncludeAdaptor, VarsStack, WildDocScript, WildDocState, Wi
 use module_loader::WdModuleLoader;
 
 pub struct Deno {
-    worker: MainWorker,
+    worker: RwLock<MainWorker>,
 }
+
+//unsafe impl Send for Deno {}
 
 impl WildDocScript for Deno {
     fn new(state: WildDocState) -> Result<Self> {
@@ -161,54 +163,61 @@ impl WildDocScript for Deno {
                 );
             }
         }
-        Ok(Self { worker })
-    }
-    fn evaluate_module(&mut self, file_name: &str, src: &[u8]) -> Result<()> {
-        deno_runtime::tokio_util::create_basic_runtime().block_on(async {
-            let script_name = "wd://script".to_owned() + file_name;
-            let mod_id = self
-                .worker
-                .js_runtime
-                .load_side_module(
-                    &ModuleSpecifier::parse(&script_name)?,
-                    Some(String::from_utf8(src.to_vec())?.into()),
-                )
-                .await?;
-            MainWorker::evaluate_module(&mut self.worker, mod_id).await?;
-            self.worker.run_event_loop(false).await
+        Ok(Self {
+            worker: RwLock::new(worker),
         })
     }
-    fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
+    fn evaluate_module(&self, file_name: &str, src: &[u8]) -> Result<()> {
+        deno_runtime::tokio_util::create_basic_runtime().block_on(async {
+            let script_name = "wd://script".to_owned() + file_name;
+            if let Ok(mut worker) = self.worker.write() {
+                let mod_id = worker
+                    .js_runtime
+                    .load_side_module(
+                        &ModuleSpecifier::parse(&script_name)?,
+                        Some(String::from_utf8(src.to_vec())?.into()),
+                    )
+                    .await?;
+                worker.evaluate_module(mod_id).await?;
+                worker.run_event_loop(false).await?;
+            }
+            Ok(())
+        })
+    }
+    fn eval(&self, code: &[u8]) -> Result<WildDocValue> {
         let code = "(".to_owned() + std::str::from_utf8(code)? + ")";
-        let scope = &mut self.worker.js_runtime.handle_scope();
+        if let Ok(mut worker) = self.worker.write() {
+            let scope = &mut worker.js_runtime.handle_scope();
 
-        if let Some(v) =
-            v8::String::new_from_one_byte(scope, code.as_bytes(), NewStringType::Normal)
-                .and_then(|code| v8::Script::compile(scope, code, None))
-                .and_then(|v| v.run(scope))
-        {
-            if v.is_array_buffer_view() {
-                if let Ok(a) = v8::Local::<v8::ArrayBufferView>::try_from(v) {
-                    if let Some(b) = a.buffer(scope) {
-                        if let Some(d) = b.data() {
-                            return Ok(WildDocValue::Binary(
-                                unsafe {
-                                    std::slice::from_raw_parts::<u8>(
-                                        d.as_ptr() as *const u8,
-                                        b.byte_length(),
-                                    )
-                                }
-                                .to_vec(),
-                            ));
+            if let Some(v) =
+                v8::String::new_from_one_byte(scope, code.as_bytes(), NewStringType::Normal)
+                    .and_then(|code| v8::Script::compile(scope, code, None))
+                    .and_then(|v| v.run(scope))
+            {
+                if v.is_array_buffer_view() {
+                    if let Ok(a) = v8::Local::<v8::ArrayBufferView>::try_from(v) {
+                        if let Some(b) = a.buffer(scope) {
+                            if let Some(d) = b.data() {
+                                return Ok(WildDocValue::Binary(
+                                    unsafe {
+                                        std::slice::from_raw_parts::<u8>(
+                                            d.as_ptr() as *const u8,
+                                            b.byte_length(),
+                                        )
+                                    }
+                                    .to_vec(),
+                                ));
+                            }
                         }
                     }
-                }
-            } else {
-                if let Ok(serv) = serde_v8::from_v8::<serde_json::Value>(scope, v) {
-                    return Ok(WildDocValue::from(serv));
+                } else {
+                    if let Ok(serv) = serde_v8::from_v8::<serde_json::Value>(scope, v) {
+                        return Ok(WildDocValue::from(serv));
+                    }
                 }
             }
         }
+
         Ok(WildDocValue::Null)
     }
 }

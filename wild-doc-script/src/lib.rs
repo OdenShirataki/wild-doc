@@ -15,6 +15,6 @@ pub trait WildDocScript {
     fn new(state: WildDocState) -> Result<Self>
     where
         Self: Sized;
-    fn evaluate_module(&mut self, file_name: &str, src: &[u8]) -> Result<()>;
-    fn eval(&mut self, code: &[u8]) -> Result<WildDocValue>;
+    fn evaluate_module(&self, file_name: &str, src: &[u8]) -> Result<()>;
+    fn eval(&self, code: &[u8]) -> Result<WildDocValue>;
 }

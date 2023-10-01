@@ -70,29 +70,24 @@ impl WildDoc {
         }
     }
 
+    pub fn database(&self) -> Arc<RwLock<SessionDatabase>> {
+        Arc::clone(&self.database)
+    }
+
     fn setup_scripts(
         &mut self,
         state: WildDocState,
-    ) -> Result<hashbrown::HashMap<String, Arc<Mutex<dyn WildDocScript>>>> {
-        let mut scripts: hashbrown::HashMap<String, Arc<Mutex<dyn WildDocScript>>> =
+    ) -> Result<hashbrown::HashMap<String, Arc<dyn WildDocScript>>> {
+        let mut scripts: hashbrown::HashMap<String, Arc<dyn WildDocScript>> =
             hashbrown::HashMap::new();
 
-        scripts.insert(
-            "var".to_owned(),
-            Arc::new(Mutex::new(Var::new(state.clone())?)),
-        );
+        scripts.insert("var".to_owned(), Arc::new(Var::new(state.clone())?));
 
         #[cfg(feature = "js")]
-        scripts.insert(
-            "js".to_owned(),
-            Arc::new(Mutex::new(Deno::new(state.clone())?)),
-        );
+        scripts.insert("js".to_owned(), Arc::new(Deno::new(state.clone())?));
 
         #[cfg(feature = "py")]
-        scripts.insert(
-            "py".to_owned(),
-            Arc::new(Mutex::new(WdPy::new(state.clone())?)),
-        );
+        scripts.insert("py".to_owned(), Arc::new(WdPy::new(state.clone())?));
         Ok(scripts)
     }
     fn run_inner(

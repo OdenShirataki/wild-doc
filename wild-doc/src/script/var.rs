@@ -30,11 +30,11 @@ impl WildDocScript for Var {
         })
     }
 
-    fn evaluate_module(&mut self, _: &str, _: &[u8]) -> Result<()> {
+    fn evaluate_module(&self, _: &str, _: &[u8]) -> Result<()> {
         Ok(())
     }
 
-    fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
+    fn eval(&self, code: &[u8]) -> Result<WildDocValue> {
         let mut value = WildDocValue::Null;
 
         let mut splited = code.split(|c| *c == b'.');

@@ -33,13 +33,13 @@ impl WildDocScript for WdPy {
         });
         Ok(WdPy {})
     }
-    fn evaluate_module(&mut self, _: &str, code: &[u8]) -> Result<()> {
+    fn evaluate_module(&self, _: &str, code: &[u8]) -> Result<()> {
         let code = std::str::from_utf8(code)?;
         Python::with_gil(|py| -> PyResult<()> { py.run(code, None, None) })?;
         Ok(())
     }
 
-    fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
+    fn eval(&self, code: &[u8]) -> Result<WildDocValue> {
         Ok(WildDocValue::Binary(
             Python::with_gil(|py| -> PyResult<PyObject> {
                 py.eval(
