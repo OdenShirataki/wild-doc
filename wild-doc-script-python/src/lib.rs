@@ -8,11 +8,12 @@ use pyo3::{
     types::{PyCapsule, PyDict, PyModule},
     wrap_pyfunction, PyObject, PyResult, Python,
 };
-use wild_doc_script::{VarsStack, WildDocScript, WildDocState, WildDocValue};
-
-use wild_doc_script::anyhow::Result;
+use wild_doc_script::{
+    anyhow::Result, VarsStack, WildDocScript, WildDocState, WildDocValue,
+};
 
 pub struct WdPy {}
+
 impl WildDocScript for WdPy {
     fn new(state: WildDocState) -> Result<Self> {
         let _ = Python::with_gil(|py| -> PyResult<()> {
@@ -33,6 +34,7 @@ impl WildDocScript for WdPy {
         });
         Ok(WdPy {})
     }
+
     fn evaluate_module(&self, _: &str, code: &[u8]) -> Result<()> {
         let code = std::str::from_utf8(code)?;
         Python::with_gil(|py| -> PyResult<()> { py.run(code, None, None) })?;

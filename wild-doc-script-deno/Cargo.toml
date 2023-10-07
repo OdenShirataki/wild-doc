@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-script-deno"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -18,5 +18,6 @@ categories = ["database","database-implementations","text-processing","web-progr
 ring = "0.16.20"
 deno_runtime = "0.128"
 deno_ast = { version = "0.29.0", features = ["transpiling"] }
+futures = "0.3"
 
 wild-doc-script = { version = "0.9", path = "../wild-doc-script" }

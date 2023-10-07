@@ -7,7 +7,7 @@ use wild_doc_script::WildDocValue;
 use super::{AttributeMap, Parser};
 
 impl Parser {
-    pub(super) fn collections(&mut self, attributes: AttributeMap) {
+    pub(super) fn collections(&self, attributes: AttributeMap) {
         let mut vars = HashMap::new();
 
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
@@ -30,13 +30,14 @@ impl Parser {
         self.state.stack().write().unwrap().push(vars);
     }
 
-    pub(super) fn delete_collection(&mut self, attributes: AttributeMap) {
+    pub(super) fn delete_collection(&self, attributes: AttributeMap) {
         if let Some(Some(collection)) = attributes.get(b"collection".as_ref()) {
-            self.database
-                .clone()
-                .write()
-                .unwrap()
-                .delete_collection(collection.to_str().as_ref());
+            futures::executor::block_on(
+                self.database
+                    .write()
+                    .unwrap()
+                    .delete_collection(collection.to_str().as_ref()),
+            );
         }
     }
 }

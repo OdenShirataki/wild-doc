@@ -13,9 +13,8 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
-use indexmap::IndexMap;
-
 use anyhow::Result;
+use indexmap::IndexMap;
 
 use semilattice_database_session::SessionDatabase;
 
@@ -70,8 +69,8 @@ impl WildDoc {
         }
     }
 
-    pub fn database(&self) -> Arc<RwLock<SessionDatabase>> {
-        Arc::clone(&self.database)
+    pub fn database(&self) -> &RwLock<SessionDatabase> {
+        &self.database
     }
 
     fn setup_scripts(
@@ -108,9 +107,9 @@ impl WildDoc {
         let stack = Arc::new(RwLock::new(vec![vars]));
 
         let state = WildDocState::new(stack.clone(), self.cache_dir.clone(), include_adaptor);
-        let scripts = Arc::new(self.setup_scripts(state.clone())?);
+        let scripts = self.setup_scripts(state.clone())?;
 
-        let body = Parser::new(self.database.clone(), scripts.clone(), state)?.parse(xml)?;
+        let body = Parser::new(self.database.clone(), scripts, state)?.parse(xml)?;
 
         let options = match global.read().unwrap().deref() {
             WildDocValue::Object(o) => o.get("result_options"),

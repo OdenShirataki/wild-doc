@@ -57,7 +57,6 @@ impl Parser {
         Ok(b"".to_vec())
     }
 
-    #[inline(always)]
     pub(super) fn case(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         let cmp_src = attributes
             .get(b"value".as_ref())
@@ -108,7 +107,6 @@ impl Parser {
         Ok(vec![])
     }
 
-    #[inline(always)]
     pub(super) fn r#if(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
             if value.as_bool().map_or(false, |v| *v) {

@@ -11,7 +11,7 @@ use super::{AttributeMap, Parser};
 impl Parser {
     #[inline(always)]
     pub(super) fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes) {
-        attributes.into_iter().for_each(|attr| {
+        for attr in attributes {
             let name = attr.name();
             if let Some(value) = attr.value() {
                 let (new_name, new_value) =
@@ -42,14 +42,14 @@ impl Parser {
             } else {
                 r.extend(attr.as_bytes());
             };
-        });
+        }
     }
 
     #[inline(always)]
     pub(super) fn parse_attibutes(&mut self, attributes: &Option<Attributes>) -> AttributeMap {
         let mut r: AttributeMap = HashMap::new();
         if let Some(attributes) = attributes {
-            attributes.into_iter().for_each(|attr| {
+            for attr in attributes.into_iter() {
                 if let Some(value) = attr.value() {
                     if let (prefix, Some(value)) =
                         self.attibute_var_or_script(attr.name().as_bytes(), value.as_bytes())
@@ -69,7 +69,7 @@ impl Parser {
                 } else {
                     r.insert(attr.name().as_bytes().to_vec(), None);
                 }
-            });
+            }
         }
         r
     }

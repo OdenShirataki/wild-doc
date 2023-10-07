@@ -8,7 +8,8 @@ use indexmap::IndexMap;
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum WildDocValue {
+pub enum WildDocValue
+{
     Null,
     Bool(bool),
     Number(serde_json::Number),

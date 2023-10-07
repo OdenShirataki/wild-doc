@@ -1,6 +1,9 @@
 mod custom_sort;
 
-use std::sync::{Arc, RwLock};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::{Arc, RwLock},
+};
 
 use hashbrown::HashMap;
 use indexmap::IndexMap;
@@ -11,7 +14,6 @@ use self::custom_sort::WdCustomSort;
 use super::{AttributeMap, Parser, WildDocValue};
 
 impl Parser {
-    #[inline(always)]
     pub(super) fn result(
         &mut self,
         attributes: &AttributeMap,
@@ -39,62 +41,65 @@ impl Parser {
                             .and_then(|v| v.as_ref())
                             .map_or_else(|| "".to_owned(), |v| v.to_string()),
                     );
-                    let mut session_maybe_has_collection = None;
+                    let mut rows: Vec<_> = vec![];
+
+                    let mut found_session = false;
                     for i in (0..self.sessions.len()).rev() {
-                        if self.sessions[i]
-                            .session
-                            .temporary_collection(collection_id)
-                            .is_some()
-                        {
-                            session_maybe_has_collection = Some(&self.sessions[i].session);
-                            break;
+                        if let Some(state) = self.sessions.get_mut(i) {
+                            if state.session.temporary_collection(collection_id).is_some() {
+                                found_session = true;
+                                rows = futures::executor::block_on(state.session.result_with(
+                                    &mut search.write().unwrap().deref_mut(),
+                                    self.database.read().unwrap().deref(),
+                                    &orders,
+                                ))
+                                .iter()
+                                .map(|row| {
+                                    WildDocValue::Object({
+                                        let mut r = IndexMap::new();
+                                        r.insert(
+                                            "row".to_owned(),
+                                            WildDocValue::Number(serde_json::Number::from(
+                                                row.get(),
+                                            )),
+                                        );
+                                        r
+                                    })
+                                })
+                                .collect();
+                                break;
+                            }
                         }
                     }
-                    let rows: Vec<_> = session_maybe_has_collection.map_or_else(
-                        || {
+
+                    if !found_session {
+                        rows = if let Some(v) = futures::executor::block_on(
                             search
                                 .write()
                                 .unwrap()
-                                .result(&self.database.read().unwrap())
-                                .read()
-                                .unwrap()
-                                .as_ref()
-                                .map_or(vec![], |v| v.sort(&self.database.read().unwrap(), &orders))
-                                .iter()
-                                .map(|row| {
-                                    WildDocValue::Object({
-                                        let mut r = IndexMap::new();
-                                        r.insert(
-                                            "row".to_owned(),
-                                            WildDocValue::Number(serde_json::Number::from(
-                                                row.get(),
-                                            )),
-                                        );
-                                        r
-                                    })
-                                })
-                                .collect()
-                        },
-                        |session| {
-                            session
-                                .search(&search)
-                                .result(&self.database.read().unwrap(), &orders)
-                                .iter()
-                                .map(|row| {
-                                    WildDocValue::Object({
-                                        let mut r = IndexMap::new();
-                                        r.insert(
-                                            "row".to_owned(),
-                                            WildDocValue::Number(serde_json::Number::from(
-                                                row.get(),
-                                            )),
-                                        );
-                                        r
-                                    })
-                                })
-                                .collect()
-                        },
-                    );
+                                .result(self.database.read().unwrap().deref()),
+                        )
+                        .read()
+                        .unwrap()
+                        .deref()
+                        {
+                            v.sort(self.database.read().unwrap().deref(), &orders)
+                        } else {
+                            vec![]
+                        }
+                        .iter()
+                        .map(|row| {
+                            WildDocValue::Object({
+                                let mut r = IndexMap::new();
+                                r.insert(
+                                    "row".to_owned(),
+                                    WildDocValue::Number(serde_json::Number::from(row.get())),
+                                );
+                                r
+                            })
+                        })
+                        .collect();
+                    }
                     let len = rows.len();
                     inner.insert("rows".to_owned(), WildDocValue::Array(rows));
                     inner.insert(
@@ -114,7 +119,7 @@ impl Parser {
 }
 
 #[inline(always)]
-fn make_order(search: &Arc<RwLock<Search>>, sort: &str) -> Vec<Order> {
+fn make_order(search: &RwLock<Search>, sort: &str) -> Vec<Order> {
     let mut orders = vec![];
     if sort.len() > 0 {
         for o in sort.trim().split(",") {
@@ -130,7 +135,7 @@ fn make_order(search: &Arc<RwLock<Search>>, sort: &str) -> Vec<Order> {
                 field.strip_prefix("join.").map(|v| -> OrderKey {
                     let s: Vec<&str> = v.split(".").collect();
                     OrderKey::Custom(Box::new(WdCustomSort {
-                        result: search.read().unwrap().get_result(),
+                        result: Arc::clone(search.read().unwrap().get_result()),
                         join_name: s[0].to_owned(),
                         property: s[1].to_owned(),
                     }))

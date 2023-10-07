@@ -39,14 +39,14 @@ struct SessionState {
 pub struct Parser {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<SessionState>,
-    scripts: Arc<HashMap<String, Arc<dyn WildDocScript>>>,
+    scripts: HashMap<String, Arc<dyn WildDocScript>>,
     state: WildDocState,
     include_stack: Vec<String>,
 }
 impl Parser {
     pub fn new(
         database: Arc<RwLock<SessionDatabase>>,
-        scripts: Arc<HashMap<String, Arc<dyn WildDocScript>>>,
+        scripts: HashMap<String, Arc<dyn WildDocScript>>,
         state: WildDocState,
     ) -> Result<Self> {
         Ok(Self {
@@ -247,7 +247,7 @@ impl Parser {
                         r.push(b'<');
                         r.extend(name.as_bytes());
                         if let Some(attributes) = token.attributes() {
-                            self.output_attributes(&mut r, attributes)
+                            self.output_attributes(&mut r, attributes);
                         }
                         r.push(b'>');
                     }
@@ -278,7 +278,7 @@ impl Parser {
                             r.push(b'<');
                             r.extend(name.as_bytes());
                             if let Some(attributes) = token.attributes() {
-                                self.output_attributes(&mut r, attributes)
+                                self.output_attributes(&mut r, attributes);
                             }
                             r.push(b' ');
                             r.push(b'/');
@@ -307,14 +307,15 @@ impl Parser {
                             b"session" => {
                                 if let Some(ref mut session_state) = self.sessions.pop() {
                                     if session_state.commit_on_close {
-                                        self.database
-                                            .write()
-                                            .unwrap()
-                                            .commit(&mut session_state.session);
+                                        futures::executor::block_on(
+                                            self.database
+                                                .write()
+                                                .unwrap()
+                                                .commit(&mut session_state.session),
+                                        );
                                     } else if session_state.clear_on_close {
                                         let _ = self
                                             .database
-                                            .clone()
                                             .write()
                                             .unwrap()
                                             .session_clear(&mut session_state.session);
@@ -353,7 +354,7 @@ impl Parser {
     }
 
     #[inline(always)]
-    fn custom_tag(&mut self, attributes: AttributeMap) -> (String, Vec<u8>) {
+    fn custom_tag(&self, attributes: AttributeMap) -> (String, Vec<u8>) {
         let mut html_attr = vec![];
         let mut name = "".to_string();
         for (key, value) in attributes {

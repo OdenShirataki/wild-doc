@@ -1,6 +1,7 @@
 use std::{
     error, fmt,
     num::{NonZeroI32, NonZeroI64, NonZeroU32},
+    sync::Arc,
 };
 
 use anyhow::{anyhow, Result};
@@ -81,10 +82,12 @@ impl Parser {
                         }
                         SessionRecord::Delete { collection_id, row } => {
                             if collection_id.get() > 0 {
-                                self.database
-                                    .write()
-                                    .unwrap()
-                                    .delete_recursive(&CollectionRow::new(collection_id, row));
+                                futures::executor::block_on(
+                                    self.database
+                                        .write()
+                                        .unwrap()
+                                        .delete_recursive(&CollectionRow::new(collection_id, row)),
+                                );
                             }
                         }
                     }
@@ -117,21 +120,22 @@ impl Parser {
                     self.register_global(name.to_str().as_ref(), &WildDocValue::Object(value));
                 }
             } else {
-                if let Some(ref mut session_state) = self.sessions.last_mut() {
-                    let session_rows = self
-                        .database
-                        .clone()
-                        .read()
-                        .unwrap()
-                        .update(&mut session_state.session, updates);
+                if let Some(session_state) = self.sessions.last_mut() {
+                    let session_rows = futures::executor::block_on(
+                        self.database
+                            .write()
+                            .unwrap()
+                            .update(&mut session_state.session, updates),
+                    );
                     let mut commit_rows = vec![];
                     if let Some(Some(commit)) = attributes.get(b"commit".as_ref()) {
                         if commit.as_bool().map_or(false, |v| *v) {
-                            commit_rows = self
-                                .database
-                                .write()
-                                .unwrap()
-                                .commit(&mut session_state.session);
+                            commit_rows = futures::executor::block_on(
+                                self.database
+                                    .write()
+                                    .unwrap()
+                                    .commit(&mut session_state.session),
+                            );
                         }
                     }
                     if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
@@ -192,7 +196,7 @@ impl Parser {
         Ok(())
     }
 
-    fn update_pends(&mut self, depend: CollectionRow, pends: &Vec<Pend>) -> Vec<CollectionRow> {
+    fn update_pends(&self, depend: CollectionRow, pends: &Vec<Pend>) -> Vec<CollectionRow> {
         let mut rows = vec![];
         for pend in pends {
             let pend_key = pend.key();
@@ -247,8 +251,9 @@ impl Parser {
         rows
     }
 
+    #[inline(always)]
     fn record_new(
-        &mut self,
+        &self,
         collection_id: NonZeroI32,
         record: &Record,
         depends: &Depends,
@@ -256,19 +261,24 @@ impl Parser {
     ) -> Vec<CollectionRow> {
         let mut rows = vec![];
         if collection_id.get() > 0 {
-            let collection_row = self
-                .database
-                .write()
-                .unwrap()
-                .collection_mut(collection_id)
-                .map(|v| CollectionRow::new(collection_id, v.create_row(record)));
+            let collection_row =
+                if let Some(v) = self.database.write().unwrap().collection_mut(collection_id) {
+                    Some(CollectionRow::new(
+                        collection_id,
+                        futures::executor::block_on(v.create_row(record)),
+                    ))
+                } else {
+                    None
+                };
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
                     for (depend_key, depend_row) in depends {
-                        self.database.write().unwrap().register_relation(
-                            depend_key,
-                            depend_row,
-                            collection_row.clone(),
+                        futures::executor::block_on(
+                            self.database.write().unwrap().register_relation(
+                                depend_key,
+                                depend_row,
+                                collection_row.clone(),
+                            ),
                         );
                     }
                 }
@@ -279,8 +289,9 @@ impl Parser {
         rows
     }
 
+    #[inline(always)]
     fn record_update(
-        &mut self,
+        &self,
         collection_id: NonZeroI32,
         row: NonZeroU32,
         record: &Record,
@@ -289,31 +300,34 @@ impl Parser {
     ) -> Vec<CollectionRow> {
         let mut rows = vec![];
         if collection_id.get() > 0 {
-            let collection_row = self
-                .database
-                .write()
-                .unwrap()
-                .collection_mut(collection_id)
-                .map(|v| {
-                    v.update_row(row, record);
-                    CollectionRow::new(collection_id, row)
-                });
+            let collection_row = if let Some(collection) =
+                self.database.write().unwrap().collection_mut(collection_id)
+            {
+                Arc::new(futures::executor::block_on(
+                    collection.update_row(row, record),
+                ));
+                Some(CollectionRow::new(collection_id, row))
+            } else {
+                None
+            };
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
-                    self.database
-                        .write()
-                        .unwrap()
-                        .relation()
-                        .write()
-                        .unwrap()
-                        .delete_pends_by_collection_row(&collection_row);
-                    depends.iter().for_each(|d| {
-                        self.database.write().unwrap().register_relation(
-                            &d.0,
-                            &d.1,
-                            collection_row.clone(),
+                    futures::executor::block_on(
+                        self.database
+                            .write()
+                            .unwrap()
+                            .relation_mut()
+                            .delete_pends_by_collection_row(&collection_row),
+                    );
+                    for d in depends {
+                        futures::executor::block_on(
+                            self.database.write().unwrap().register_relation(
+                                &d.0,
+                                &d.1,
+                                collection_row.clone(),
+                            ),
                         );
-                    });
+                    }
                 }
                 rows.push(collection_row.clone());
                 self.update_pends(collection_row, &pends);
@@ -322,6 +336,7 @@ impl Parser {
         rows
     }
 
+    #[inline(always)]
     fn depend(
         &mut self,
         attributes: &AttributeMap,
@@ -335,7 +350,6 @@ impl Parser {
             if let (Ok(row), Some(collection_id)) = (
                 row.to_str().parse::<NonZeroI64>(),
                 self.database
-                    .clone()
                     .read()
                     .unwrap()
                     .collection_id(&collection.to_str()),
@@ -371,6 +385,7 @@ impl Parser {
         Err(DependError)
     }
 
+    #[inline(always)]
     fn make_update_struct(&mut self, xml: &[u8]) -> Result<Vec<SessionRecord>> {
         let mut updates = Vec::new();
         let mut xml = xml;
@@ -387,7 +402,6 @@ impl Parser {
                         {
                             let collection_id = self
                                 .database
-                                .clone()
                                 .write()
                                 .unwrap()
                                 .collection_id_or_create(&collection_name.to_str());

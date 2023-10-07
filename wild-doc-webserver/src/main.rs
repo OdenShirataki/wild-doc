@@ -60,7 +60,7 @@ static SETTING: Lazy<std::sync::Mutex<HashMap<String, String>>> = Lazy::new(|| {
 });
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_server = {
         let addr_http: SocketAddr = ([127, 0, 0, 1], 80).into();
         async move {

@@ -8,21 +8,21 @@ use std::{
 };
 
 use deno_runtime::{
-    deno_core::{self, anyhow::Result, serde_json, serde_v8, ModuleSpecifier},
+    deno_core::{self, anyhow::Result, serde_v8, ModuleSpecifier},
     deno_napi::v8::{self, NewStringType, PropertyAttribute},
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
 };
 
-use wild_doc_script::{IncludeAdaptor, VarsStack, WildDocScript, WildDocState, WildDocValue};
+use wild_doc_script::{
+    serde_json, IncludeAdaptor, VarsStack, WildDocScript, WildDocState, WildDocValue,
+};
 
 use module_loader::WdModuleLoader;
 
 pub struct Deno {
     worker: RwLock<MainWorker>,
 }
-
-//unsafe impl Send for Deno {}
 
 impl WildDocScript for Deno {
     fn new(state: WildDocState) -> Result<Self> {
@@ -167,23 +167,23 @@ impl WildDocScript for Deno {
             worker: RwLock::new(worker),
         })
     }
+
     fn evaluate_module(&self, file_name: &str, src: &[u8]) -> Result<()> {
         deno_runtime::tokio_util::create_basic_runtime().block_on(async {
             let script_name = "wd://script".to_owned() + file_name;
+            let url = ModuleSpecifier::parse(&script_name)?;
+            let src = String::from_utf8(src.to_vec())?;
             if let Ok(mut worker) = self.worker.write() {
                 let mod_id = worker
                     .js_runtime
-                    .load_side_module(
-                        &ModuleSpecifier::parse(&script_name)?,
-                        Some(String::from_utf8(src.to_vec())?.into()),
-                    )
+                    .load_side_module(&url, Some(src.into()))
                     .await?;
                 worker.evaluate_module(mod_id).await?;
-                worker.run_event_loop(false).await?;
             }
             Ok(())
         })
     }
+
     fn eval(&self, code: &[u8]) -> Result<WildDocValue> {
         let code = "(".to_owned() + std::str::from_utf8(code)? + ")";
         if let Ok(mut worker) = self.worker.write() {

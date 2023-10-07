@@ -26,7 +26,7 @@ impl Parser {
     }
 
     #[inline(always)]
-    pub(crate) fn register_global(&mut self, name: &str, value: &WildDocValue) {
+    pub(crate) fn register_global(&self, name: &str, value: &WildDocValue) {
         if let Some(global) = self
             .state
             .stack()
@@ -51,7 +51,7 @@ impl Parser {
     }
 
     #[inline(always)]
-    pub(super) fn local(&mut self, attributes: AttributeMap) {
+    pub(super) fn local(&self, attributes: AttributeMap) {
         self.state.stack().write().unwrap().push(
             attributes
                 .iter()

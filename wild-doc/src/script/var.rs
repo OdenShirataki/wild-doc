@@ -10,6 +10,7 @@ use wild_doc_script::{VarsStack, WildDocScript, WildDocValue};
 pub struct Var {
     stack: Arc<RwLock<VarsStack>>,
 }
+
 impl Var {
     fn search_stack(&self, key: &[u8]) -> Option<Arc<RwLock<WildDocValue>>> {
         for stack in self.stack.read().unwrap().iter().rev() {
@@ -20,6 +21,7 @@ impl Var {
         None
     }
 }
+
 impl WildDocScript for Var {
     fn new(state: wild_doc_script::WildDocState) -> Result<Self>
     where
