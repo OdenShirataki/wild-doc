@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.95.0"
+version = "0.96.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -34,7 +34,7 @@ futures = "0.3"
 async-recursion = "1.0"
 async-trait = "0.1"
 
-semilattice-database-session = { version = "0.29", path = "../../semilattice-database/semilattice-database-session" }
+semilattice-database-session = { version = "0.30", path = "../../semilattice-database/semilattice-database-session" }
 
 wild-doc-script = { version = "0.9", path = "../wild-doc-script" }
 

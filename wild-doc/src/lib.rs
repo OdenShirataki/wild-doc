@@ -52,6 +52,7 @@ impl WildDoc {
         dir: P,
         default_include_adaptor: Box<dyn IncludeAdaptor + Send>,
         collection_settings: Option<HashMap<String, DataOption>>,
+        relation_allocation_lot: u32,
     ) -> Self {
         let dir = dir.as_ref();
         let mut cache_dir = dir.to_path_buf();
@@ -63,6 +64,7 @@ impl WildDoc {
             database: Arc::new(RwLock::new(SessionDatabase::new(
                 dir.into(),
                 collection_settings,
+                relation_allocation_lot,
             ))),
             default_include_adaptor: Arc::new(Mutex::new(default_include_adaptor)),
             cache_dir,

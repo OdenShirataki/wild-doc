@@ -27,6 +27,7 @@ struct ConfigServer {
     port: Option<String>,
     delete_dir_on_start: Option<String>,
     collection: Option<HashMap<String, DataOption>>,
+    relation_reserve_unit: Option<u32>,
 }
 
 fn main() {
@@ -72,6 +73,7 @@ fn main() {
                                                         dir,
                                                         Box::new(IncludeEmpty::new()),
                                                         config.collection.clone(),
+                                                        config.relation_reserve_unit.unwrap_or(1),
                                                     )))
                                                 });
                                             let wd = Arc::clone(&wd);
