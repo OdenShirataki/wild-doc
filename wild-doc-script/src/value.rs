@@ -1,15 +1,12 @@
-use std::{
-    borrow::Cow,
-    sync::{Arc, RwLock},
-};
+use std::{borrow::Cow, sync::Arc};
 
 use hashbrown::HashMap;
 use indexmap::IndexMap;
+use parking_lot::RwLock;
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum WildDocValue
-{
+pub enum WildDocValue {
     Null,
     Bool(bool),
     Number(serde_json::Number),

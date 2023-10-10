@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-script"
-version = "0.9.1"
+version = "0.10.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -20,3 +20,4 @@ anyhow.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 indexmap.workspace = true
+parking_lot.workspace = true

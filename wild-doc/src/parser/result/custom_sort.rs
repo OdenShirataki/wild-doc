@@ -1,9 +1,6 @@
-use std::{
-    cmp::Ordering,
-    num::NonZeroU32,
-    sync::{Arc, RwLock},
-};
+use std::{cmp::Ordering, num::NonZeroU32, sync::Arc};
 
+use parking_lot::RwLock;
 use semilattice_database_session::{search::SearchResult, CustomSort};
 
 pub struct WdCustomSort {
@@ -18,7 +15,6 @@ impl CustomSort for WdCustomSort {
         if let Some(join) = self
             .result
             .read()
-            .unwrap()
             .as_ref()
             .and_then(|v| v.join().get(&self.join_name))
         {
@@ -36,7 +32,7 @@ impl CustomSort for WdCustomSort {
 
     #[inline(always)]
     fn asc(&self) -> Vec<NonZeroU32> {
-        if let Some(result) = self.result.read().unwrap().as_ref() {
+        if let Some(result) = self.result.read().as_ref() {
             if let Some(join) = result.join().get(&self.join_name) {
                 match self.property.as_str() {
                     "len" => {
@@ -59,7 +55,7 @@ impl CustomSort for WdCustomSort {
 
     #[inline(always)]
     fn desc(&self) -> Vec<NonZeroU32> {
-        if let Some(result) = self.result.read().unwrap().as_ref() {
+        if let Some(result) = self.result.read().as_ref() {
             if let Some(join) = result.join().get(&self.join_name) {
                 match self.property.as_str() {
                     "len" => {

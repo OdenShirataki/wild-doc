@@ -8,13 +8,11 @@ mod session;
 mod update;
 mod var;
 
-use std::{
-    ops::Deref,
-    sync::{Arc, RwLock},
-};
+use std::{ops::Deref, sync::Arc};
 
 use anyhow::Result;
 use hashbrown::HashMap;
+use parking_lot::RwLock;
 
 use maybe_xml::{
     scanner::{Scanner, State},
@@ -302,7 +300,7 @@ impl Parser {
                             | b"collections"
                             | b"sessions"
                             | b"session_sequence_cursor" => {
-                                self.state.stack().write().unwrap().pop();
+                                self.state.stack().lock().pop();
                             }
                             b"session" => {
                                 if let Some(ref mut session_state) = self.sessions.pop() {
@@ -310,14 +308,12 @@ impl Parser {
                                         futures::executor::block_on(
                                             self.database
                                                 .write()
-                                                .unwrap()
                                                 .commit(&mut session_state.session),
                                         );
                                     } else if session_state.clear_on_close {
                                         let _ = self
                                             .database
                                             .write()
-                                            .unwrap()
                                             .session_clear(&mut session_state.session);
                                     }
                                 }

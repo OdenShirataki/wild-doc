@@ -10,11 +10,12 @@ use std::{
     collections::HashMap,
     ops::Deref,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock},
+    sync::Arc,
 };
 
 use anyhow::Result;
 use indexmap::IndexMap;
+use parking_lot::{Mutex, RwLock};
 
 use semilattice_database_session::SessionDatabase;
 
@@ -106,14 +107,14 @@ impl WildDoc {
         let global = Arc::new(RwLock::new(WildDocValue::Object(IndexMap::new())));
         vars.insert(b"global".to_vec(), Arc::clone(&global));
 
-        let stack = Arc::new(RwLock::new(vec![vars]));
+        let stack = Arc::new(Mutex::new(vec![vars]));
 
-        let state = WildDocState::new(stack.clone(), self.cache_dir.clone(), include_adaptor);
+        let state = WildDocState::new(stack, self.cache_dir.clone(), include_adaptor);
         let scripts = self.setup_scripts(state.clone())?;
 
-        let body = Parser::new(self.database.clone(), scripts, state)?.parse(xml)?;
+        let body = Parser::new(Arc::clone(&self.database), scripts, state)?.parse(xml)?;
 
-        let options = match global.read().unwrap().deref() {
+        let options = match global.read().deref() {
             WildDocValue::Object(o) => o.get("result_options"),
             _ => None,
         }
@@ -121,7 +122,7 @@ impl WildDoc {
         Ok(WildDocResult { body, options })
     }
     pub fn run(&mut self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {
-        self.run_inner(xml, input_json, self.default_include_adaptor.clone())
+        self.run_inner(xml, input_json, Arc::clone(&self.default_include_adaptor))
     }
     pub fn run_with_include_adaptor(
         &mut self,

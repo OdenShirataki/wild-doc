@@ -1,9 +1,7 @@
-use std::{
-    borrow::Cow,
-    sync::{Arc, RwLock},
-};
+use std::{borrow::Cow, sync::Arc};
 
 use hashbrown::HashMap;
+use parking_lot::RwLock;
 use serde_json::json;
 
 use wild_doc_script::WildDocValue;
@@ -18,14 +16,14 @@ impl Parser {
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
             let var = var.to_str();
             if var != "" {
-                let sessions = self.database.read().unwrap().sessions();
+                let sessions = self.database.read().sessions();
                 json.insert(
                     var.to_string().into_bytes(),
                     Arc::new(RwLock::new(WildDocValue::from(json!(sessions)))),
                 );
             }
         }
-        self.state.stack().write().unwrap().push(json);
+        self.state.stack().lock().push(json);
     }
 
     #[inline(always)]
@@ -54,7 +52,7 @@ impl Parser {
                 } else {
                     None
                 };
-                let mut session = self.database.read().unwrap().session(&session_name, expire);
+                let mut session = self.database.read().session(&session_name, expire);
                 if let Some(Some(cursor)) = attributes.get(b"cursor".as_ref()) {
                     let cursor = cursor.to_str();
                     if cursor != "" {
@@ -65,10 +63,7 @@ impl Parser {
                 }
                 if let Some(Some(initialize)) = attributes.get(b"initialize".as_ref()) {
                     if initialize.as_bool().map_or(false, |v| *v) {
-                        self.database
-                            .read()
-                            .unwrap()
-                            .session_restart(&mut session, expire);
+                        self.database.read().session_restart(&mut session, expire);
                     }
                 }
                 self.sessions.push(SessionState {
@@ -115,12 +110,12 @@ impl Parser {
                 );
             }
         }
-        self.state.stack().write().unwrap().push(json);
+        self.state.stack().lock().push(json);
     }
 
     #[inline(always)]
     pub(super) fn session_gc(&self, attributes: AttributeMap) {
-        self.database.write().unwrap().session_gc(
+        self.database.write().session_gc(
             attributes
                 .get(b"expire".as_ref())
                 .and_then(|v| v.as_ref())

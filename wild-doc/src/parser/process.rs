@@ -1,8 +1,4 @@
-use std::{
-    borrow::Cow,
-    path::Path,
-    sync::{Arc, RwLock},
-};
+use std::{borrow::Cow, path::Path, sync::Arc};
 
 use anyhow::Result;
 use hashbrown::HashMap;
@@ -11,6 +7,7 @@ use maybe_xml::{
     scanner::{Scanner, State},
     token::{self, prop::Attributes},
 };
+use parking_lot::RwLock;
 
 use crate::xml_util;
 
@@ -24,7 +21,6 @@ impl Parser {
                 .state
                 .include_adaptor()
                 .lock()
-                .unwrap()
                 .include(Path::new(src.as_ref()))
                 .map_or_else(
                     || {
@@ -35,7 +31,6 @@ impl Parser {
                                 .state
                                 .include_adaptor()
                                 .lock()
-                                .unwrap()
                                 .include(Path::new(substitute.as_ref()))
                             {
                                 r = (Some(xml), substitute);
@@ -139,9 +134,9 @@ impl Parser {
                                         key
                                     )))),
                                 );
-                                self.state.stack().write().unwrap().push(vars);
+                                self.state.stack().lock().push(vars);
                                 r.extend(self.parse(xml)?);
-                                self.state.stack().write().unwrap().pop();
+                                self.state.stack().lock().pop();
                             }
                         } else {
                             for (_, value) in map {
@@ -150,9 +145,9 @@ impl Parser {
                                     var.to_string().into_bytes(),
                                     Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
                                 );
-                                self.state.stack().write().unwrap().push(vars);
+                                self.state.stack().lock().push(vars);
                                 r.extend(self.parse(xml)?);
-                                self.state.stack().write().unwrap().pop();
+                                self.state.stack().lock().pop();
                             }
                         }
                     }
@@ -173,9 +168,9 @@ impl Parser {
                                     )))),
                                 );
                                 key += 1;
-                                self.state.stack().write().unwrap().push(vars);
+                                self.state.stack().lock().push(vars);
                                 r.extend(self.parse(xml)?);
-                                self.state.stack().write().unwrap().pop();
+                                self.state.stack().lock().pop();
                             }
                         } else {
                             for value in vec {
@@ -184,9 +179,9 @@ impl Parser {
                                     var.to_string().into_bytes(),
                                     Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
                                 );
-                                self.state.stack().write().unwrap().push(vars);
+                                self.state.stack().lock().push(vars);
                                 r.extend(self.parse(xml)?);
-                                self.state.stack().write().unwrap().pop();
+                                self.state.stack().lock().pop();
                             }
                         }
                     }

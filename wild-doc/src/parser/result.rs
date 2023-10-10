@@ -2,11 +2,12 @@ mod custom_sort;
 
 use std::{
     ops::{Deref, DerefMut},
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 
 use hashbrown::HashMap;
 use indexmap::IndexMap;
+use parking_lot::RwLock;
 use semilattice_database_session::{search::Search, Order, OrderKey};
 
 use self::custom_sort::WdCustomSort;
@@ -29,7 +30,7 @@ impl Parser {
             if search != "" && var != "" {
                 let mut inner = IndexMap::new();
                 if let Some(search) = search_map.get(search.as_ref()) {
-                    let collection_id = search.read().unwrap().collection_id();
+                    let collection_id = search.read().collection_id();
                     inner.insert(
                         "collection_id".to_owned(),
                         WildDocValue::Number(serde_json::Number::from(collection_id.get())),
@@ -49,8 +50,8 @@ impl Parser {
                             if state.session.temporary_collection(collection_id).is_some() {
                                 found_session = true;
                                 rows = futures::executor::block_on(state.session.result_with(
-                                    &mut search.write().unwrap().deref_mut(),
-                                    self.database.read().unwrap().deref(),
+                                    &mut search.write().deref_mut(),
+                                    self.database.read().deref(),
                                     &orders,
                                 ))
                                 .iter()
@@ -74,16 +75,12 @@ impl Parser {
 
                     if !found_session {
                         rows = if let Some(v) = futures::executor::block_on(
-                            search
-                                .write()
-                                .unwrap()
-                                .result(self.database.read().unwrap().deref()),
+                            search.write().result(self.database.read().deref()),
                         )
                         .read()
-                        .unwrap()
                         .deref()
                         {
-                            v.sort(self.database.read().unwrap().deref(), &orders)
+                            v.sort(self.database.read().deref(), &orders)
                         } else {
                             vec![]
                         }
@@ -114,7 +111,7 @@ impl Parser {
                 }
             }
         }
-        self.state.stack().write().unwrap().push(vars);
+        self.state.stack().lock().push(vars);
     }
 }
 
@@ -135,7 +132,7 @@ fn make_order(search: &RwLock<Search>, sort: &str) -> Vec<Order> {
                 field.strip_prefix("join.").map(|v| -> OrderKey {
                     let s: Vec<&str> = v.split(".").collect();
                     OrderKey::Custom(Box::new(WdCustomSort {
-                        result: Arc::clone(search.read().unwrap().get_result()),
+                        result: Arc::clone(search.read().get_result()),
                         join_name: s[0].to_owned(),
                         property: s[1].to_owned(),
                     }))

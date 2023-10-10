@@ -8,9 +8,7 @@ use pyo3::{
     types::{PyCapsule, PyDict, PyModule},
     wrap_pyfunction, PyObject, PyResult, Python,
 };
-use wild_doc_script::{
-    anyhow::Result, VarsStack, WildDocScript, WildDocState, WildDocValue,
-};
+use wild_doc_script::{anyhow::Result, VarsStack, WildDocScript, WildDocState, WildDocValue};
 
 pub struct WdPy {}
 
@@ -27,7 +25,7 @@ impl WildDocScript for WdPy {
             builtins.add_submodule(wd)?;
 
             let name = CString::new("builtins.wdstack").unwrap();
-            let stack = PyCapsule::new(py, state.stack(), Some(name.clone()))?;
+            let stack = PyCapsule::new(py, Arc::clone(state.stack()), Some(name.clone()))?;
             builtins.add("wdstack", stack)?;
 
             Ok(())
@@ -77,7 +75,7 @@ def v(data):
                     "",
                 )?
                 .getattr("v")?
-                .call1((v.read().unwrap().to_string(),))?
+                .call1((v.read().to_string(),))?
                 .extract();
             }
         }

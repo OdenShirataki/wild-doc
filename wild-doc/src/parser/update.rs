@@ -85,7 +85,6 @@ impl Parser {
                                 futures::executor::block_on(
                                     self.database
                                         .write()
-                                        .unwrap()
                                         .delete_recursive(&CollectionRow::new(collection_id, row)),
                                 );
                             }
@@ -124,17 +123,13 @@ impl Parser {
                     let session_rows = futures::executor::block_on(
                         self.database
                             .write()
-                            .unwrap()
                             .update(&mut session_state.session, updates),
                     );
                     let mut commit_rows = vec![];
                     if let Some(Some(commit)) = attributes.get(b"commit".as_ref()) {
                         if commit.as_bool().map_or(false, |v| *v) {
                             commit_rows = futures::executor::block_on(
-                                self.database
-                                    .write()
-                                    .unwrap()
-                                    .commit(&mut session_state.session),
+                                self.database.write().commit(&mut session_state.session),
                             );
                         }
                     }
@@ -262,7 +257,7 @@ impl Parser {
         let mut rows = vec![];
         if collection_id.get() > 0 {
             let collection_row =
-                if let Some(v) = self.database.write().unwrap().collection_mut(collection_id) {
+                if let Some(v) = self.database.write().collection_mut(collection_id) {
                     Some(CollectionRow::new(
                         collection_id,
                         futures::executor::block_on(v.create_row(record)),
@@ -273,13 +268,11 @@ impl Parser {
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
                     for (depend_key, depend_row) in depends {
-                        futures::executor::block_on(
-                            self.database.write().unwrap().register_relation(
-                                depend_key,
-                                depend_row,
-                                collection_row.clone(),
-                            ),
-                        );
+                        futures::executor::block_on(self.database.write().register_relation(
+                            depend_key,
+                            depend_row,
+                            collection_row.clone(),
+                        ));
                     }
                 }
                 rows.push(collection_row.clone());
@@ -300,33 +293,29 @@ impl Parser {
     ) -> Vec<CollectionRow> {
         let mut rows = vec![];
         if collection_id.get() > 0 {
-            let collection_row = if let Some(collection) =
-                self.database.write().unwrap().collection_mut(collection_id)
-            {
-                Arc::new(futures::executor::block_on(
-                    collection.update_row(row, record),
-                ));
-                Some(CollectionRow::new(collection_id, row))
-            } else {
-                None
-            };
+            let collection_row =
+                if let Some(collection) = self.database.write().collection_mut(collection_id) {
+                    Arc::new(futures::executor::block_on(
+                        collection.update_row(row, record),
+                    ));
+                    Some(CollectionRow::new(collection_id, row))
+                } else {
+                    None
+                };
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
                     futures::executor::block_on(
                         self.database
                             .write()
-                            .unwrap()
                             .relation_mut()
                             .delete_pends_by_collection_row(&collection_row),
                     );
                     for d in depends {
-                        futures::executor::block_on(
-                            self.database.write().unwrap().register_relation(
-                                &d.0,
-                                &d.1,
-                                collection_row.clone(),
-                            ),
-                        );
+                        futures::executor::block_on(self.database.write().register_relation(
+                            &d.0,
+                            &d.1,
+                            collection_row.clone(),
+                        ));
                     }
                 }
                 rows.push(collection_row.clone());
@@ -349,10 +338,7 @@ impl Parser {
         ) {
             if let (Ok(row), Some(collection_id)) = (
                 row.to_str().parse::<NonZeroI64>(),
-                self.database
-                    .read()
-                    .unwrap()
-                    .collection_id(&collection.to_str()),
+                self.database.read().collection_id(&collection.to_str()),
             ) {
                 let in_session = row.get() < 0;
                 if in_session {
@@ -403,7 +389,6 @@ impl Parser {
                             let collection_id = self
                                 .database
                                 .write()
-                                .unwrap()
                                 .collection_id_or_create(&collection_name.to_str());
 
                             let mut pends = Vec::new();

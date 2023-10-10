@@ -1,20 +1,22 @@
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock},
+    sync::Arc,
 };
+
+use parking_lot::Mutex;
 
 use crate::{IncludeAdaptor, VarsStack};
 
 #[derive(Clone)]
 pub struct WildDocState {
-    stack: Arc<RwLock<VarsStack>>,
+    stack: Arc<Mutex<VarsStack>>,
     cache_dir: PathBuf,
     include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
 }
 
 impl WildDocState {
     pub fn new(
-        stack: Arc<RwLock<VarsStack>>,
+        stack: Arc<Mutex<VarsStack>>,
         cache_dir: PathBuf,
         include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
     ) -> Self {
@@ -31,8 +33,8 @@ impl WildDocState {
     }
 
     #[inline(always)]
-    pub fn stack(&self) -> Arc<RwLock<VarsStack>> {
-        self.stack.clone()
+    pub fn stack(&self) -> &Arc<Mutex<VarsStack>> {
+        &self.stack
     }
 
     #[inline(always)]

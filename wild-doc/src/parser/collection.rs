@@ -1,7 +1,8 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use hashbrown::HashMap;
 
+use parking_lot::RwLock;
 use wild_doc_script::WildDocValue;
 
 use super::{AttributeMap, Parser};
@@ -18,7 +19,6 @@ impl Parser {
                     Arc::new(RwLock::new(WildDocValue::Array(
                         self.database
                             .read()
-                            .unwrap()
                             .collections()
                             .iter()
                             .map(|v| WildDocValue::String(v.to_owned()))
@@ -27,7 +27,7 @@ impl Parser {
                 );
             }
         }
-        self.state.stack().write().unwrap().push(vars);
+        self.state.stack().lock().push(vars);
     }
 
     pub(super) fn delete_collection(&self, attributes: AttributeMap) {
@@ -35,7 +35,6 @@ impl Parser {
             futures::executor::block_on(
                 self.database
                     .write()
-                    .unwrap()
                     .delete_collection(collection.to_str().as_ref()),
             );
         }

@@ -3,7 +3,7 @@ mod join;
 use std::{
     num::{NonZeroI32, NonZeroI64},
     str::FromStr,
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 
 use chrono::DateTime;
@@ -12,6 +12,7 @@ use maybe_xml::{
     scanner::{Scanner, State},
     token,
 };
+use parking_lot::RwLock;
 use semilattice_database_session::{
     search::{self, Join, Search},
     Activity, CollectionRow, Condition, Uuid,
@@ -26,12 +27,7 @@ impl Parser {
     fn collection_id(&self, attributes: &AttributeMap) -> Option<NonZeroI32> {
         if let Some(Some(collection_name)) = attributes.get(b"collection".as_ref()) {
             let collection_name = collection_name.to_string();
-            if let Some(collection_id) = self
-                .database
-                .read()
-                .unwrap()
-                .collection_id(&collection_name)
-            {
+            if let Some(collection_id) = self.database.read().collection_id(&collection_name) {
                 return Some(collection_id);
             }
             if collection_name != "" {
@@ -42,7 +38,6 @@ impl Parser {
                         return Some(
                             self.database
                                 .write()
-                                .unwrap()
                                 .collection_id_or_create(&collection_name),
                         );
                     }
@@ -217,10 +212,7 @@ impl Parser {
             if row != "" && collection_name != "" {
                 if let (Ok(row), Some(collection_id)) = (
                     row.parse::<NonZeroI64>(),
-                    self.database
-                        .read()
-                        .unwrap()
-                        .collection_id(&collection_name),
+                    self.database.read().collection_id(&collection_name),
                 ) {
                     return Some(Condition::Depend(
                         attributes

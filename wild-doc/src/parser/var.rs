@@ -1,10 +1,7 @@
-use std::{
-    collections::VecDeque,
-    ops::DerefMut,
-    sync::{Arc, RwLock},
-};
+use std::{collections::VecDeque, ops::DerefMut, sync::Arc};
 
 use indexmap::IndexMap;
+use parking_lot::RwLock;
 use wild_doc_script::WildDocValue;
 
 use super::{AttributeMap, Parser};
@@ -30,12 +27,11 @@ impl Parser {
         if let Some(global) = self
             .state
             .stack()
-            .write()
-            .unwrap()
+            .lock()
             .get(0)
             .and_then(|v| v.get(b"global".as_ref()))
         {
-            if let WildDocValue::Object(ref mut map) = global.write().unwrap().deref_mut() {
+            if let WildDocValue::Object(ref mut map) = global.write().deref_mut() {
                 let mut splited: VecDeque<_> = name.split('.').collect();
                 if let Some(last) = splited.pop_back() {
                     if splited.len() > 0 {
@@ -52,7 +48,7 @@ impl Parser {
 
     #[inline(always)]
     pub(super) fn local(&self, attributes: AttributeMap) {
-        self.state.stack().write().unwrap().push(
+        self.state.stack().lock().push(
             attributes
                 .iter()
                 .filter_map(|(k, v)| {

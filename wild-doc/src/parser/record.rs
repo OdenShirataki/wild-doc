@@ -1,10 +1,11 @@
 use std::{
     num::{NonZeroI64, NonZeroU32},
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 
 use hashbrown::HashMap;
 use indexmap::IndexMap;
+use parking_lot::RwLock;
 use semilattice_database_session::{Activity, CollectionRow, Uuid};
 use wild_doc_script::WildDocValue;
 
@@ -23,10 +24,7 @@ impl Parser {
             if var != "" {
                 let mut inner = IndexMap::new();
                 if let (Some(collection_id), Ok(row)) = (
-                    self.database
-                        .read()
-                        .unwrap()
-                        .collection_id(&collection.to_string()),
+                    self.database.read().collection_id(&collection.to_string()),
                     row.to_string().parse::<NonZeroI64>(),
                 ) {
                     inner.insert(
@@ -123,9 +121,7 @@ impl Parser {
                     }
 
                     if !find_session && row.get() > 0 {
-                        if let Some(collection) =
-                            self.database.read().unwrap().collection(collection_id)
-                        {
+                        if let Some(collection) = self.database.read().collection(collection_id) {
                             let row = unsafe { NonZeroU32::new_unchecked(row.get() as u32) };
 
                             if let Some(uuid) = collection.uuid_string(row) {
@@ -159,7 +155,6 @@ impl Parser {
                             for d in self
                                 .database
                                 .read()
-                                .unwrap()
                                 .relation()
                                 .depends(None, &CollectionRow::new(collection_id, row))
                             {
@@ -168,7 +163,7 @@ impl Parser {
                                 let collection_id = d.collection_id();
 
                                 if let Some(collection) =
-                                    self.database.read().unwrap().collection(collection_id)
+                                    self.database.read().collection(collection_id)
                                 {
                                     depend.insert(
                                         "collection_id".to_owned(),
@@ -233,6 +228,6 @@ impl Parser {
                 );
             }
         }
-        self.state.stack().write().unwrap().push(json);
+        self.state.stack().lock().push(json);
     }
 }
