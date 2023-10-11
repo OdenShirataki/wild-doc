@@ -30,13 +30,12 @@ impl Parser {
         self.state.stack().lock().push(vars);
     }
 
-    pub(super) fn delete_collection(&self, attributes: AttributeMap) {
+    pub(super) async fn delete_collection(&self, attributes: AttributeMap) {
         if let Some(Some(collection)) = attributes.get(b"collection".as_ref()) {
-            futures::executor::block_on(
-                self.database
-                    .write()
-                    .delete_collection(collection.to_str().as_ref()),
-            );
+            self.database
+                .write()
+                .delete_collection(collection.to_str().as_ref())
+                .await;
         }
     }
 }

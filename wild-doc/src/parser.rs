@@ -11,6 +11,7 @@ mod var;
 use std::{ops::Deref, sync::Arc};
 
 use anyhow::Result;
+use async_recursion::async_recursion;
 use hashbrown::HashMap;
 use parking_lot::RwLock;
 
@@ -56,7 +57,8 @@ impl Parser {
         })
     }
 
-    fn parse_wd_start_or_empty_tag(
+    #[async_recursion(?Send)]
+    async fn parse_wd_start_or_empty_tag(
         &mut self,
         name: &[u8],
         attributes: &Option<Attributes<'_>>,
@@ -65,6 +67,7 @@ impl Parser {
             b"print" => {
                 return Ok(self
                     .parse_attibutes(attributes)
+                    .await
                     .get(b"value".as_ref())
                     .and_then(|v| v.as_ref())
                     .map(|v| match v.deref() {
@@ -74,7 +77,7 @@ impl Parser {
                     }));
             }
             b"global" => {
-                let attributes = self.parse_attibutes(attributes);
+                let attributes = self.parse_attibutes(attributes).await;
                 if let (Some(Some(var)), Some(Some(value))) = (
                     attributes.get(b"var".as_ref()),
                     attributes.get(b"value".as_ref()),
@@ -85,20 +88,21 @@ impl Parser {
             b"print_escape_html" => {
                 return Ok(self
                     .parse_attibutes(attributes)
+                    .await
                     .get(b"value".as_ref())
                     .and_then(|v| v.as_ref())
                     .map(|v| xml_util::escape_html(&v.to_str()).into_bytes()));
             }
             b"include" => {
-                let attributes = self.parse_attibutes(attributes);
-                return Ok(Some(self.get_include_content(attributes)?));
+                let attributes = self.parse_attibutes(attributes).await;
+                return Ok(Some(self.get_include_content(attributes).await?));
             }
             b"delete_collection" => {
-                let attributes = self.parse_attibutes(attributes);
-                self.delete_collection(attributes);
+                let attributes = self.parse_attibutes(attributes).await;
+                self.delete_collection(attributes).await;
             }
             b"session_gc" => {
-                let attributes = self.parse_attibutes(attributes);
+                let attributes = self.parse_attibutes(attributes).await;
                 self.session_gc(attributes);
             }
             _ => {}
@@ -112,7 +116,8 @@ impl Parser {
             .map_or(false, |v| v.as_bytes() == b"wd")
     }
 
-    pub fn parse(&mut self, xml: &[u8]) -> Result<Vec<u8>> {
+    #[async_recursion(?Send)]
+    pub async fn parse<'a>(&'a mut self, xml: &'a [u8]) -> Result<Vec<u8>> {
         let mut r: Vec<u8> = Vec::new();
         let mut tag_stack = vec![];
         let mut search_map = HashMap::new();
@@ -128,10 +133,13 @@ impl Parser {
                     let target = token.target();
                     if let Some(script) = self.scripts.get(target.to_str()?) {
                         if let Some(i) = token.instructions() {
-                            if let Err(e) = futures::executor::block_on(script.evaluate_module(
-                                self.include_stack.last().map_or("", |v| v),
-                                i.as_bytes(),
-                            )) {
+                            if let Err(e) = script
+                                .evaluate_module(
+                                    self.include_stack.last().map_or("", |v| v),
+                                    i.as_bytes(),
+                                )
+                                .await
+                            {
                                 return Err(e);
                             }
                         }
@@ -146,30 +154,36 @@ impl Parser {
                     let token = token::borrowed::StartTag::from(token_bytes);
                     let name = token.name();
                     if Self::is_wd_tag(&name) {
-                        if let Some(parsed) = self.parse_wd_start_or_empty_tag(
-                            name.local().as_bytes(),
-                            &token.attributes(),
-                        )? {
+                        if let Some(parsed) = self
+                            .parse_wd_start_or_empty_tag(
+                                name.local().as_bytes(),
+                                &token.attributes(),
+                            )
+                            .await?
+                        {
                             r.extend(parsed);
                         } else {
                             match name.local().as_bytes() {
                                 b"session" => {
-                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    let attributes =
+                                        self.parse_attibutes(&token.attributes()).await;
                                     self.session(attributes);
                                 }
                                 b"session_sequence_cursor" => {
-                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    let attributes =
+                                        self.parse_attibutes(&token.attributes()).await;
                                     self.session_sequence(attributes);
                                 }
                                 b"sessions" => {
-                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    let attributes =
+                                        self.parse_attibutes(&token.attributes()).await;
                                     self.sessions(&attributes);
                                 }
                                 b"re" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let parsed = self.parse(inner_xml)?;
+                                    let parsed = self.parse(inner_xml).await?;
                                     xml = &xml[outer_end..];
-                                    r.extend(self.parse(&parsed)?);
+                                    r.extend(self.parse(&parsed).await?);
                                 }
                                 b"comment" => {
                                     let (_, outer_end) = xml_util::inner(xml);
@@ -181,52 +195,61 @@ impl Parser {
                                     xml = &xml[outer_end..];
                                 }
                                 b"update" => {
-                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    let attributes =
+                                        self.parse_attibutes(&token.attributes()).await;
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    self.update(inner_xml, &attributes)?;
+                                    self.update(inner_xml, &attributes).await?;
                                     xml = &xml[outer_end..];
                                 }
                                 b"search" => {
-                                    let attributes = self.parse_attibutes(&token.attributes());
-                                    xml = self.search(xml, &attributes, &mut search_map);
+                                    let attributes =
+                                        self.parse_attibutes(&token.attributes()).await;
+                                    xml = self.search(xml, &attributes, &mut search_map).await;
                                 }
                                 b"result" => {
-                                    let attributes = self.parse_attibutes(&token.attributes());
-                                    self.result(&attributes, &search_map);
+                                    let attributes =
+                                        self.parse_attibutes(&token.attributes()).await;
+                                    self.result(&attributes, &search_map).await;
                                 }
                                 b"record" => {
-                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    let attributes =
+                                        self.parse_attibutes(&token.attributes()).await;
                                     self.record(attributes);
                                 }
                                 b"collections" => {
-                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    let attributes =
+                                        self.parse_attibutes(&token.attributes()).await;
                                     self.collections(attributes);
                                 }
                                 b"case" => {
-                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    let attributes =
+                                        self.parse_attibutes(&token.attributes()).await;
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.extend(self.case(attributes, inner_xml)?);
+                                    r.extend(self.case(attributes, inner_xml).await?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"if" => {
-                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    let attributes =
+                                        self.parse_attibutes(&token.attributes()).await;
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.extend(self.r#if(attributes, inner_xml)?);
+                                    r.extend(self.r#if(attributes, inner_xml).await?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"for" => {
-                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    let attributes =
+                                        self.parse_attibutes(&token.attributes()).await;
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.extend(self.r#for(attributes, inner_xml)?);
+                                    r.extend(self.r#for(attributes, inner_xml).await?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"while" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.extend(self.r#while(token.attributes(), inner_xml)?);
+                                    r.extend(self.r#while(token.attributes(), inner_xml).await?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"tag" => {
-                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    let attributes =
+                                        self.parse_attibutes(&token.attributes()).await;
                                     let (name, attr) = self.custom_tag(attributes);
                                     tag_stack.push(name.clone());
                                     r.push(b'<');
@@ -235,7 +258,8 @@ impl Parser {
                                     r.push(b'>');
                                 }
                                 b"local" => {
-                                    let attributes = self.parse_attibutes(&token.attributes());
+                                    let attributes =
+                                        self.parse_attibutes(&token.attributes()).await;
                                     self.local(attributes);
                                 }
                                 _ => {}
@@ -245,7 +269,7 @@ impl Parser {
                         r.push(b'<');
                         r.extend(name.as_bytes());
                         if let Some(attributes) = token.attributes() {
-                            self.output_attributes(&mut r, attributes);
+                            self.output_attributes(&mut r, attributes).await;
                         }
                         r.push(b'>');
                     }
@@ -256,7 +280,7 @@ impl Parser {
                     let token = token::borrowed::EmptyElementTag::from(token_bytes);
                     let name = token.name();
                     if name.as_bytes() == b"wd:tag" {
-                        let attributes = self.parse_attibutes(&token.attributes());
+                        let attributes = self.parse_attibutes(&token.attributes()).await;
                         let (name, attr) = self.custom_tag(attributes);
                         r.push(b'<');
                         r.extend(name.into_bytes());
@@ -266,17 +290,20 @@ impl Parser {
                         r.push(b'>');
                     } else {
                         if Self::is_wd_tag(&name) {
-                            if let Some(parsed) = self.parse_wd_start_or_empty_tag(
-                                name.local().as_bytes(),
-                                &token.attributes(),
-                            )? {
+                            if let Some(parsed) = self
+                                .parse_wd_start_or_empty_tag(
+                                    name.local().as_bytes(),
+                                    &token.attributes(),
+                                )
+                                .await?
+                            {
                                 r.extend(parsed);
                             }
                         } else {
                             r.push(b'<');
                             r.extend(name.as_bytes());
                             if let Some(attributes) = token.attributes() {
-                                self.output_attributes(&mut r, attributes);
+                                self.output_attributes(&mut r, attributes).await;
                             }
                             r.push(b' ');
                             r.push(b'/');
@@ -305,11 +332,10 @@ impl Parser {
                             b"session" => {
                                 if let Some(ref mut session_state) = self.sessions.pop() {
                                     if session_state.commit_on_close {
-                                        futures::executor::block_on(
-                                            self.database
-                                                .write()
-                                                .commit(&mut session_state.session),
-                                        );
+                                        self.database
+                                            .write()
+                                            .commit(&mut session_state.session)
+                                            .await;
                                     } else if session_state.clear_on_close {
                                         let _ = self
                                             .database

@@ -15,7 +15,7 @@ use self::custom_sort::WdCustomSort;
 use super::{AttributeMap, Parser, WildDocValue};
 
 impl Parser {
-    pub(super) fn result(
+    pub(super) async fn result(
         &mut self,
         attributes: &AttributeMap,
         search_map: &HashMap<String, Arc<RwLock<Search>>>,
@@ -49,36 +49,40 @@ impl Parser {
                         if let Some(state) = self.sessions.get_mut(i) {
                             if state.session.temporary_collection(collection_id).is_some() {
                                 found_session = true;
-                                rows = futures::executor::block_on(state.session.result_with(
-                                    &mut search.write().deref_mut(),
-                                    self.database.read().deref(),
-                                    &orders,
-                                ))
-                                .iter()
-                                .map(|row| {
-                                    WildDocValue::Object({
-                                        let mut r = IndexMap::new();
-                                        r.insert(
-                                            "row".to_owned(),
-                                            WildDocValue::Number(serde_json::Number::from(
-                                                row.get(),
-                                            )),
-                                        );
-                                        r
+                                rows = state
+                                    .session
+                                    .result_with(
+                                        &mut search.write().deref_mut(),
+                                        self.database.read().deref(),
+                                        &orders,
+                                    )
+                                    .await
+                                    .iter()
+                                    .map(|row| {
+                                        WildDocValue::Object({
+                                            let mut r = IndexMap::new();
+                                            r.insert(
+                                                "row".to_owned(),
+                                                WildDocValue::Number(serde_json::Number::from(
+                                                    row.get(),
+                                                )),
+                                            );
+                                            r
+                                        })
                                     })
-                                })
-                                .collect();
+                                    .collect();
                                 break;
                             }
                         }
                     }
 
                     if !found_session {
-                        rows = if let Some(v) = futures::executor::block_on(
-                            search.write().result(self.database.read().deref()),
-                        )
-                        .read()
-                        .deref()
+                        rows = if let Some(v) = search
+                            .write()
+                            .result(self.database.read().deref())
+                            .await
+                            .read()
+                            .deref()
                         {
                             v.sort(self.database.read().deref(), &orders)
                         } else {

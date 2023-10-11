@@ -6,6 +6,7 @@ use std::{
     sync::Arc,
 };
 
+use async_recursion::async_recursion;
 use chrono::DateTime;
 use hashbrown::HashMap;
 use maybe_xml::{
@@ -47,8 +48,7 @@ impl Parser {
         None
     }
 
-    #[inline(always)]
-    pub(crate) fn search<'a>(
+    pub(crate) async fn search<'a>(
         &mut self,
         xml: &'a [u8],
         attributes: &AttributeMap,
@@ -58,7 +58,7 @@ impl Parser {
             let name = name.to_str();
             if name != "" {
                 if let Some(collection_id) = self.collection_id(attributes) {
-                    let (last_xml, condition, join) = self.make_conditions(attributes, xml);
+                    let (last_xml, condition, join) = self.make_conditions(attributes, xml).await;
                     search_map.insert(
                         name.into_owned(),
                         Arc::new(RwLock::new(Search::new(collection_id, condition, join))),
@@ -70,13 +70,12 @@ impl Parser {
         return xml;
     }
 
-    #[inline(always)]
-    fn make_conditions<'a>(
+    async fn make_conditions<'a>(
         &mut self,
         attributes: &AttributeMap,
         xml: &'a [u8],
     ) -> (&'a [u8], Vec<Condition>, HashMap<String, Join>) {
-        let (last_xml, mut conditions, join) = self.condition_loop(xml);
+        let (last_xml, mut conditions, join) = self.condition_loop(xml).await;
 
         if let Some(Some(activity)) = attributes.get(b"activity".as_ref()) {
             conditions.push(Condition::Activity(if activity.to_str() == "inactive" {
@@ -107,7 +106,8 @@ impl Parser {
         (last_xml, conditions, join)
     }
 
-    fn condition_loop<'a>(
+    #[async_recursion(?Send)]
+    async fn condition_loop<'a>(
         &mut self,
         xml: &'a [u8],
     ) -> (&'a [u8], Vec<Condition>, HashMap<String, Join>) {
@@ -127,22 +127,22 @@ impl Parser {
                             b"narrow" => {
                                 let (inner_xml, outer_end) = xml_util::inner(xml);
                                 xml = &xml[outer_end..];
-                                if let Ok(inner_xml) = self.parse(inner_xml) {
-                                    let (_, cond, _) = self.condition_loop(&inner_xml);
+                                if let Ok(inner_xml) = self.parse(inner_xml).await.as_mut() {
+                                    let (_, cond, _) = self.condition_loop(&inner_xml).await;
                                     result_conditions.push(Condition::Narrow(cond));
                                 }
                             }
                             b"wide" => {
                                 let (inner_xml, outer_end) = xml_util::inner(xml);
                                 xml = &xml[outer_end..];
-                                if let Ok(inner_xml) = self.parse(inner_xml) {
-                                    let (_, cond, _) = self.condition_loop(&inner_xml);
+                                if let Ok(inner_xml) = self.parse(inner_xml).await {
+                                    let (_, cond, _) = self.condition_loop(&inner_xml).await;
                                     result_conditions.push(Condition::Wide(cond));
                                 }
                             }
                             b"join" => {
-                                let attributes = self.parse_attibutes(&token.attributes());
-                                xml = self.join(xml, &attributes, &mut join);
+                                let attributes = self.parse_attibutes(&token.attributes()).await;
+                                xml = self.join(xml, &attributes, &mut join).await;
                             }
                             _ => {}
                         }
@@ -152,7 +152,7 @@ impl Parser {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
                     let token = token::borrowed::EmptyElementTag::from(token_bytes);
-                    let attributes = self.parse_attibutes(&token.attributes());
+                    let attributes = self.parse_attibutes(&token.attributes()).await;
                     let name = token.name();
                     match name.local().as_bytes() {
                         b"row" => {

@@ -8,7 +8,7 @@ use semilattice_database_session::search::{Join, JoinCondition};
 use crate::parser::{AttributeMap, Parser};
 
 impl Parser {
-    pub fn join<'a>(
+    pub async fn join<'a>(
         &mut self,
         xml: &'a [u8],
         attributes: &AttributeMap,
@@ -18,7 +18,7 @@ impl Parser {
             let name = name.to_str();
             if name != "" {
                 if let Some(collection_id) = self.collection_id(attributes) {
-                    let (last_xml, condition) = self.join_condition_loop(xml);
+                    let (last_xml, condition) = self.join_condition_loop(xml).await;
                     search_map.insert(name.to_string(), Join::new(collection_id, condition));
                     return last_xml;
                 }
@@ -27,7 +27,7 @@ impl Parser {
         return xml;
     }
 
-    fn join_condition_loop<'a>(&mut self, xml: &'a [u8]) -> (&'a [u8], Vec<JoinCondition>) {
+    async fn join_condition_loop<'a>(&mut self, xml: &'a [u8]) -> (&'a [u8], Vec<JoinCondition>) {
         let mut result_conditions = Vec::new();
         let mut xml = xml;
         let mut scanner = Scanner::new();
@@ -40,7 +40,7 @@ impl Parser {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
                     let token = token::borrowed::EmptyElementTag::from(token_bytes);
-                    let attributes = self.parse_attibutes(&token.attributes());
+                    let attributes = self.parse_attibutes(&token.attributes()).await;
                     let name = token.name();
                     match name.local().as_bytes() {
                         b"pends" => {

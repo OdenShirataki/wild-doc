@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
+use async_recursion::async_recursion;
 use base64::{engine::general_purpose, Engine};
 use chrono::DateTime;
 use hashbrown::HashMap;
@@ -38,9 +39,9 @@ impl error::Error for DependError {
 }
 
 impl Parser {
-    pub fn update(&mut self, xml: &[u8], attributes: &AttributeMap) -> Result<()> {
-        if let Ok(inner_xml) = self.parse(xml) {
-            let updates = self.make_update_struct(inner_xml.as_slice())?;
+    pub async fn update(&mut self, xml: &[u8], attributes: &AttributeMap) -> Result<()> {
+        if let Ok(inner_xml) = self.parse(xml).await {
+            let updates = self.make_update_struct(inner_xml.as_slice()).await?;
 
             if !self.sessions.last().is_some()
                 || attributes
@@ -58,12 +59,10 @@ impl Parser {
                             depends,
                             pends,
                         } => {
-                            commit_rows.extend(self.record_new(
-                                collection_id,
-                                &record,
-                                &depends,
-                                &pends,
-                            ));
+                            commit_rows.extend(
+                                self.record_new(collection_id, &record, &depends, &pends)
+                                    .await,
+                            );
                         }
                         SessionRecord::Update {
                             collection_id,
@@ -72,21 +71,17 @@ impl Parser {
                             depends,
                             pends,
                         } => {
-                            commit_rows.extend(self.record_update(
-                                collection_id,
-                                row,
-                                &record,
-                                &depends,
-                                &pends,
-                            ));
+                            commit_rows.extend(
+                                self.record_update(collection_id, row, &record, &depends, &pends)
+                                    .await,
+                            );
                         }
                         SessionRecord::Delete { collection_id, row } => {
                             if collection_id.get() > 0 {
-                                futures::executor::block_on(
-                                    self.database
-                                        .write()
-                                        .delete_recursive(&CollectionRow::new(collection_id, row)),
-                                );
+                                self.database
+                                    .write()
+                                    .delete_recursive(&CollectionRow::new(collection_id, row))
+                                    .await;
                             }
                         }
                     }
@@ -120,17 +115,19 @@ impl Parser {
                 }
             } else {
                 if let Some(session_state) = self.sessions.last_mut() {
-                    let session_rows = futures::executor::block_on(
-                        self.database
-                            .write()
-                            .update(&mut session_state.session, updates),
-                    );
+                    let session_rows = self
+                        .database
+                        .write()
+                        .update(&mut session_state.session, updates)
+                        .await;
                     let mut commit_rows = vec![];
                     if let Some(Some(commit)) = attributes.get(b"commit".as_ref()) {
                         if commit.as_bool().map_or(false, |v| *v) {
-                            commit_rows = futures::executor::block_on(
-                                self.database.write().commit(&mut session_state.session),
-                            );
+                            commit_rows = self
+                                .database
+                                .write()
+                                .commit(&mut session_state.session)
+                                .await;
                         }
                     }
                     if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
@@ -191,7 +188,8 @@ impl Parser {
         Ok(())
     }
 
-    fn update_pends(&self, depend: CollectionRow, pends: &Vec<Pend>) -> Vec<CollectionRow> {
+    #[async_recursion(?Send)]
+    async fn update_pends(&self, depend: CollectionRow, pends: &Vec<Pend>) -> Vec<CollectionRow> {
         let mut rows = vec![];
         for pend in pends {
             let pend_key = pend.key();
@@ -210,12 +208,15 @@ impl Parser {
                         };
                         depends.push((pend_key.to_owned(), depend.clone()));
 
-                        rows.extend(self.record_new(
-                            *collection_id,
-                            record,
-                            &Depends::Overwrite(depends),
-                            pends,
-                        ));
+                        rows.extend(
+                            self.record_new(
+                                *collection_id,
+                                record,
+                                &Depends::Overwrite(depends),
+                                pends,
+                            )
+                            .await,
+                        );
                     }
                     SessionRecord::Update {
                         collection_id,
@@ -231,13 +232,16 @@ impl Parser {
                         };
                         depends.push((pend_key.to_owned(), depend.clone()));
 
-                        rows.extend(self.record_update(
-                            *collection_id,
-                            *row,
-                            record,
-                            &Depends::Overwrite(depends),
-                            pends,
-                        ));
+                        rows.extend(
+                            self.record_update(
+                                *collection_id,
+                                *row,
+                                record,
+                                &Depends::Overwrite(depends),
+                                pends,
+                            )
+                            .await,
+                        );
                     }
                     _ => unreachable!(),
                 }
@@ -246,8 +250,7 @@ impl Parser {
         rows
     }
 
-    #[inline(always)]
-    fn record_new(
+    async fn record_new(
         &self,
         collection_id: NonZeroI32,
         record: &Record,
@@ -260,7 +263,7 @@ impl Parser {
                 if let Some(v) = self.database.write().collection_mut(collection_id) {
                     Some(CollectionRow::new(
                         collection_id,
-                        futures::executor::block_on(v.create_row(record)),
+                        v.create_row(record).await,
                     ))
                 } else {
                     None
@@ -268,22 +271,20 @@ impl Parser {
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
                     for (depend_key, depend_row) in depends {
-                        futures::executor::block_on(self.database.write().register_relation(
-                            depend_key,
-                            depend_row,
-                            collection_row.clone(),
-                        ));
+                        self.database
+                            .write()
+                            .register_relation(depend_key, depend_row, collection_row.clone())
+                            .await;
                     }
                 }
                 rows.push(collection_row.clone());
-                self.update_pends(collection_row, pends);
+                self.update_pends(collection_row, pends).await;
             }
         }
         rows
     }
 
-    #[inline(always)]
-    fn record_update(
+    async fn record_update(
         &self,
         collection_id: NonZeroI32,
         row: NonZeroU32,
@@ -295,31 +296,27 @@ impl Parser {
         if collection_id.get() > 0 {
             let collection_row =
                 if let Some(collection) = self.database.write().collection_mut(collection_id) {
-                    Arc::new(futures::executor::block_on(
-                        collection.update_row(row, record),
-                    ));
+                    Arc::new(collection.update_row(row, record).await);
                     Some(CollectionRow::new(collection_id, row))
                 } else {
                     None
                 };
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
-                    futures::executor::block_on(
+                    self.database
+                        .write()
+                        .relation_mut()
+                        .delete_pends_by_collection_row(&collection_row)
+                        .await;
+                    for d in depends {
                         self.database
                             .write()
-                            .relation_mut()
-                            .delete_pends_by_collection_row(&collection_row),
-                    );
-                    for d in depends {
-                        futures::executor::block_on(self.database.write().register_relation(
-                            &d.0,
-                            &d.1,
-                            collection_row.clone(),
-                        ));
+                            .register_relation(&d.0, &d.1, collection_row.clone())
+                            .await;
                     }
                 }
                 rows.push(collection_row.clone());
-                self.update_pends(collection_row, &pends);
+                self.update_pends(collection_row, &pends).await;
             }
         }
         rows
@@ -371,8 +368,8 @@ impl Parser {
         Err(DependError)
     }
 
-    #[inline(always)]
-    fn make_update_struct(&mut self, xml: &[u8]) -> Result<Vec<SessionRecord>> {
+    #[async_recursion(?Send)]
+    async fn make_update_struct(&mut self, xml: &[u8]) -> Result<Vec<SessionRecord>> {
         let mut updates = Vec::new();
         let mut xml = xml;
         let mut scanner = Scanner::new();
@@ -383,7 +380,8 @@ impl Parser {
                     xml = &xml[pos..];
                     let token_collection = token::borrowed::StartTag::from(token_bytes);
                     if token_collection.name().as_bytes() == b"collection" {
-                        let token_attributes = self.parse_attibutes(&token_collection.attributes());
+                        let token_attributes =
+                            self.parse_attibutes(&token_collection.attributes()).await;
                         if let Some(Some(collection_name)) = token_attributes.get(b"name".as_ref())
                         {
                             let collection_id = self
@@ -403,7 +401,8 @@ impl Parser {
                                         let token_bytes = &xml[..pos];
                                         xml = &xml[pos..];
                                         let token = token::borrowed::StartTag::from(token_bytes);
-                                        let attributes = self.parse_attibutes(&token.attributes());
+                                        let attributes =
+                                            self.parse_attibutes(&token.attributes()).await;
                                         let name = token.name();
                                         match name.as_bytes() {
                                             b"field" => {
@@ -441,7 +440,7 @@ impl Parser {
                                                 let (inner_xml, outer_end) = xml_util::inner(xml);
                                                 xml = &xml[outer_end..];
                                                 let pends_tmp =
-                                                    self.make_update_struct(inner_xml)?;
+                                                    self.make_update_struct(inner_xml).await?;
 
                                                 if let Some(Some(key)) =
                                                     attributes.get(b"key".as_ref())
@@ -464,7 +463,7 @@ impl Parser {
                                         match name.as_bytes() {
                                             b"depend" => {
                                                 let attributes =
-                                                    self.parse_attibutes(&token.attributes());
+                                                    self.parse_attibutes(&token.attributes()).await;
                                                 self.depend(&attributes, &mut depends)?;
                                             }
                                             _ => {}

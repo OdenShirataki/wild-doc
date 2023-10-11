@@ -1,10 +1,9 @@
 use std::{ops::Deref, sync::Arc};
 
 use anyhow::Result;
-use async_trait::async_trait;
 use parking_lot::{Mutex, RwLock};
 
-use wild_doc_script::{VarsStack, WildDocScript, WildDocValue};
+use wild_doc_script::{async_trait, VarsStack, WildDocScript, WildDocValue};
 
 pub struct Var {
     stack: Arc<Mutex<VarsStack>>,

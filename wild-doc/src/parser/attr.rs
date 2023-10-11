@@ -9,12 +9,13 @@ use crate::xml_util;
 use super::{AttributeMap, Parser};
 
 impl Parser {
-    pub(super) fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes<'_>) {
+    pub(super) async fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes<'_>) {
         for attr in attributes {
             let name = attr.name();
             if let Some(value) = attr.value() {
-                let (new_name, new_value) =
-                    self.attibute_var_or_script(name.as_bytes(), value.as_bytes());
+                let (new_name, new_value) = self
+                    .attibute_var_or_script(name.as_bytes(), value.as_bytes())
+                    .await;
                 if new_name == b"wd-attr:replace" {
                     if let Some(value) = new_value {
                         if !value.is_null() {
@@ -44,13 +45,17 @@ impl Parser {
         }
     }
 
-    pub(super) fn parse_attibutes(&mut self, attributes: &Option<Attributes<'_>>) -> AttributeMap {
+    pub(super) async fn parse_attibutes(
+        &mut self,
+        attributes: &Option<Attributes<'_>>,
+    ) -> AttributeMap {
         let mut r: AttributeMap = HashMap::new();
         if let Some(attributes) = attributes {
             for attr in attributes.into_iter() {
                 if let Some(value) = attr.value() {
-                    if let (prefix, Some(value)) =
-                        self.attibute_var_or_script(attr.name().as_bytes(), value.as_bytes())
+                    if let (prefix, Some(value)) = self
+                        .attibute_var_or_script(attr.name().as_bytes(), value.as_bytes())
+                        .await
                     {
                         r.insert(prefix.to_vec(), Some(Arc::new(value)));
                     } else {
@@ -91,21 +96,17 @@ impl Parser {
         r.push(b'"');
     }
 
-    fn attibute_var_or_script<'a>(
+    async fn attibute_var_or_script<'a>(
         &mut self,
         name: &'a [u8],
         value: &[u8],
     ) -> (&'a [u8], Option<WildDocValue>) {
-        for key in self.scripts.keys() {
-            if name.ends_with((":".to_owned() + key.as_str()).as_bytes()) {
-                return (
-                    &name[..name.len() - (key.len() + 1)],
-                    futures::executor::block_on(
-                        self.attribute_script(key.to_owned().as_str(), value),
-                    ),
-                );
-            }
+        let splited = name.split(|p| *p == b':').collect::<Vec<&[u8]>>();
+        if let (Some(name), Some(script)) = (splited.get(0), splited.get(1)) {
+            let script = unsafe { std::str::from_utf8_unchecked(script) };
+            (*name, self.attribute_script(script, value).await)
+        } else {
+            (name, None)
         }
-        (name, None)
     }
 }

@@ -112,7 +112,9 @@ impl WildDoc {
         let state = WildDocState::new(stack, self.cache_dir.clone(), include_adaptor);
         let scripts = self.setup_scripts(state.clone())?;
 
-        let body = Parser::new(Arc::clone(&self.database), scripts, state)?.parse(xml)?;
+        let body = futures::executor::block_on(
+            Parser::new(Arc::clone(&self.database), scripts, state)?.parse(xml),
+        )?;
 
         let options = match global.read().deref() {
             WildDocValue::Object(o) => o.get("result_options"),
