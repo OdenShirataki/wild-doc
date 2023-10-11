@@ -11,7 +11,7 @@ use deno_runtime::{
 use parking_lot::{Mutex, RwLock};
 
 use wild_doc_script::{
-    serde_json, IncludeAdaptor, VarsStack, WildDocScript, WildDocState, WildDocValue,
+    async_trait, serde_json, IncludeAdaptor, VarsStack, WildDocScript, WildDocState, WildDocValue,
 };
 
 use module_loader::WdModuleLoader;
@@ -20,6 +20,7 @@ pub struct Deno {
     worker: RwLock<MainWorker>,
 }
 
+#[async_trait(?Send)]
 impl WildDocScript for Deno {
     fn new(state: WildDocState) -> Result<Self> {
         let mut worker = MainWorker::bootstrap_from_options(
@@ -162,22 +163,20 @@ impl WildDocScript for Deno {
         })
     }
 
-    fn evaluate_module(&self, file_name: &str, src: &[u8]) -> Result<()> {
-        deno_runtime::tokio_util::create_basic_runtime().block_on(async {
-            let script_name = "wd://script".to_owned() + file_name;
-            let url = ModuleSpecifier::parse(&script_name)?;
-            let src = String::from_utf8(src.to_vec())?;
-            let mut worker = self.worker.write();
-            let mod_id = worker
-                .js_runtime
-                .load_side_module(&url, Some(src.into()))
-                .await?;
-            worker.evaluate_module(mod_id).await?;
-            Ok(())
-        })
+    async fn evaluate_module(&self, file_name: &str, src: &[u8]) -> Result<()> {
+        let script_name = "wd://script".to_owned() + file_name;
+        let url = ModuleSpecifier::parse(&script_name)?;
+        let src = String::from_utf8(src.to_vec())?;
+        let mut worker = self.worker.write();
+        let mod_id = worker
+            .js_runtime
+            .load_side_module(&url, Some(src.into()))
+            .await?;
+        worker.evaluate_module(mod_id).await?;
+        Ok(())
     }
 
-    fn eval(&self, code: &[u8]) -> Result<WildDocValue> {
+    async fn eval(&self, code: &[u8]) -> Result<WildDocValue> {
         let code = "(".to_owned() + std::str::from_utf8(code)? + ")";
         let mut worker = self.worker.write();
         let scope = &mut worker.js_runtime.handle_scope();

@@ -128,10 +128,10 @@ impl Parser {
                     let target = token.target();
                     if let Some(script) = self.scripts.get(target.to_str()?) {
                         if let Some(i) = token.instructions() {
-                            if let Err(e) = script.evaluate_module(
+                            if let Err(e) = futures::executor::block_on(script.evaluate_module(
                                 self.include_stack.last().map_or("", |v| v),
                                 i.as_bytes(),
-                            ) {
+                            )) {
                                 return Err(e);
                             }
                         }

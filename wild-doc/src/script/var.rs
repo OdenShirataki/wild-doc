@@ -1,6 +1,7 @@
 use std::{ops::Deref, sync::Arc};
 
 use anyhow::Result;
+use async_trait::async_trait;
 use parking_lot::{Mutex, RwLock};
 
 use wild_doc_script::{VarsStack, WildDocScript, WildDocValue};
@@ -20,6 +21,7 @@ impl Var {
     }
 }
 
+#[async_trait(?Send)]
 impl WildDocScript for Var {
     fn new(state: wild_doc_script::WildDocState) -> Result<Self>
     where
@@ -30,11 +32,11 @@ impl WildDocScript for Var {
         })
     }
 
-    fn evaluate_module(&self, _: &str, _: &[u8]) -> Result<()> {
+    async fn evaluate_module(&self, _: &str, _: &[u8]) -> Result<()> {
         Ok(())
     }
 
-    fn eval(&self, code: &[u8]) -> Result<WildDocValue> {
+    async fn eval(&self, code: &[u8]) -> Result<WildDocValue> {
         let mut value = WildDocValue::Null;
 
         let mut splited = code.split(|c| *c == b'.');

@@ -9,8 +9,7 @@ use crate::xml_util;
 use super::{AttributeMap, Parser};
 
 impl Parser {
-    #[inline(always)]
-    pub(super) fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes) {
+    pub(super) fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes<'_>) {
         for attr in attributes {
             let name = attr.name();
             if let Some(value) = attr.value() {
@@ -45,8 +44,7 @@ impl Parser {
         }
     }
 
-    #[inline(always)]
-    pub(super) fn parse_attibutes(&mut self, attributes: &Option<Attributes>) -> AttributeMap {
+    pub(super) fn parse_attibutes(&mut self, attributes: &Option<Attributes<'_>>) -> AttributeMap {
         let mut r: AttributeMap = HashMap::new();
         if let Some(attributes) = attributes {
             for attr in attributes.into_iter() {
@@ -74,11 +72,15 @@ impl Parser {
         r
     }
 
-    #[inline(always)]
-    fn attribute_script(&mut self, script: &str, value: &[u8]) -> Option<WildDocValue> {
-        self.scripts
-            .get(script)
-            .and_then(|script| script.eval(xml_util::quot_unescape(value).as_bytes()).ok())
+    async fn attribute_script(&mut self, script: &str, value: &[u8]) -> Option<WildDocValue> {
+        if let Some(script) = self.scripts.get(script) {
+            script
+                .eval(xml_util::quot_unescape(value).as_bytes())
+                .await
+                .ok()
+        } else {
+            None
+        }
     }
 
     #[inline(always)]
@@ -89,7 +91,6 @@ impl Parser {
         r.push(b'"');
     }
 
-    #[inline(always)]
     fn attibute_var_or_script<'a>(
         &mut self,
         name: &'a [u8],
@@ -99,7 +100,9 @@ impl Parser {
             if name.ends_with((":".to_owned() + key.as_str()).as_bytes()) {
                 return (
                     &name[..name.len() - (key.len() + 1)],
-                    self.attribute_script(key.to_owned().as_str(), value),
+                    futures::executor::block_on(
+                        self.attribute_script(key.to_owned().as_str(), value),
+                    ),
                 );
             }
         }
