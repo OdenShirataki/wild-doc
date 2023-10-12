@@ -38,14 +38,14 @@ struct SessionState {
 pub struct Parser {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<SessionState>,
-    scripts: HashMap<String, Arc<dyn WildDocScript>>,
+    scripts: HashMap<String, Box<dyn WildDocScript>>,
     state: WildDocState,
     include_stack: Vec<String>,
 }
 impl Parser {
     pub fn new(
         database: Arc<RwLock<SessionDatabase>>,
-        scripts: HashMap<String, Arc<dyn WildDocScript>>,
+        scripts: HashMap<String, Box<dyn WildDocScript>>,
         state: WildDocState,
     ) -> Result<Self> {
         Ok(Self {
@@ -131,7 +131,7 @@ impl Parser {
                     let token_bytes = &xml[..pos];
                     let token = token::borrowed::ProcessingInstruction::from(token_bytes);
                     let target = token.target();
-                    if let Some(script) = self.scripts.get(target.to_str()?) {
+                    if let Some(script) = self.scripts.get_mut(target.to_str()?) {
                         if let Some(i) = token.instructions() {
                             if let Err(e) = script
                                 .evaluate_module(

@@ -79,17 +79,18 @@ impl WildDoc {
     fn setup_scripts(
         &mut self,
         state: WildDocState,
-    ) -> Result<hashbrown::HashMap<String, Arc<dyn WildDocScript>>> {
-        let mut scripts: hashbrown::HashMap<String, Arc<dyn WildDocScript>> =
+    ) -> Result<hashbrown::HashMap<String, Box<dyn WildDocScript>>> {
+        let mut scripts: hashbrown::HashMap<String, Box<dyn WildDocScript>> =
             hashbrown::HashMap::new();
 
-        scripts.insert("var".to_owned(), Arc::new(Var::new(state.clone())?));
+        scripts.insert("var".to_owned(), Box::new(Var::new(state.clone())?));
 
         #[cfg(feature = "js")]
-        scripts.insert("js".to_owned(), Arc::new(Deno::new(state.clone())?));
+        scripts.insert("js".to_owned(), Box::new(Deno::new(state.clone())?));
 
         #[cfg(feature = "py")]
-        scripts.insert("py".to_owned(), Arc::new(WdPy::new(state.clone())?));
+        scripts.insert("py".to_owned(), Box::new(WdPy::new(state.clone())?));
+
         Ok(scripts)
     }
     fn run_inner(
@@ -98,22 +99,31 @@ impl WildDoc {
         input_json: &[u8],
         include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
     ) -> Result<WildDocResult> {
-        let mut vars = hashbrown::HashMap::new();
-
-        let input =
-            WildDocValue::from(serde_json::from_slice(input_json).unwrap_or(serde_json::json!({})));
-        vars.insert(b"input".to_vec(), Arc::new(RwLock::new(input)));
-
         let global = Arc::new(RwLock::new(WildDocValue::Object(IndexMap::new())));
-        vars.insert(b"global".to_vec(), Arc::clone(&global));
 
-        let stack = Arc::new(Mutex::new(vec![vars]));
+        let vars = hashbrown::HashMap::from([
+            (
+                b"input".to_vec(),
+                Arc::new(RwLock::new(WildDocValue::from(
+                    serde_json::from_slice(input_json).unwrap_or(serde_json::json!({})),
+                ))),
+            ),
+            (b"global".to_vec(), Arc::clone(&global)),
+        ]);
 
-        let state = WildDocState::new(stack, self.cache_dir.clone(), include_adaptor);
-        let scripts = self.setup_scripts(state.clone())?;
+        let state = WildDocState::new(
+            Arc::new(Mutex::new(vec![vars])),
+            self.cache_dir.clone(),
+            include_adaptor,
+        );
 
         let body = futures::executor::block_on(
-            Parser::new(Arc::clone(&self.database), scripts, state)?.parse(xml),
+            Parser::new(
+                Arc::clone(&self.database),
+                self.setup_scripts(state.clone())?,
+                state,
+            )?
+            .parse(xml),
         )?;
 
         let options = match global.read().deref() {

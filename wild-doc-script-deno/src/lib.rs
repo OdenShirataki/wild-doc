@@ -17,7 +17,7 @@ use wild_doc_script::{
 use module_loader::WdModuleLoader;
 
 pub struct Deno {
-    worker: RwLock<MainWorker>,
+    worker: Mutex<MainWorker>,
 }
 
 #[async_trait(?Send)]
@@ -159,32 +159,34 @@ impl WildDocScript for Deno {
             }
         }
         Ok(Self {
-            worker: RwLock::new(worker),
+            worker: Mutex::new(worker),
         })
     }
 
     async fn evaluate_module(&self, file_name: &str, src: &[u8]) -> Result<()> {
-        let script_name = "wd://script".to_owned() + file_name;
-        let url = ModuleSpecifier::parse(&script_name)?;
-        let src = String::from_utf8(src.to_vec())?;
-        let mut worker = self.worker.write();
+        let mut worker = self.worker.lock();
         let mod_id = worker
             .js_runtime
-            .load_side_module(&url, Some(src.into()))
+            .load_side_module(
+                &(ModuleSpecifier::parse(&("wd://script".to_owned() + file_name))?),
+                Some(String::from_utf8(src.to_vec())?.into()),
+            )
             .await?;
         worker.evaluate_module(mod_id).await?;
         Ok(())
     }
 
     async fn eval(&self, code: &[u8]) -> Result<WildDocValue> {
-        let code = "(".to_owned() + std::str::from_utf8(code)? + ")";
-        let mut worker = self.worker.write();
+        let mut worker = self.worker.lock();
         let scope = &mut worker.js_runtime.handle_scope();
 
-        if let Some(v) =
-            v8::String::new_from_one_byte(scope, code.as_bytes(), NewStringType::Normal)
-                .and_then(|code| v8::Script::compile(scope, code, None))
-                .and_then(|v| v.run(scope))
+        if let Some(v) = v8::String::new_from_one_byte(
+            scope,
+            ("(".to_owned() + std::str::from_utf8(code)? + ")").as_bytes(),
+            NewStringType::Normal,
+        )
+        .and_then(|code| v8::Script::compile(scope, code, None))
+        .and_then(|v| v.run(scope))
         {
             if v.is_array_buffer_view() {
                 if let Ok(a) = v8::Local::<v8::ArrayBufferView>::try_from(v) {

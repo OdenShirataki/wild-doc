@@ -28,13 +28,9 @@ impl Parser {
             let search = search.to_str();
             let var = var.to_str();
             if search != "" && var != "" {
-                let mut inner = IndexMap::new();
                 if let Some(search) = search_map.get(search.as_ref()) {
                     let collection_id = search.read().collection_id();
-                    inner.insert(
-                        "collection_id".to_owned(),
-                        WildDocValue::Number(serde_json::Number::from(collection_id.get())),
-                    );
+
                     let orders = make_order(
                         search,
                         &attributes
@@ -42,6 +38,7 @@ impl Parser {
                             .and_then(|v| v.as_ref())
                             .map_or_else(|| "".to_owned(), |v| v.to_string()),
                     );
+
                     let mut rows: Vec<_> = vec![];
 
                     let mut found_session = false;
@@ -59,16 +56,12 @@ impl Parser {
                                     .await
                                     .iter()
                                     .map(|row| {
-                                        WildDocValue::Object({
-                                            let mut r = IndexMap::new();
-                                            r.insert(
-                                                "row".to_owned(),
-                                                WildDocValue::Number(serde_json::Number::from(
-                                                    row.get(),
-                                                )),
-                                            );
-                                            r
-                                        })
+                                        WildDocValue::Object(IndexMap::from([(
+                                            "row".to_owned(),
+                                            WildDocValue::Number(serde_json::Number::from(
+                                                row.get(),
+                                            )),
+                                        )]))
                                     })
                                     .collect();
                                 break;
@@ -90,27 +83,29 @@ impl Parser {
                         }
                         .iter()
                         .map(|row| {
-                            WildDocValue::Object({
-                                let mut r = IndexMap::new();
-                                r.insert(
-                                    "row".to_owned(),
-                                    WildDocValue::Number(serde_json::Number::from(row.get())),
-                                );
-                                r
-                            })
+                            WildDocValue::Object(IndexMap::from([(
+                                "row".to_owned(),
+                                WildDocValue::Number(serde_json::Number::from(row.get())),
+                            )]))
                         })
                         .collect();
                     }
+
                     let len = rows.len();
-                    inner.insert("rows".to_owned(), WildDocValue::Array(rows));
-                    inner.insert(
-                        "len".to_owned(),
-                        WildDocValue::Number(serde_json::Number::from(len)),
-                    );
 
                     vars.insert(
                         var.to_string().into_bytes(),
-                        Arc::new(RwLock::new(WildDocValue::Object(inner))),
+                        Arc::new(RwLock::new(WildDocValue::Object(IndexMap::from([
+                            (
+                                "collection_id".to_owned(),
+                                WildDocValue::Number(serde_json::Number::from(collection_id.get())),
+                            ),
+                            ("rows".to_owned(), WildDocValue::Array(rows)),
+                            (
+                                "len".to_owned(),
+                                WildDocValue::Number(serde_json::Number::from(len)),
+                            ),
+                        ])))),
                     );
                 }
             }

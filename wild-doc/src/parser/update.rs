@@ -87,31 +87,36 @@ impl Parser {
                     }
                 }
                 if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
-                    let mut value = IndexMap::new();
-                    value.insert(
-                        "commit_rows".to_owned(),
-                        WildDocValue::Array(
-                            commit_rows
-                                .iter()
-                                .map(|v| {
-                                    let mut map = IndexMap::new();
-                                    map.insert(
-                                        "collection_id".to_owned(),
-                                        WildDocValue::from(serde_json::Number::from(
-                                            v.collection_id().get(),
-                                        )),
-                                    );
-                                    map.insert(
-                                        "row".to_owned(),
-                                        WildDocValue::from(serde_json::Number::from(v.row().get())),
-                                    );
-                                    WildDocValue::Object(map)
-                                })
-                                .collect::<Vec<WildDocValue>>(),
-                        ),
+                    self.register_global(
+                        name.to_str().as_ref(),
+                        &WildDocValue::Object(IndexMap::from([
+                            (
+                                "commit_rows".to_owned(),
+                                WildDocValue::Array(
+                                    commit_rows
+                                        .iter()
+                                        .map(|v| {
+                                            WildDocValue::Object(IndexMap::from([
+                                                (
+                                                    "collection_id".to_owned(),
+                                                    WildDocValue::from(serde_json::Number::from(
+                                                        v.collection_id().get(),
+                                                    )),
+                                                ),
+                                                (
+                                                    "row".to_owned(),
+                                                    WildDocValue::from(serde_json::Number::from(
+                                                        v.row().get(),
+                                                    )),
+                                                ),
+                                            ]))
+                                        })
+                                        .collect(),
+                                ),
+                            ),
+                            ("session_rows".to_owned(), WildDocValue::Array(vec![])),
+                        ])),
                     );
-                    value.insert("session_rows".to_owned(), WildDocValue::Array(vec![]));
-                    self.register_global(name.to_str().as_ref(), &WildDocValue::Object(value));
                 }
             } else {
                 if let Some(session_state) = self.sessions.last_mut() {
@@ -131,56 +136,63 @@ impl Parser {
                         }
                     }
                     if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
-                        let mut value = IndexMap::new();
-                        value.insert(
-                            "commit_rows".to_owned(),
-                            WildDocValue::Array(
-                                commit_rows
-                                    .iter()
-                                    .map(|v| {
-                                        let mut map = IndexMap::new();
-                                        map.insert(
-                                            "collection_id".to_owned(),
-                                            WildDocValue::from(serde_json::Number::from(
-                                                v.collection_id().get(),
-                                            )),
-                                        );
-                                        map.insert(
-                                            "row".to_owned(),
-                                            WildDocValue::from(serde_json::Number::from(
-                                                v.row().get(),
-                                            )),
-                                        );
-                                        WildDocValue::Object(map)
-                                    })
-                                    .collect::<Vec<WildDocValue>>(),
-                            ),
+                        self.register_global(
+                            name.to_str().as_ref(),
+                            &WildDocValue::Object(IndexMap::from([
+                                (
+                                    "commit_rows".to_owned(),
+                                    WildDocValue::Array(
+                                        commit_rows
+                                            .iter()
+                                            .map(|v| {
+                                                WildDocValue::Object(IndexMap::from([
+                                                    (
+                                                        "collection_id".to_owned(),
+                                                        WildDocValue::from(
+                                                            serde_json::Number::from(
+                                                                v.collection_id().get(),
+                                                            ),
+                                                        ),
+                                                    ),
+                                                    (
+                                                        "row".to_owned(),
+                                                        WildDocValue::from(
+                                                            serde_json::Number::from(v.row().get()),
+                                                        ),
+                                                    ),
+                                                ]))
+                                            })
+                                            .collect(),
+                                    ),
+                                ),
+                                (
+                                    "session_rows".to_owned(),
+                                    WildDocValue::Array(
+                                        session_rows
+                                            .iter()
+                                            .map(|v| {
+                                                WildDocValue::Object(IndexMap::from([
+                                                    (
+                                                        "collection_id".to_owned(),
+                                                        WildDocValue::from(
+                                                            serde_json::Number::from(
+                                                                v.collection_id().get(),
+                                                            ),
+                                                        ),
+                                                    ),
+                                                    (
+                                                        "row".to_owned(),
+                                                        WildDocValue::from(
+                                                            serde_json::Number::from(v.row().get()),
+                                                        ),
+                                                    ),
+                                                ]))
+                                            })
+                                            .collect(),
+                                    ),
+                                ),
+                            ])),
                         );
-                        value.insert(
-                            "session_rows".to_owned(),
-                            WildDocValue::Array(
-                                session_rows
-                                    .iter()
-                                    .map(|v| {
-                                        let mut map = IndexMap::new();
-                                        map.insert(
-                                            "collection_id".to_owned(),
-                                            WildDocValue::from(serde_json::Number::from(
-                                                v.collection_id().get(),
-                                            )),
-                                        );
-                                        map.insert(
-                                            "row".to_owned(),
-                                            WildDocValue::from(serde_json::Number::from(
-                                                v.row().get(),
-                                            )),
-                                        );
-                                        WildDocValue::Object(map)
-                                    })
-                                    .collect::<Vec<WildDocValue>>(),
-                            ),
-                        );
-                        self.register_global(name.to_str().as_ref(), &WildDocValue::Object(value));
                     }
                 }
             }
@@ -201,18 +213,17 @@ impl Parser {
                         depends,
                         pends,
                     } => {
-                        let mut depends = if let Depends::Overwrite(depends) = depends {
-                            depends.clone()
-                        } else {
-                            Vec::new()
-                        };
-                        depends.push((pend_key.to_owned(), depend.clone()));
-
                         rows.extend(
                             self.record_new(
                                 *collection_id,
                                 record,
-                                &Depends::Overwrite(depends),
+                                &Depends::Overwrite(if let Depends::Overwrite(depends) = depends {
+                                    let mut depends = depends.clone();
+                                    depends.push((pend_key.to_owned(), depend.clone()));
+                                    depends
+                                } else {
+                                    vec![(pend_key.to_owned(), depend.clone())]
+                                }),
                                 pends,
                             )
                             .await,
@@ -225,19 +236,18 @@ impl Parser {
                         depends,
                         pends,
                     } => {
-                        let mut depends = if let Depends::Overwrite(depends) = depends {
-                            depends.clone()
-                        } else {
-                            Vec::new()
-                        };
-                        depends.push((pend_key.to_owned(), depend.clone()));
-
                         rows.extend(
                             self.record_update(
                                 *collection_id,
                                 *row,
                                 record,
-                                &Depends::Overwrite(depends),
+                                &Depends::Overwrite(if let Depends::Overwrite(depends) = depends {
+                                    let mut depends = depends.clone();
+                                    depends.push((pend_key.to_owned(), depend.clone()));
+                                    depends
+                                } else {
+                                    vec![(pend_key.to_owned(), depend.clone())]
+                                }),
                                 pends,
                             )
                             .await,
