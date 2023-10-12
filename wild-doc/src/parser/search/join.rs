@@ -40,11 +40,12 @@ impl Parser {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
                     let token = token::borrowed::EmptyElementTag::from(token_bytes);
-                    let attributes = self.parse_attibutes(&token.attributes()).await;
                     let name = token.name();
                     match name.local().as_bytes() {
                         b"pends" => {
-                            result_conditions.push(Self::join_condition_pends(&attributes));
+                            result_conditions.push(Self::join_condition_pends(
+                                &self.parse_attibutes(&token.attributes()).await,
+                            ));
                         }
                         _ => {}
                     }

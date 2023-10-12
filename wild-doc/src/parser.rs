@@ -285,9 +285,7 @@ impl Parser {
                         r.push(b'<');
                         r.extend(name.into_bytes());
                         r.extend(attr);
-                        r.push(b' ');
-                        r.push(b'/');
-                        r.push(b'>');
+                        r.extend(b" />");
                     } else {
                         if Self::is_wd_tag(&name) {
                             if let Some(parsed) = self

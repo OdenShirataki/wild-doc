@@ -50,8 +50,7 @@ impl Parser {
                     .boxed_local(),
                 );
             } else {
-                let attr = attr.as_bytes();
-                futs.push(async { attr.to_vec() }.boxed_local());
+                futs.push(async move { attr.as_bytes().to_vec() }.boxed_local());
             };
         }
         r.extend(futures::future::join_all(futs).await.concat());
@@ -76,25 +75,29 @@ impl Parser {
                 }
             }
         }
-        for (name, value, org_value) in futures::future::join_all(futs).await {
-            let name = name.to_vec();
-            r.insert(
-                name,
-                Some(Arc::new(if let Some(value) = value {
-                    value
-                } else {
-                    {
-                        let value = xml_util::quot_unescape(org_value);
-                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(value.as_str())
-                        {
-                            WildDocValue::from(json)
+
+        r.extend(
+            futures::future::join_all(futs)
+                .await
+                .iter()
+                .map(|(name, value, org_value)| {
+                    (
+                        name.to_vec(),
+                        Some(Arc::new(if let Some(value) = value.clone() {
+                            value
                         } else {
-                            WildDocValue::String(value)
-                        }
-                    }
-                })),
-            );
-        }
+                            let value = xml_util::quot_unescape(org_value);
+                            if let Ok(json) =
+                                serde_json::from_str::<serde_json::Value>(value.as_str())
+                            {
+                                WildDocValue::from(json)
+                            } else {
+                                WildDocValue::String(value)
+                            }
+                        })),
+                    )
+                }),
+        );
         r
     }
 
@@ -111,8 +114,7 @@ impl Parser {
 
     #[inline(always)]
     fn output_attribute_value(r: &mut Vec<u8>, val: &[u8]) {
-        r.push(b'=');
-        r.push(b'"');
+        r.extend(b"=\"");
         r.extend(val.to_vec());
         r.push(b'"');
     }
@@ -124,8 +126,12 @@ impl Parser {
     ) -> (&'a [u8], Option<WildDocValue>, &'a [u8]) {
         let splited = name.split(|p| *p == b':').collect::<Vec<&[u8]>>();
         if let (Some(name), Some(script)) = (splited.get(0), splited.get(1)) {
-            let script = unsafe { std::str::from_utf8_unchecked(script) };
-            (*name, self.attribute_script(script, value).await, value)
+            (
+                *name,
+                self.attribute_script(unsafe { std::str::from_utf8_unchecked(script) }, value)
+                    .await,
+                value,
+            )
         } else {
             (name, None, value)
         }

@@ -40,81 +40,124 @@ impl Parser {
                         {
                             find_session = true;
                             if let Some(entity) = temporary_collection.get(&row) {
-                                inner.insert(
-                                    "uuid".to_owned(),
-                                    WildDocValue::String(
-                                        Uuid::from_u128(entity.uuid()).to_string(),
+                                inner.extend([
+                                    (
+                                        "uuid".to_owned(),
+                                        WildDocValue::String(
+                                            Uuid::from_u128(entity.uuid()).to_string(),
+                                        ),
                                     ),
-                                );
-                                inner.insert(
-                                    "activity".to_owned(),
-                                    WildDocValue::Bool(entity.activity() == Activity::Active),
-                                );
-                                inner.insert(
-                                    "term_begin".to_owned(),
-                                    WildDocValue::Number(serde_json::Number::from(
-                                        entity.term_begin(),
-                                    )),
-                                );
-                                inner.insert(
-                                    "term_end".to_owned(),
-                                    WildDocValue::Number(serde_json::Number::from(
-                                        entity.term_end(),
-                                    )),
-                                );
-
-                                let mut depends = IndexMap::new();
-                                for d in entity.depends() {
-                                    let mut depend = IndexMap::new();
-                                    depend.insert(
-                                        "collection_id".to_owned(),
+                                    (
+                                        "activity".to_owned(),
+                                        WildDocValue::Bool(entity.activity() == Activity::Active),
+                                    ),
+                                    (
+                                        "term_begin".to_owned(),
                                         WildDocValue::Number(serde_json::Number::from(
-                                            d.collection_id().get(),
+                                            entity.term_begin(),
                                         )),
-                                    );
-                                    depend.insert(
-                                        "row".to_owned(),
+                                    ),
+                                    (
+                                        "term_end".to_owned(),
                                         WildDocValue::Number(serde_json::Number::from(
-                                            d.row().get(),
+                                            entity.term_end(),
                                         )),
-                                    );
-
-                                    depends
-                                        .insert(d.key().to_string(), WildDocValue::Object(depend));
-                                }
-                                inner.insert("depends".to_owned(), WildDocValue::Object(depends));
-
-                                let mut field = IndexMap::new();
-                                if let Some(Some(field_mask)) = attributes.get(b"fields".as_ref()) {
-                                    if let WildDocValue::Array(field_mask) = field_mask.as_ref() {
-                                        let entities = entity.fields();
-                                        for field_name in field_mask {
-                                            let field_name = field_name.to_str();
-                                            if let Some(bytes) = entities.get(field_name.as_ref()) {
-                                                field.insert(
-                                                    field_name.to_string(),
-                                                    if let Ok(str) = std::str::from_utf8(bytes) {
-                                                        WildDocValue::String(str.to_owned())
-                                                    } else {
-                                                        WildDocValue::Binary(bytes.to_owned())
-                                                    },
-                                                );
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    for (field_name, value) in entity.fields() {
-                                        field.insert(
-                                            field_name.as_str().to_owned(),
-                                            if let Ok(str) = std::str::from_utf8(value) {
-                                                WildDocValue::String(str.to_owned())
+                                    ),
+                                    (
+                                        "depends".to_owned(),
+                                        WildDocValue::Object(
+                                            entity
+                                                .depends()
+                                                .iter()
+                                                .map(|d| {
+                                                    (
+                                                        d.key().to_string(),
+                                                        WildDocValue::Object(IndexMap::from([
+                                                            (
+                                                                "collection_id".to_owned(),
+                                                                WildDocValue::Number(
+                                                                    serde_json::Number::from(
+                                                                        d.collection_id().get(),
+                                                                    ),
+                                                                ),
+                                                            ),
+                                                            (
+                                                                "row".to_owned(),
+                                                                WildDocValue::Number(
+                                                                    serde_json::Number::from(
+                                                                        d.row().get(),
+                                                                    ),
+                                                                ),
+                                                            ),
+                                                        ])),
+                                                    )
+                                                })
+                                                .collect(),
+                                        ),
+                                    ),
+                                    (
+                                        "field".to_owned(),
+                                        WildDocValue::Object(
+                                            if let Some(Some(field_mask)) =
+                                                attributes.get(b"fields".as_ref())
+                                            {
+                                                if let WildDocValue::Array(field_mask) =
+                                                    field_mask.as_ref()
+                                                {
+                                                    let entities = entity.fields();
+                                                    field_mask
+                                                        .iter()
+                                                        .map(|field_name| {
+                                                            let field_name = field_name.to_str();
+                                                            if let Some(bytes) =
+                                                                entities.get(field_name.as_ref())
+                                                            {
+                                                                Some((
+                                                                    field_name.to_string(),
+                                                                    if let Ok(str) =
+                                                                        std::str::from_utf8(bytes)
+                                                                    {
+                                                                        WildDocValue::String(
+                                                                            str.to_owned(),
+                                                                        )
+                                                                    } else {
+                                                                        WildDocValue::Binary(
+                                                                            bytes.to_owned(),
+                                                                        )
+                                                                    },
+                                                                ))
+                                                            } else {
+                                                                None
+                                                            }
+                                                        })
+                                                        .flatten()
+                                                        .collect()
+                                                } else {
+                                                    IndexMap::new()
+                                                }
                                             } else {
-                                                WildDocValue::Binary(value.to_owned())
+                                                entity
+                                                    .fields()
+                                                    .iter()
+                                                    .map(|(field_name, value)| {
+                                                        (
+                                                            field_name.as_str().to_owned(),
+                                                            if let Ok(str) =
+                                                                std::str::from_utf8(value)
+                                                            {
+                                                                WildDocValue::String(str.to_owned())
+                                                            } else {
+                                                                WildDocValue::Binary(
+                                                                    value.to_owned(),
+                                                                )
+                                                            },
+                                                        )
+                                                    })
+                                                    .collect()
                                             },
-                                        );
-                                    }
-                                }
-                                inner.insert("field".to_owned(), WildDocValue::Object(field));
+                                        ),
+                                    ),
+                                ]);
                             }
                             break;
                         }
@@ -151,74 +194,109 @@ impl Parser {
                                     WildDocValue::Number(serde_json::Number::from(last_updated)),
                                 );
                             }
-                            let mut depends = IndexMap::new();
-                            for d in self
-                                .database
-                                .read()
-                                .relation()
-                                .depends(None, &CollectionRow::new(collection_id, row))
-                            {
-                                let mut depend = IndexMap::new();
-
-                                let collection_id = d.collection_id();
-
-                                if let Some(collection) =
-                                    self.database.read().collection(collection_id)
-                                {
-                                    depend.insert(
-                                        "collection_id".to_owned(),
-                                        WildDocValue::Number(serde_json::Number::from(
-                                            collection_id.get(),
-                                        )),
-                                    );
-                                    depend.insert(
-                                        "collection_name".to_owned(),
-                                        WildDocValue::String(collection.name().to_owned()),
-                                    );
-                                    depend.insert(
-                                        "row".to_owned(),
-                                        WildDocValue::Number(serde_json::Number::from(
-                                            d.row().get(),
-                                        )),
-                                    );
-                                    depends
-                                        .insert(d.key().to_string(), WildDocValue::Object(depend));
-                                }
-                            }
-                            inner.insert("depends".to_owned(), WildDocValue::Object(depends));
-
-                            let mut field = IndexMap::new();
-                            if let Some(Some(field_mask)) = attributes.get(b"fields".as_ref()) {
-                                if let WildDocValue::Array(field_mask) = field_mask.as_ref() {
-                                    for field_name in field_mask {
-                                        let field_name = field_name.to_str();
-                                        let bytes =
-                                            collection.field_bytes(row, field_name.as_ref());
-                                        field.insert(
-                                            field_name.to_string(),
-                                            if let Ok(str) = std::str::from_utf8(bytes) {
-                                                WildDocValue::String(str.to_owned())
+                            inner.extend([
+                                (
+                                    "depends".to_owned(),
+                                    WildDocValue::Object(
+                                        self.database
+                                            .read()
+                                            .relation()
+                                            .depends(None, &CollectionRow::new(collection_id, row))
+                                            .iter()
+                                            .map(|d| {
+                                                let collection_id = d.collection_id();
+                                                self.database.read().collection(collection_id).map(
+                                                    |collection| {
+                                                        (
+                                                            d.key().to_string(),
+                                                            WildDocValue::Object(IndexMap::from([
+                                                                (
+                                                                    "collection_id".to_owned(),
+                                                                    WildDocValue::Number(
+                                                                        serde_json::Number::from(
+                                                                            collection_id.get(),
+                                                                        ),
+                                                                    ),
+                                                                ),
+                                                                (
+                                                                    "collection_name".to_owned(),
+                                                                    WildDocValue::String(
+                                                                        collection
+                                                                            .name()
+                                                                            .to_owned(),
+                                                                    ),
+                                                                ),
+                                                                (
+                                                                    "row".to_owned(),
+                                                                    WildDocValue::Number(
+                                                                        serde_json::Number::from(
+                                                                            d.row().get(),
+                                                                        ),
+                                                                    ),
+                                                                ),
+                                                            ])),
+                                                        )
+                                                    },
+                                                )
+                                            })
+                                            .flatten()
+                                            .collect(),
+                                    ),
+                                ),
+                                (
+                                    "field".to_owned(),
+                                    WildDocValue::Object(
+                                        if let Some(Some(field_mask)) =
+                                            attributes.get(b"fields".as_ref())
+                                        {
+                                            if let WildDocValue::Array(field_mask) =
+                                                field_mask.as_ref()
+                                            {
+                                                field_mask
+                                                    .iter()
+                                                    .map(|field_name| {
+                                                        let field_name = field_name.to_str();
+                                                        let bytes = collection
+                                                            .field_bytes(row, field_name.as_ref());
+                                                        (
+                                                            field_name.to_string(),
+                                                            if let Ok(str) =
+                                                                std::str::from_utf8(bytes)
+                                                            {
+                                                                WildDocValue::String(str.to_owned())
+                                                            } else {
+                                                                WildDocValue::Binary(
+                                                                    bytes.to_owned(),
+                                                                )
+                                                            },
+                                                        )
+                                                    })
+                                                    .collect()
                                             } else {
-                                                WildDocValue::Binary(bytes.to_owned())
-                                            },
-                                        );
-                                    }
-                                }
-                            } else {
-                                for field_name in collection.field_names() {
-                                    let bytes = collection.field_bytes(row, field_name);
-                                    field.insert(
-                                        field_name.clone(),
-                                        if let Ok(str) = std::str::from_utf8(bytes) {
-                                            WildDocValue::String(str.to_owned())
+                                                IndexMap::new()
+                                            }
                                         } else {
-                                            WildDocValue::Binary(bytes.to_owned())
+                                            collection
+                                                .field_names()
+                                                .iter()
+                                                .map(|field_name| {
+                                                    let bytes =
+                                                        collection.field_bytes(row, field_name);
+                                                    (
+                                                        field_name.to_string(),
+                                                        if let Ok(str) = std::str::from_utf8(bytes)
+                                                        {
+                                                            WildDocValue::String(str.to_owned())
+                                                        } else {
+                                                            WildDocValue::Binary(bytes.to_owned())
+                                                        },
+                                                    )
+                                                })
+                                                .collect()
                                         },
-                                    );
-                                }
-                            }
-
-                            inner.insert("field".to_owned(), WildDocValue::Object(field));
+                                    ),
+                                ),
+                            ]);
                         }
                     }
                 }
