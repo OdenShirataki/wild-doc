@@ -16,7 +16,7 @@ use maybe_xml::{
 };
 
 use semilattice_database_session::{
-    Activity, CollectionRow, Depends, KeyValue, Pend, Record, SessionRecord, Term,
+    Activity, CollectionRow, Depends, Pend, Record, SessionRecord, Term,
 };
 
 use wild_doc_script::WildDocValue;
@@ -570,10 +570,7 @@ impl Parser {
                                     activity,
                                     term_begin,
                                     term_end,
-                                    fields: fields
-                                        .iter()
-                                        .map(|(key, value)| KeyValue::new(key, value.clone()))
-                                        .collect(),
+                                    fields,
                                 };
                                 updates.push(if row == 0 {
                                     SessionRecord::New {
