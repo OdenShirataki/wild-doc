@@ -66,10 +66,7 @@ impl Parser {
             for attr in attributes.into_iter() {
                 let name = attr.name().as_bytes();
                 if let Some(value) = attr.value() {
-                    futs.push(
-                        self.attibute_var_or_script(name, value.as_bytes())
-                            .boxed_local(),
-                    );
+                    futs.push(self.attibute_var_or_script(name, value.as_bytes()));
                 } else {
                     r.insert(name.to_vec(), None);
                 }
