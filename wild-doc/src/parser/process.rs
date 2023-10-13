@@ -74,8 +74,11 @@ impl Parser {
                         b"wd:when" => {
                             let (inner_xml, outer_end) = xml_util::inner(xml);
                             xml = &xml[outer_end..];
-                            let attributes = self.parse_attibutes(&token.attributes()).await;
-                            if let Some(Some(right)) = attributes.get(b"value".as_ref()) {
+                            if let Some(Some(right)) = self
+                                .parse_attibutes(token.attributes())
+                                .await
+                                .get(b"value".as_ref())
+                            {
                                 if let Some(cmp_src) = cmp_src {
                                     if cmp_src == right {
                                         return Ok(self.parse(inner_xml).await?);
@@ -203,7 +206,7 @@ impl Parser {
         let mut r = Vec::new();
         loop {
             if self
-                .parse_attibutes(&attributes)
+                .parse_attibutes(attributes)
                 .await
                 .get(b"continue".as_ref())
                 .and_then(|v| v.as_ref())

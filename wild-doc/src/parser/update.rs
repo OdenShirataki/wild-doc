@@ -60,7 +60,7 @@ impl Parser {
                             pends,
                         } => {
                             commit_rows.extend(
-                                self.record_new(collection_id, &record, &depends, &pends)
+                                self.record_new(collection_id, record, &depends, pends)
                                     .await,
                             );
                         }
@@ -72,7 +72,7 @@ impl Parser {
                             pends,
                         } => {
                             commit_rows.extend(
-                                self.record_update(collection_id, row, &record, &depends, &pends)
+                                self.record_update(collection_id, row, record, &depends, pends)
                                     .await,
                             );
                         }
@@ -201,11 +201,11 @@ impl Parser {
     }
 
     #[async_recursion(?Send)]
-    async fn update_pends(&self, depend: CollectionRow, pends: &Vec<Pend>) -> Vec<CollectionRow> {
+    async fn update_pends(&self, depend: CollectionRow, pends: Vec<Pend>) -> Vec<CollectionRow> {
         let mut rows = vec![];
         for pend in pends {
-            let pend_key = pend.key();
-            for record in pend.records() {
+            let pend_key = pend.key;
+            for record in pend.records {
                 match record {
                     SessionRecord::New {
                         collection_id,
@@ -215,15 +215,16 @@ impl Parser {
                     } => {
                         rows.extend(
                             self.record_new(
-                                *collection_id,
+                                collection_id,
                                 record,
-                                &Depends::Overwrite(if let Depends::Overwrite(depends) = depends {
-                                    let mut depends = depends.clone();
-                                    depends.push((pend_key.to_owned(), depend.clone()));
-                                    depends
-                                } else {
-                                    vec![(pend_key.to_owned(), depend.clone())]
-                                }),
+                                &Depends::Overwrite(
+                                    if let Depends::Overwrite(mut depends) = depends {
+                                        depends.push((pend_key.to_owned(), depend));
+                                        depends
+                                    } else {
+                                        vec![(pend_key.to_owned(), depend)]
+                                    },
+                                ),
                                 pends,
                             )
                             .await,
@@ -238,16 +239,17 @@ impl Parser {
                     } => {
                         rows.extend(
                             self.record_update(
-                                *collection_id,
-                                *row,
+                                collection_id,
+                                row,
                                 record,
-                                &Depends::Overwrite(if let Depends::Overwrite(depends) = depends {
-                                    let mut depends = depends.clone();
-                                    depends.push((pend_key.to_owned(), depend.clone()));
-                                    depends
-                                } else {
-                                    vec![(pend_key.to_owned(), depend.clone())]
-                                }),
+                                &Depends::Overwrite(
+                                    if let Depends::Overwrite(mut depends) = depends {
+                                        depends.push((pend_key.to_owned(), depend));
+                                        depends
+                                    } else {
+                                        vec![(pend_key.to_owned(), depend)]
+                                    },
+                                ),
                                 pends,
                             )
                             .await,
@@ -263,9 +265,9 @@ impl Parser {
     async fn record_new(
         &self,
         collection_id: NonZeroI32,
-        record: &Record,
+        record: Record,
         depends: &Depends,
-        pends: &Vec<Pend>,
+        pends: Vec<Pend>,
     ) -> Vec<CollectionRow> {
         let mut rows = vec![];
         if collection_id.get() > 0 {
@@ -283,11 +285,11 @@ impl Parser {
                     for (depend_key, depend_row) in depends {
                         self.database
                             .write()
-                            .register_relation(depend_key, depend_row, collection_row.clone())
+                            .register_relation(depend_key, depend_row, collection_row)
                             .await;
                     }
                 }
-                rows.push(collection_row.clone());
+                rows.push(collection_row);
                 self.update_pends(collection_row, pends).await;
             }
         }
@@ -298,9 +300,9 @@ impl Parser {
         &self,
         collection_id: NonZeroI32,
         row: NonZeroU32,
-        record: &Record,
+        record: Record,
         depends: &Depends,
-        pends: &Vec<Pend>,
+        pends: Vec<Pend>,
     ) -> Vec<CollectionRow> {
         let mut rows = vec![];
         if collection_id.get() > 0 {
@@ -321,12 +323,12 @@ impl Parser {
                     for d in depends {
                         self.database
                             .write()
-                            .register_relation(&d.0, &d.1, collection_row.clone())
+                            .register_relation(&d.0, &d.1, collection_row)
                             .await;
                     }
                 }
-                rows.push(collection_row.clone());
-                self.update_pends(collection_row, &pends).await;
+                rows.push(collection_row);
+                self.update_pends(collection_row, pends).await;
             }
         }
         rows
@@ -391,7 +393,7 @@ impl Parser {
                     let token_collection = token::borrowed::StartTag::from(token_bytes);
                     if token_collection.name().as_bytes() == b"collection" {
                         let token_attributes =
-                            self.parse_attibutes(&token_collection.attributes()).await;
+                            self.parse_attibutes(token_collection.attributes()).await;
                         if let Some(Some(collection_name)) = token_attributes.get(b"name".as_ref())
                         {
                             let collection_id = self
@@ -412,7 +414,7 @@ impl Parser {
                                         xml = &xml[pos..];
                                         let token = token::borrowed::StartTag::from(token_bytes);
                                         let attributes =
-                                            self.parse_attibutes(&token.attributes()).await;
+                                            self.parse_attibutes(token.attributes()).await;
                                         let name = token.name();
                                         match name.as_bytes() {
                                             b"field" => {
@@ -455,10 +457,10 @@ impl Parser {
                                                 if let Some(Some(key)) =
                                                     attributes.get(b"key".as_ref())
                                                 {
-                                                    pends.push(Pend::new(
-                                                        key.to_string(),
-                                                        pends_tmp,
-                                                    ));
+                                                    pends.push(Pend {
+                                                        key: key.to_string(),
+                                                        records: pends_tmp,
+                                                    });
                                                 }
                                             }
                                             _ => {}
@@ -473,7 +475,7 @@ impl Parser {
                                         match name.as_bytes() {
                                             b"depend" => {
                                                 let attributes =
-                                                    self.parse_attibutes(&token.attributes()).await;
+                                                    self.parse_attibutes(token.attributes()).await;
                                                 self.depend(&attributes, &mut depends)?;
                                             }
                                             _ => {}

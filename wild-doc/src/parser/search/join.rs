@@ -44,7 +44,7 @@ impl Parser {
                     match name.local().as_bytes() {
                         b"pends" => {
                             result_conditions.push(Self::join_condition_pends(
-                                &self.parse_attibutes(&token.attributes()).await,
+                                self.parse_attibutes(token.attributes()).await,
                             ));
                         }
                         _ => {}
@@ -74,7 +74,7 @@ impl Parser {
     }
 
     #[inline(always)]
-    fn join_condition_pends(attributes: &AttributeMap) -> JoinCondition {
+    fn join_condition_pends(attributes: AttributeMap) -> JoinCondition {
         JoinCondition::Pends {
             key: attributes
                 .get(b"key".as_ref())

@@ -141,8 +141,13 @@ impl Parser {
                                 }
                             }
                             b"join" => {
-                                let attributes = self.parse_attibutes(&token.attributes()).await;
-                                xml = self.join(xml, &attributes, &mut join).await;
+                                xml = self
+                                    .join(
+                                        xml,
+                                        &self.parse_attibutes(token.attributes()).await,
+                                        &mut join,
+                                    )
+                                    .await;
                             }
                             _ => {}
                         }
@@ -152,7 +157,7 @@ impl Parser {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
                     let token = token::borrowed::EmptyElementTag::from(token_bytes);
-                    let attributes = self.parse_attibutes(&token.attributes()).await;
+                    let attributes = self.parse_attibutes(token.attributes()).await;
                     let name = token.name();
                     match name.local().as_bytes() {
                         b"row" => {

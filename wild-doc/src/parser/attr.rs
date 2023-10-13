@@ -56,10 +56,7 @@ impl Parser {
         r.extend(futures::future::join_all(futs).await.concat());
     }
 
-    pub(super) async fn parse_attibutes(
-        &self,
-        attributes: &Option<Attributes<'_>>,
-    ) -> AttributeMap {
+    pub(super) async fn parse_attibutes(&self, attributes: Option<Attributes<'_>>) -> AttributeMap {
         let mut r: AttributeMap = HashMap::new();
         let mut futs = vec![];
         if let Some(attributes) = attributes {
@@ -73,28 +70,24 @@ impl Parser {
             }
         }
 
-        r.extend(
-            futures::future::join_all(futs)
-                .await
-                .iter()
-                .map(|(name, value, org_value)| {
-                    (
-                        name.to_vec(),
-                        Some(Arc::new(if let Some(value) = value.clone() {
-                            value
+        r.extend(futures::future::join_all(futs).await.into_iter().map(
+            |(name, value, org_value)| {
+                (
+                    name.to_vec(),
+                    Some(Arc::new(if let Some(value) = value {
+                        value
+                    } else {
+                        let value = xml_util::quot_unescape(org_value);
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(value.as_str())
+                        {
+                            WildDocValue::from(json)
                         } else {
-                            let value = xml_util::quot_unescape(org_value);
-                            if let Ok(json) =
-                                serde_json::from_str::<serde_json::Value>(value.as_str())
-                            {
-                                WildDocValue::from(json)
-                            } else {
-                                WildDocValue::String(value)
-                            }
-                        })),
-                    )
-                }),
-        );
+                            WildDocValue::String(value)
+                        }
+                    })),
+                )
+            },
+        ));
         r
     }
 
