@@ -65,6 +65,6 @@ impl IncludeAdaptor for IncludeRemote {
                 }
             }
         }
-        self.cache.get(path).map(|v| v.clone())
+        self.cache.get(path).cloned()
     }
 }
