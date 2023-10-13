@@ -28,7 +28,7 @@ impl WildDocScript for WdPy {
             builtins.add_submodule(wd)?;
 
             let name = CString::new("builtins.wdstack").unwrap();
-            let stack = PyCapsule::new(py, Arc::clone(state.stack()), Some(name.clone()))?;
+            let stack = PyCapsule::new(py, Arc::clone(state.stack()), Some(name))?;
             builtins.add("wdstack", stack)?;
 
             Ok(())
