@@ -121,7 +121,7 @@ impl Parser {
         let mut r: Vec<u8> = Vec::new();
         let mut tag_stack = vec![];
         let mut search_map = HashMap::new();
-        let mut xml = xml;
+        let mut xml: &[u8] = xml;
 
         let mut scanner = Scanner::new();
 
@@ -165,16 +165,15 @@ impl Parser {
                         } else {
                             match name.local().as_bytes() {
                                 b"session" => {
-                                    let attributes = self.parse_attibutes(token.attributes()).await;
-                                    self.session(attributes);
+                                    self.session(self.parse_attibutes(token.attributes()).await);
                                 }
                                 b"session_sequence_cursor" => {
-                                    let attributes = self.parse_attibutes(token.attributes()).await;
-                                    self.session_sequence(attributes);
+                                    self.session_sequence(
+                                        self.parse_attibutes(token.attributes()).await,
+                                    );
                                 }
                                 b"sessions" => {
-                                    let attributes = self.parse_attibutes(token.attributes()).await;
-                                    self.sessions(&attributes);
+                                    self.sessions(self.parse_attibutes(token.attributes()).await);
                                 }
                                 b"re" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
@@ -192,43 +191,69 @@ impl Parser {
                                     xml = &xml[outer_end..];
                                 }
                                 b"update" => {
-                                    let attributes = self.parse_attibutes(token.attributes()).await;
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    self.update(inner_xml, &attributes).await?;
+                                    self.update(
+                                        inner_xml,
+                                        self.parse_attibutes(token.attributes()).await,
+                                    )
+                                    .await?;
                                     xml = &xml[outer_end..];
                                 }
                                 b"search" => {
-                                    let attributes = self.parse_attibutes(token.attributes()).await;
-                                    xml = self.search(xml, &attributes, &mut search_map).await;
+                                    xml = self
+                                        .search(
+                                            xml,
+                                            self.parse_attibutes(token.attributes()).await,
+                                            &mut search_map,
+                                        )
+                                        .await;
                                 }
                                 b"result" => {
-                                    let attributes = self.parse_attibutes(token.attributes()).await;
-                                    self.result(&attributes, &search_map).await;
+                                    self.result(
+                                        self.parse_attibutes(token.attributes()).await,
+                                        &mut search_map,
+                                    )
+                                    .await;
                                 }
                                 b"record" => {
-                                    let attributes = self.parse_attibutes(token.attributes()).await;
-                                    self.record(attributes);
+                                    self.record(self.parse_attibutes(token.attributes()).await);
                                 }
                                 b"collections" => {
-                                    let attributes = self.parse_attibutes(token.attributes()).await;
-                                    self.collections(attributes);
+                                    self.collections(
+                                        self.parse_attibutes(token.attributes()).await,
+                                    );
                                 }
                                 b"case" => {
-                                    let attributes = self.parse_attibutes(token.attributes()).await;
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.extend(self.case(attributes, inner_xml).await?);
+                                    r.extend(
+                                        self.case(
+                                            self.parse_attibutes(token.attributes()).await,
+                                            inner_xml,
+                                        )
+                                        .await?,
+                                    );
                                     xml = &xml[outer_end..];
                                 }
                                 b"if" => {
-                                    let attributes = self.parse_attibutes(token.attributes()).await;
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.extend(self.r#if(attributes, inner_xml).await?);
+                                    r.extend(
+                                        self.r#if(
+                                            self.parse_attibutes(token.attributes()).await,
+                                            inner_xml,
+                                        )
+                                        .await?,
+                                    );
                                     xml = &xml[outer_end..];
                                 }
                                 b"for" => {
-                                    let attributes = self.parse_attibutes(token.attributes()).await;
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.extend(self.r#for(attributes, inner_xml).await?);
+                                    r.extend(
+                                        self.r#for(
+                                            self.parse_attibutes(token.attributes()).await,
+                                            inner_xml,
+                                        )
+                                        .await?,
+                                    );
                                     xml = &xml[outer_end..];
                                 }
                                 b"while" => {
@@ -237,8 +262,8 @@ impl Parser {
                                     xml = &xml[outer_end..];
                                 }
                                 b"tag" => {
-                                    let attributes = self.parse_attibutes(token.attributes()).await;
-                                    let (name, attr) = self.custom_tag(attributes);
+                                    let (name, attr) = self
+                                        .custom_tag(self.parse_attibutes(token.attributes()).await);
                                     tag_stack.push(name.clone());
                                     r.push(b'<');
                                     r.extend(name.into_bytes());
@@ -246,8 +271,7 @@ impl Parser {
                                     r.push(b'>');
                                 }
                                 b"local" => {
-                                    let attributes = self.parse_attibutes(token.attributes()).await;
-                                    self.local(attributes);
+                                    self.local(self.parse_attibutes(token.attributes()).await);
                                 }
                                 _ => {}
                             }

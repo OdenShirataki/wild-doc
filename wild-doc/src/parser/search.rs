@@ -8,12 +8,12 @@ use std::{
 
 use async_recursion::async_recursion;
 use chrono::DateTime;
+use futures::FutureExt;
 use hashbrown::HashMap;
 use maybe_xml::{
     scanner::{Scanner, State},
     token,
 };
-use parking_lot::RwLock;
 use semilattice_database_session::{
     search::{self, Join, Search},
     Activity, CollectionRow, Condition, Uuid,
@@ -51,17 +51,17 @@ impl Parser {
     pub(crate) async fn search<'a>(
         &mut self,
         xml: &'a [u8],
-        attributes: &AttributeMap,
-        search_map: &mut HashMap<String, Arc<RwLock<Search>>>,
+        attributes: AttributeMap,
+        search_map: &mut HashMap<String, Search>,
     ) -> &'a [u8] {
         if let Some(Some(name)) = attributes.get(b"name".as_ref()) {
             let name = name.to_str();
             if name != "" {
-                if let Some(collection_id) = self.collection_id(attributes) {
-                    let (last_xml, condition, join) = self.make_conditions(attributes, xml).await;
+                if let Some(collection_id) = self.collection_id(&attributes) {
+                    let (last_xml, condition, join) = self.make_conditions(&attributes, xml).await;
                     search_map.insert(
                         name.into_owned(),
-                        Arc::new(RwLock::new(Search::new(collection_id, condition, join))),
+                        Search::new(collection_id, condition, join),
                     );
                     return last_xml;
                 }
@@ -115,6 +115,9 @@ impl Parser {
         let mut result_conditions = Vec::new();
         let mut xml = xml;
         let mut scanner = Scanner::new();
+
+        let mut futs = vec![];
+
         while let Some(state) = scanner.scan(xml) {
             match state {
                 State::ScannedStartTag(pos) => {
@@ -160,23 +163,11 @@ impl Parser {
                     let attributes = self.parse_attibutes(token.attributes()).await;
                     let name = token.name();
                     match name.local().as_bytes() {
-                        b"row" => {
-                            if let Some(c) = Self::condition_row(&attributes) {
-                                result_conditions.push(c);
-                            }
-                        }
-                        b"field" => {
-                            if let Some(c) = Self::condition_field(&attributes) {
-                                result_conditions.push(c);
-                            }
-                        }
-                        b"uuid" => {
-                            if let Some(c) = Self::condition_uuid(&attributes) {
-                                result_conditions.push(c);
-                            }
-                        }
+                        b"row" => futs.push(Self::condition_row(attributes).boxed()),
+                        b"field" => futs.push(Self::condition_field(attributes).boxed()),
+                        b"uuid" => futs.push(Self::condition_uuid(attributes).boxed()),
                         b"depend" => {
-                            if let Some(c) = self.condition_depend(&attributes) {
+                            if let Some(c) = self.condition_depend(attributes).await {
                                 result_conditions.push(c);
                             }
                         }
@@ -203,11 +194,11 @@ impl Parser {
                 _ => {}
             }
         }
+        result_conditions.extend(futures::future::join_all(futs).await.into_iter().flatten());
         (xml, result_conditions, join)
     }
 
-    #[inline(always)]
-    fn condition_depend(&self, attributes: &AttributeMap) -> Option<Condition> {
+    async fn condition_depend(&self, attributes: AttributeMap) -> Option<Condition> {
         if let (Some(Some(row)), Some(Some(collection_name))) = (
             attributes.get(b"row".as_ref()),
             attributes.get(b"collection".as_ref()),
@@ -236,8 +227,7 @@ impl Parser {
         None
     }
 
-    #[inline(always)]
-    fn condition_row(attributes: &AttributeMap) -> Option<Condition> {
+    async fn condition_row(attributes: AttributeMap) -> Option<Condition> {
         if let (Some(Some(method)), Some(Some(value))) = (
             attributes.get(b"method".as_ref()),
             attributes.get(b"value".as_ref()),
@@ -280,8 +270,7 @@ impl Parser {
         None
     }
 
-    #[inline(always)]
-    fn condition_uuid(attributes: &AttributeMap) -> Option<Condition> {
+    async fn condition_uuid(attributes: AttributeMap) -> Option<Condition> {
         if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
             let value = value.to_string();
             (value != "")
@@ -298,8 +287,7 @@ impl Parser {
         }
     }
 
-    #[inline(always)]
-    fn condition_field(attributes: &AttributeMap) -> Option<Condition> {
+    async fn condition_field(attributes: AttributeMap) -> Option<Condition> {
         if let (Some(Some(name)), Some(Some(method)), Some(Some(value))) = (
             attributes.get(b"name".as_ref()),
             attributes.get(b"method".as_ref()),

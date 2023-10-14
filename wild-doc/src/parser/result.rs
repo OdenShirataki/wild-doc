@@ -1,9 +1,6 @@
 mod custom_sort;
 
-use std::{
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
+use std::{ops::Deref, sync::Arc};
 
 use hashbrown::HashMap;
 use indexmap::IndexMap;
@@ -17,8 +14,8 @@ use super::{AttributeMap, Parser, WildDocValue};
 impl Parser {
     pub(super) async fn result(
         &mut self,
-        attributes: &AttributeMap,
-        search_map: &HashMap<String, Arc<RwLock<Search>>>,
+        attributes: AttributeMap,
+        search_map: &mut HashMap<String, Search>,
     ) {
         let mut vars = HashMap::new();
         if let (Some(Some(search)), Some(Some(var))) = (
@@ -28,8 +25,8 @@ impl Parser {
             let search = search.to_str();
             let var = var.to_str();
             if search != "" && var != "" {
-                if let Some(search) = search_map.get(search.as_ref()) {
-                    let collection_id = search.read().collection_id();
+                if let Some(mut search) = search_map.get_mut(search.as_ref()) {
+                    let collection_id = search.collection_id();
 
                     let orders = make_order(
                         search,
@@ -48,11 +45,7 @@ impl Parser {
                                 found_session = true;
                                 rows = state
                                     .session
-                                    .result_with(
-                                        &mut search.write().deref_mut(),
-                                        self.database.read().deref(),
-                                        &orders,
-                                    )
+                                    .result_with(&mut search, self.database.read().deref(), &orders)
                                     .await
                                     .iter()
                                     .map(|row| {
@@ -71,7 +64,6 @@ impl Parser {
 
                     if !found_session {
                         rows = if let Some(v) = search
-                            .write()
                             .result(self.database.read().deref())
                             .await
                             .read()
@@ -115,7 +107,7 @@ impl Parser {
 }
 
 #[inline(always)]
-fn make_order(search: &RwLock<Search>, sort: &str) -> Vec<Order> {
+fn make_order(search: &Search, sort: &str) -> Vec<Order> {
     let mut orders = vec![];
     if sort.len() > 0 {
         for o in sort.trim().split(",") {
@@ -131,7 +123,7 @@ fn make_order(search: &RwLock<Search>, sort: &str) -> Vec<Order> {
                 field.strip_prefix("join.").map(|v| -> OrderKey {
                     let s: Vec<&str> = v.split(".").collect();
                     OrderKey::Custom(Box::new(WdCustomSort {
-                        result: Arc::clone(search.read().get_result()),
+                        result: Arc::clone(search.get_result()),
                         join_name: s[0].to_owned(),
                         property: s[1].to_owned(),
                     }))

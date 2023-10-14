@@ -39,7 +39,7 @@ impl error::Error for DependError {
 }
 
 impl Parser {
-    pub async fn update(&mut self, xml: &[u8], attributes: &AttributeMap) -> Result<()> {
+    pub async fn update(&mut self, xml: &[u8], attributes: AttributeMap) -> Result<()> {
         if let Ok(inner_xml) = self.parse(xml).await {
             let updates = self.make_update_struct(inner_xml.as_slice()).await?;
 

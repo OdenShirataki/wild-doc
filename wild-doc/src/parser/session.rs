@@ -10,7 +10,7 @@ use super::{AttributeMap, Parser, SessionState};
 
 impl Parser {
     #[inline(always)]
-    pub(super) fn sessions(&self, attributes: &AttributeMap) {
+    pub(super) fn sessions(&self, attributes: AttributeMap) {
         let mut json = HashMap::new();
 
         if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
