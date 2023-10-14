@@ -114,10 +114,11 @@ impl Parser {
         name: &'a [u8],
         value: &'a [u8],
     ) -> (&'a [u8], Option<WildDocValue>, &'a [u8]) {
-        let splited = name.split(|p| *p == b':').collect::<Vec<&[u8]>>();
-        if let (Some(name), Some(script)) = (splited.get(0), splited.get(1)) {
+        let mut splited = name.split(|p| *p == b':').collect::<Vec<&[u8]>>();
+        if splited.len() >= 2 {
+            let script = splited.pop().unwrap();
             (
-                *name,
+                &name[..name.len() - (script.len() + 1)],
                 self.attribute_script(unsafe { std::str::from_utf8_unchecked(script) }, value)
                     .await,
                 value,
