@@ -144,7 +144,7 @@ impl Parser {
                             }
                         }
                     } else {
-                        r.extend(token_bytes.to_vec());
+                        r.extend(token_bytes);
                     }
                     xml = &xml[pos..];
                 }
@@ -187,7 +187,7 @@ impl Parser {
                                 }
                                 b"letitgo" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.extend(inner_xml.to_vec());
+                                    r.extend(inner_xml);
                                     xml = &xml[outer_end..];
                                 }
                                 b"update" => {
@@ -355,7 +355,7 @@ impl Parser {
                             }
                             b"tag" => {
                                 if let Some(name) = tag_stack.pop() {
-                                    r.extend(b"</".to_vec());
+                                    r.extend(b"</");
                                     r.extend(name.into_bytes());
                                     r.push(b'>');
                                 }
@@ -363,18 +363,18 @@ impl Parser {
                             _ => {}
                         }
                     } else {
-                        r.extend(token_bytes.to_vec());
+                        r.extend(token_bytes);
                     }
                 }
                 State::ScannedCharacters(pos)
                 | State::ScannedCdata(pos)
                 | State::ScannedComment(pos)
                 | State::ScannedDeclaration(pos) => {
-                    r.extend(xml[..pos].to_vec());
+                    r.extend(xml[..pos].as_ref());
                     xml = &xml[pos..];
                 }
                 State::ScanningCharacters => {
-                    r.extend(xml.to_vec());
+                    r.extend(xml);
                     break;
                 }
                 _ => {}
@@ -396,13 +396,12 @@ impl Parser {
                     let attr = xml_util::quot_unescape(value.to_str().as_bytes());
                     if attr.len() > 0 {
                         html_attr.push(b' ');
-                        html_attr.extend(attr.as_bytes().to_vec());
+                        html_attr.extend(attr.as_bytes());
                     }
                 } else {
                     html_attr.push(b' ');
-                    html_attr.extend(key.to_vec());
-                    html_attr.push(b'=');
-                    html_attr.push(b'"');
+                    html_attr.extend(key);
+                    html_attr.extend(b"=\"");
                     html_attr.extend(
                         value
                             .to_str()

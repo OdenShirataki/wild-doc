@@ -26,12 +26,12 @@ impl Parser {
                             if let Some(value) = new_value {
                                 if !value.is_null() {
                                     r.push(b' ');
-                                    r.extend(value.to_str().to_string().into_bytes());
+                                    r.extend(value.to_str().as_bytes());
                                 }
                             }
                         } else {
                             r.push(b' ');
-                            r.extend(new_name.to_vec());
+                            r.extend(new_name);
                             if let Some(value) = new_value {
                                 if value.is_null() {
                                     Self::output_attribute_value(&mut r, b"");
@@ -105,7 +105,7 @@ impl Parser {
     #[inline(always)]
     fn output_attribute_value(r: &mut Vec<u8>, val: &[u8]) {
         r.extend(b"=\"");
-        r.extend(val.to_vec());
+        r.extend(val);
         r.push(b'"');
     }
 
