@@ -39,14 +39,14 @@ pub struct Parser {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<SessionState>,
     scripts: HashMap<String, Box<dyn WildDocScript>>,
-    state: WildDocState,
+    state: Arc<WildDocState>,
     include_stack: Vec<String>,
 }
 impl Parser {
     pub fn new(
         database: Arc<RwLock<SessionDatabase>>,
         scripts: HashMap<String, Box<dyn WildDocScript>>,
-        state: WildDocState,
+        state: Arc<WildDocState>,
     ) -> Result<Self> {
         Ok(Self {
             scripts,

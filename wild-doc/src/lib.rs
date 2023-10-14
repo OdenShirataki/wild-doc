@@ -78,18 +78,18 @@ impl WildDoc {
 
     fn setup_scripts(
         &mut self,
-        state: WildDocState,
+        state: Arc<WildDocState>,
     ) -> Result<hashbrown::HashMap<String, Box<dyn WildDocScript>>> {
         let mut scripts: hashbrown::HashMap<String, Box<dyn WildDocScript>> =
             hashbrown::HashMap::new();
 
-        scripts.insert("var".to_owned(), Box::new(Var::new(state.clone())?));
+        scripts.insert("var".to_owned(), Box::new(Var::new(Arc::clone(&state))?));
 
         #[cfg(feature = "js")]
-        scripts.insert("js".to_owned(), Box::new(Deno::new(state.clone())?));
+        scripts.insert("js".to_owned(), Box::new(Deno::new(Arc::clone(&state))?));
 
         #[cfg(feature = "py")]
-        scripts.insert("py".to_owned(), Box::new(WdPy::new(state.clone())?));
+        scripts.insert("py".to_owned(), Box::new(WdPy::new(Arc::clone(&state))?));
 
         Ok(scripts)
     }
@@ -101,26 +101,24 @@ impl WildDoc {
     ) -> Result<WildDocResult> {
         let global = Arc::new(RwLock::new(WildDocValue::Object(IndexMap::new())));
 
-        let vars = hashbrown::HashMap::from([
-            (
-                b"input".to_vec(),
-                Arc::new(RwLock::new(WildDocValue::from(
-                    serde_json::from_slice(input_json).unwrap_or(serde_json::json!({})),
-                ))),
-            ),
-            (b"global".to_vec(), Arc::clone(&global)),
-        ]);
-
-        let state = WildDocState::new(
-            Arc::new(Mutex::new(vec![vars])),
+        let state = Arc::new(WildDocState::new(
+            vec![hashbrown::HashMap::from([
+                (
+                    b"input".to_vec(),
+                    Arc::new(RwLock::new(WildDocValue::from(
+                        serde_json::from_slice(input_json).unwrap_or(serde_json::json!({})),
+                    ))),
+                ),
+                (b"global".to_vec(), Arc::clone(&global)),
+            ])],
             self.cache_dir.clone(),
             include_adaptor,
-        );
-
-        let body = futures::executor::block_on(
+        ));
+        
+        let body = tokio::runtime::Runtime::new()?.block_on(
             Parser::new(
                 Arc::clone(&self.database),
-                self.setup_scripts(state.clone())?,
+                self.setup_scripts(Arc::clone(&state))?,
                 state,
             )?
             .parse(xml),

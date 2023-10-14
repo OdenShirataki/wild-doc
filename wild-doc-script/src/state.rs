@@ -7,7 +7,6 @@ use parking_lot::Mutex;
 
 use crate::{IncludeAdaptor, VarsStack};
 
-#[derive(Clone)]
 pub struct WildDocState {
     stack: Arc<Mutex<VarsStack>>,
     cache_dir: PathBuf,
@@ -16,12 +15,12 @@ pub struct WildDocState {
 
 impl WildDocState {
     pub fn new(
-        stack: Arc<Mutex<VarsStack>>,
+        initial_vars: VarsStack,
         cache_dir: PathBuf,
         include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
     ) -> Self {
         Self {
-            stack,
+            stack: Arc::new(Mutex::new(initial_vars)),
             cache_dir,
             include_adaptor,
         }

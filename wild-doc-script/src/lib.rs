@@ -2,6 +2,8 @@ mod include;
 mod state;
 mod value;
 
+use std::sync::Arc;
+
 pub use async_trait::async_trait;
 pub use include::IncludeAdaptor;
 pub use state::WildDocState;
@@ -14,7 +16,7 @@ use anyhow::Result;
 
 #[async_trait(?Send)]
 pub trait WildDocScript {
-    fn new(state: WildDocState) -> Result<Self>
+    fn new(state: Arc<WildDocState>) -> Result<Self>
     where
         Self: Sized;
     async fn evaluate_module(&self, file_name: &str, src: &[u8]) -> Result<()>;

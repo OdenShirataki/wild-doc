@@ -16,7 +16,7 @@ pub struct WdPy {}
 
 #[async_trait(?Send)]
 impl WildDocScript for WdPy {
-    fn new(state: WildDocState) -> Result<Self> {
+    fn new(state: Arc<WildDocState>) -> Result<Self> {
         let _ = Python::with_gil(|py| -> PyResult<()> {
             let builtins = PyModule::import(py, "builtins")?;
 

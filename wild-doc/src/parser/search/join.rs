@@ -28,14 +28,12 @@ impl Parser {
     }
 
     async fn join_condition_loop<'a>(&mut self, xml: &'a [u8]) -> (&'a [u8], Vec<JoinCondition>) {
-        let mut result_conditions = Vec::new();
         let mut xml = xml;
         let mut scanner = Scanner::new();
+        let mut futs = vec![];
+
         while let Some(state) = scanner.scan(xml) {
             match state {
-                State::ScannedStartTag(pos) => {
-                    xml = &xml[pos..];
-                }
                 State::ScannedEmptyElementTag(pos) => {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
@@ -43,7 +41,7 @@ impl Parser {
                     let name = token.name();
                     match name.local().as_bytes() {
                         b"pends" => {
-                            result_conditions.push(Self::join_condition_pends(
+                            futs.push(Self::join_condition_pends(
                                 self.parse_attibutes(token.attributes()).await,
                             ));
                         }
@@ -60,7 +58,8 @@ impl Parser {
                         _ => {}
                     }
                 }
-                State::ScannedCharacters(pos)
+                State::ScannedStartTag(pos)
+                | State::ScannedCharacters(pos)
                 | State::ScannedCdata(pos)
                 | State::ScannedComment(pos)
                 | State::ScannedDeclaration(pos)
@@ -70,11 +69,13 @@ impl Parser {
                 _ => {}
             }
         }
-        (xml, result_conditions)
+        (
+            xml,
+            futures::future::join_all(futs).await.into_iter().collect(),
+        )
     }
 
-    #[inline(always)]
-    fn join_condition_pends(attributes: AttributeMap) -> JoinCondition {
+    async fn join_condition_pends(attributes: AttributeMap) -> JoinCondition {
         JoinCondition::Pends {
             key: attributes
                 .get(b"key".as_ref())

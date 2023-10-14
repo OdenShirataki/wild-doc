@@ -1,6 +1,6 @@
 pub mod module_loader;
 
-use std::{ffi::c_void, ops::Deref, path::Path};
+use std::{ffi::c_void, ops::Deref, path::Path, sync::Arc};
 
 use deno_runtime::{
     deno_core::{self, anyhow::Result, serde_v8, ModuleSpecifier},
@@ -22,7 +22,7 @@ pub struct Deno {
 
 #[async_trait(?Send)]
 impl WildDocScript for Deno {
-    fn new(state: WildDocState) -> Result<Self> {
+    fn new(state: Arc<WildDocState>) -> Result<Self> {
         let mut worker = MainWorker::bootstrap_from_options(
             deno_core::resolve_url("wd://main").unwrap(),
             PermissionsContainer::allow_all(),

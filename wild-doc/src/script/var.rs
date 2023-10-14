@@ -22,7 +22,7 @@ impl Var {
 
 #[async_trait(?Send)]
 impl WildDocScript for Var {
-    fn new(state: wild_doc_script::WildDocState) -> Result<Self>
+    fn new(state: Arc<wild_doc_script::WildDocState>) -> Result<Self>
     where
         Self: Sized,
     {
@@ -59,11 +59,11 @@ impl WildDocScript for Var {
                             WildDocValue::Array(map) => {
                                 unsafe { std::str::from_utf8_unchecked(next) }
                                     .parse::<usize>()
-                                    .ok()
-                                    .and_then(|v| map.get(v))
                                     .map_or(false, |v| {
-                                        next_value = v;
-                                        true
+                                        map.get(v).map_or(false, |v| {
+                                            next_value = v;
+                                            true
+                                        })
                                     })
                             }
                             _ => false,
