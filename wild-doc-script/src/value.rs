@@ -2,7 +2,6 @@ use std::{borrow::Cow, sync::Arc};
 
 use hashbrown::HashMap;
 use indexmap::IndexMap;
-use parking_lot::RwLock;
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -131,5 +130,5 @@ impl WildDocValue {
         }
     }
 }
-pub type Vars = HashMap<Vec<u8>, Arc<RwLock<WildDocValue>>>;
+pub type Vars = HashMap<Vec<u8>, Arc<WildDocValue>>;
 pub type VarsStack = Vec<Vars>;

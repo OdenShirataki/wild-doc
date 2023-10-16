@@ -1,7 +1,7 @@
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 
 use wild_doc_script::{async_trait, VarsStack, WildDocScript, WildDocValue};
 
@@ -10,7 +10,7 @@ pub struct Var {
 }
 
 impl Var {
-    fn search_stack(&self, key: &[u8]) -> Option<Arc<RwLock<WildDocValue>>> {
+    fn search_stack(&self, key: &[u8]) -> Option<Arc<WildDocValue>> {
         for stack in self.stack.lock().iter().rev() {
             if let Some(v) = stack.get(key) {
                 return Some(Arc::clone(v));
@@ -40,9 +40,8 @@ impl WildDocScript for Var {
 
         let mut splited = code.split(|c| *c == b'.');
         if let Some(root) = splited.next() {
-            if let Some(root) = self.search_stack(root) {
-                let next_value = root.read().deref().clone();
-                let mut next_value = &next_value;
+            if let Some(ref root) = self.search_stack(root) {
+                let mut next_value = root.as_ref();
                 while {
                     splited.next().map_or_else(
                         || {

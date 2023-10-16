@@ -1,7 +1,6 @@
-use std::{collections::VecDeque, ops::DerefMut, sync::Arc};
+use std::{collections::VecDeque, sync::Arc};
 
 use indexmap::IndexMap;
-use parking_lot::RwLock;
 use wild_doc_script::WildDocValue;
 
 use super::{AttributeMap, Parser};
@@ -24,24 +23,17 @@ impl Parser {
 
     #[inline(always)]
     pub(crate) fn register_global(&self, name: &str, value: &WildDocValue) {
-        if let Some(global) = self
-            .state
-            .stack()
-            .lock()
-            .get(0)
-            .and_then(|v| v.get(b"global".as_ref()))
-        {
-            if let WildDocValue::Object(ref mut map) = global.write().deref_mut() {
-                let mut splited: VecDeque<_> = name.split('.').collect();
-                if let Some(last) = splited.pop_back() {
-                    if splited.len() > 0 {
-                        if let Some(map) = Self::route_map(map, splited) {
-                            map.insert(last.to_owned(), value.clone());
-                        }
-                    } else {
-                        map.insert(last.to_owned(), value.clone());
-                    }
+        let mut splited: VecDeque<_> = name.split('.').collect();
+        if let Some(last) = splited.pop_back() {
+            if splited.len() > 0 {
+                if let Some(map) = Self::route_map(&mut self.state.global().lock(), splited) {
+                    map.insert(last.to_owned(), value.clone());
                 }
+            } else {
+                self.state
+                    .global()
+                    .lock()
+                    .insert(last.to_owned(), value.clone());
             }
         }
     }
@@ -51,10 +43,7 @@ impl Parser {
         self.state.stack().lock().push(
             attributes
                 .iter()
-                .filter_map(|(k, v)| {
-                    v.as_ref()
-                        .map(|v| (k.to_vec(), Arc::new(RwLock::new(v.as_ref().clone()))))
-                })
+                .filter_map(|(k, v)| v.as_ref().map(|v| (k.to_vec(), Arc::clone(v))))
                 .collect(),
         );
     }

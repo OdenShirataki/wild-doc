@@ -7,7 +7,6 @@ use maybe_xml::{
     scanner::{Scanner, State},
     token::{self, prop::Attributes},
 };
-use parking_lot::RwLock;
 
 use crate::xml_util;
 
@@ -132,13 +131,11 @@ impl Parser {
                                 let mut vars = HashMap::new();
                                 vars.insert(
                                     var.to_string().into_bytes(),
-                                    Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
+                                    Arc::new(WildDocValue::from(value.clone())), //TODO Arc clone?
                                 );
                                 vars.insert(
                                     key_name.to_string().into_bytes(),
-                                    Arc::new(RwLock::new(WildDocValue::from(serde_json::json!(
-                                        key
-                                    )))),
+                                    Arc::new(WildDocValue::from(serde_json::json!(key))),
                                 );
                                 self.state.stack().lock().push(vars);
                                 r.extend(self.parse(xml).await?);
@@ -149,7 +146,7 @@ impl Parser {
                                 let mut vars = HashMap::new();
                                 vars.insert(
                                     var.to_string().into_bytes(),
-                                    Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
+                                    Arc::new(WildDocValue::from(value.clone())), //TODO Arc clone?
                                 );
                                 self.state.stack().lock().push(vars);
                                 r.extend(self.parse(xml).await?);
@@ -165,13 +162,11 @@ impl Parser {
                                 let mut vars = HashMap::new();
                                 vars.insert(
                                     var.to_string().into_bytes(),
-                                    Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
+                                    Arc::new(WildDocValue::from(value.clone())), //TODO Arc clone?
                                 );
                                 vars.insert(
                                     key_name.to_string().into_bytes(),
-                                    Arc::new(RwLock::new(WildDocValue::from(serde_json::json!(
-                                        key
-                                    )))),
+                                    Arc::new(WildDocValue::from(serde_json::json!(key))),
                                 );
                                 key += 1;
                                 self.state.stack().lock().push(vars);
@@ -183,7 +178,7 @@ impl Parser {
                                 let mut vars = HashMap::new();
                                 vars.insert(
                                     var.to_string().into_bytes(),
-                                    Arc::new(RwLock::new(WildDocValue::from(value.clone()))),
+                                    Arc::new(WildDocValue::from(value.clone())), //TODO Arc clone?
                                 );
                                 self.state.stack().lock().push(vars);
                                 r.extend(self.parse(xml).await?);

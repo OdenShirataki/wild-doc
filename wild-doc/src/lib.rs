@@ -4,17 +4,16 @@ mod script;
 mod xml_util;
 
 pub use include::IncludeLocal;
+use indexmap::IndexMap;
 pub use semilattice_database_session::DataOption;
 
 use std::{
     collections::HashMap,
-    ops::Deref,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use anyhow::Result;
-use indexmap::IndexMap;
 use parking_lot::{Mutex, RwLock};
 
 use semilattice_database_session::SessionDatabase;
@@ -99,22 +98,20 @@ impl WildDoc {
         input_json: &[u8],
         include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
     ) -> Result<WildDocResult> {
-        let global = Arc::new(RwLock::new(WildDocValue::Object(IndexMap::new())));
+        let global = Arc::new(Mutex::new(IndexMap::new()));
 
         let state = Arc::new(WildDocState::new(
-            vec![hashbrown::HashMap::from([
-                (
-                    b"input".to_vec(),
-                    Arc::new(RwLock::new(WildDocValue::from(
-                        serde_json::from_slice(input_json).unwrap_or(serde_json::json!({})),
-                    ))),
-                ),
-                (b"global".to_vec(), Arc::clone(&global)),
-            ])],
+            vec![hashbrown::HashMap::from([(
+                b"input".to_vec(),
+                Arc::new(WildDocValue::from(
+                    serde_json::from_slice(input_json).unwrap_or(serde_json::json!({})),
+                )),
+            )])],
+            Arc::clone(&global),
             self.cache_dir.clone(),
             include_adaptor,
         ));
-        
+
         let body = tokio::runtime::Runtime::new()?.block_on(
             Parser::new(
                 Arc::clone(&self.database),
@@ -124,11 +121,7 @@ impl WildDoc {
             .parse(xml),
         )?;
 
-        let options = match global.read().deref() {
-            WildDocValue::Object(o) => o.get("result_options"),
-            _ => None,
-        }
-        .cloned();
+        let options = global.lock().get("result_options").cloned();
         Ok(WildDocResult { body, options })
     }
     pub fn run(&mut self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {

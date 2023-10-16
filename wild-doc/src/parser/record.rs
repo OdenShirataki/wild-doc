@@ -5,7 +5,6 @@ use std::{
 
 use hashbrown::HashMap;
 use indexmap::IndexMap;
-use parking_lot::RwLock;
 use semilattice_database_session::{Activity, CollectionRow, Uuid};
 use wild_doc_script::WildDocValue;
 
@@ -300,10 +299,7 @@ impl Parser {
                         }
                     }
                 }
-                json.insert(
-                    var.to_string().into_bytes(),
-                    Arc::new(RwLock::new(WildDocValue::Object(inner))),
-                );
+                json.insert(var.to_string().into_bytes(), Arc::new(WildDocValue::Object(inner)));
             }
         }
         self.state.stack().lock().push(json);

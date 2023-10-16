@@ -78,7 +78,7 @@ def v(data):
                     "",
                 )?
                 .getattr("v")?
-                .call1((v.read().to_string(),))?
+                .call1((v.to_string(),))?
                 .extract();
             }
         }

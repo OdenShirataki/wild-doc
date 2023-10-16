@@ -4,7 +4,6 @@ use std::{ops::Deref, sync::Arc};
 
 use hashbrown::HashMap;
 use indexmap::IndexMap;
-use parking_lot::RwLock;
 use semilattice_database_session::{search::Search, Order, OrderKey};
 
 use self::custom_sort::WdCustomSort;
@@ -87,7 +86,7 @@ impl Parser {
 
                     vars.insert(
                         var.to_string().into_bytes(),
-                        Arc::new(RwLock::new(WildDocValue::Object(IndexMap::from([
+                        Arc::new(WildDocValue::Object(IndexMap::from([
                             (
                                 "collection_id".to_owned(),
                                 WildDocValue::Number(serde_json::Number::from(collection_id.get())),
@@ -97,7 +96,7 @@ impl Parser {
                                 "len".to_owned(),
                                 WildDocValue::Number(serde_json::Number::from(len)),
                             ),
-                        ])))),
+                        ]))),
                     );
                 }
             }

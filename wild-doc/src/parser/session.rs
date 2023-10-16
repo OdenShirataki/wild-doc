@@ -1,7 +1,6 @@
 use std::{borrow::Cow, sync::Arc};
 
 use hashbrown::HashMap;
-use parking_lot::RwLock;
 use serde_json::json;
 
 use wild_doc_script::WildDocValue;
@@ -19,7 +18,7 @@ impl Parser {
                 let sessions = self.database.read().sessions();
                 json.insert(
                     var.to_string().into_bytes(),
-                    Arc::new(RwLock::new(WildDocValue::from(json!(sessions)))),
+                    Arc::new(WildDocValue::from(json!(sessions))),
                 );
             }
         }
@@ -98,15 +97,13 @@ impl Parser {
             if let Some(cursor) = session_state.session.sequence_cursor() {
                 json.insert(
                     str_max.to_string().into_bytes(),
-                    Arc::new(RwLock::new(WildDocValue::Number(serde_json::Number::from(
-                        cursor.max,
-                    )))),
+                    Arc::new(WildDocValue::Number(serde_json::Number::from(cursor.max))),
                 );
                 json.insert(
                     str_current.to_string().into_bytes(),
-                    Arc::new(RwLock::new(WildDocValue::Number(serde_json::Number::from(
+                    Arc::new(WildDocValue::Number(serde_json::Number::from(
                         cursor.current,
-                    )))),
+                    ))),
                 );
             }
         }

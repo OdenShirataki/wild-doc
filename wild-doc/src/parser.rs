@@ -370,7 +370,7 @@ impl Parser {
                 | State::ScannedCdata(pos)
                 | State::ScannedComment(pos)
                 | State::ScannedDeclaration(pos) => {
-                    r.extend(xml[..pos].as_ref());
+                    r.extend(&xml[..pos]);
                     xml = &xml[pos..];
                 }
                 State::ScanningCharacters => {

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use hashbrown::HashMap;
 
-use parking_lot::RwLock;
 use wild_doc_script::WildDocValue;
 
 use super::{AttributeMap, Parser};
@@ -16,14 +15,14 @@ impl Parser {
             if var != "" {
                 vars.insert(
                     var.to_string().into_bytes(),
-                    Arc::new(RwLock::new(WildDocValue::Array(
+                    Arc::new(WildDocValue::Array(
                         self.database
                             .read()
                             .collections()
                             .iter()
                             .map(|v| WildDocValue::String(v.to_owned()))
                             .collect(),
-                    ))),
+                    )),
                 );
             }
         }

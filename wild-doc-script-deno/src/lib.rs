@@ -1,6 +1,6 @@
 pub mod module_loader;
 
-use std::{ffi::c_void, ops::Deref, path::Path, sync::Arc};
+use std::{ffi::c_void, path::Path, sync::Arc};
 
 use deno_runtime::{
     deno_core::{self, anyhow::Result, serde_v8, ModuleSpecifier},
@@ -8,7 +8,8 @@ use deno_runtime::{
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
 };
-use parking_lot::{Mutex, RwLock};
+use indexmap::IndexMap;
+use parking_lot::Mutex;
 
 use wild_doc_script::{
     async_trait, serde_json, IncludeAdaptor, VarsStack, WildDocScript, WildDocState, WildDocValue,
@@ -18,6 +19,7 @@ use module_loader::WdModuleLoader;
 
 pub struct Deno {
     worker: Mutex<MainWorker>,
+    _state: Arc<WildDocState>,
 }
 
 #[async_trait(?Send)]
@@ -76,25 +78,40 @@ impl WildDocScript for Deno {
                 |scope: &mut v8::HandleScope,
                  args: v8::FunctionCallbackArguments,
                  mut retval: v8::ReturnValue| {
-                    if let Some(stack) = v8::String::new(scope, "wd.stack")
-                        .and_then(|code| v8::Script::compile(scope, code, None))
-                        .and_then(|v| v.run(scope))
-                    {
-                        let stack = unsafe {
-                            &*(v8::Local::<v8::External>::cast(stack).value()
-                                as *const RwLock<VarsStack>)
-                        };
-                        let key = args
-                            .get(0)
-                            .to_string(scope)
-                            .unwrap()
-                            .to_rust_string_lossy(scope);
-                        for stack in stack.read().iter().rev() {
-                            if let Some(v) = stack.get(key.as_bytes()) {
-                                if let Ok(r) = serde_v8::to_v8(scope, v.read().deref()) {
-                                    retval.set(r.into());
+                    let key = args
+                        .get(0)
+                        .to_string(scope)
+                        .unwrap()
+                        .to_rust_string_lossy(scope);
+                    if key == "global" {
+                        if let Some(global) = v8::String::new(scope, "wd.global")
+                            .and_then(|code| v8::Script::compile(scope, code, None))
+                            .and_then(|v| v.run(scope))
+                        {
+                            let global = unsafe {
+                                &*(v8::Local::<v8::External>::cast(global).value()
+                                    as *const Mutex<IndexMap<String, WildDocValue>>)
+                            };
+                            if let Ok(r) = serde_v8::to_v8(scope, global.lock().to_owned()) {
+                                retval.set(r.into());
+                            }
+                        }
+                    } else {
+                        if let Some(stack) = v8::String::new(scope, "wd.stack")
+                            .and_then(|code| v8::Script::compile(scope, code, None))
+                            .and_then(|v| v.run(scope))
+                        {
+                            let stack = unsafe {
+                                &*(v8::Local::<v8::External>::cast(stack).value()
+                                    as *const Mutex<VarsStack>)
+                            };
+                            for stack in stack.lock().iter().rev() {
+                                if let Some(v) = stack.get(key.as_bytes()) {
+                                    if let Ok(r) = serde_v8::to_v8(scope, v) {
+                                        retval.set(r.into());
+                                    }
+                                    break;
                                 }
-                                break;
                             }
                         }
                     }
@@ -107,6 +124,7 @@ impl WildDocScript for Deno {
                 Some(v8str_get_contents),
                 Some(v8func_get_contents),
                 Some(v8str_stack),
+                Some(v8str_global),
                 Some(v8str_v),
                 Some(v8func_v),
             ) = (
@@ -118,6 +136,7 @@ impl WildDocScript for Deno {
                 v8::String::new(scope, "get_contents"),
                 func_get_contents,
                 v8::String::new(scope, "stack"),
+                v8::String::new(scope, "global"),
                 v8::String::new(scope, "v"),
                 func_v,
             ) {
@@ -144,6 +163,18 @@ impl WildDocScript for Deno {
                     PropertyAttribute::READ_ONLY,
                 );
 
+                let v8ext_global = v8::External::new(
+                    scope,
+                    state.global().as_ref() as *const Mutex<IndexMap<String, WildDocValue>>
+                        as *mut c_void,
+                );
+                wd.define_own_property(
+                    scope,
+                    v8str_global.into(),
+                    v8ext_global.into(),
+                    PropertyAttribute::READ_ONLY,
+                );
+
                 wd.define_own_property(
                     scope,
                     v8str_get_contents.into(),
@@ -160,6 +191,7 @@ impl WildDocScript for Deno {
         }
         Ok(Self {
             worker: Mutex::new(worker),
+            _state: Arc::clone(&state),
         })
     }
 
