@@ -1,7 +1,6 @@
 use std::{borrow::Cow, path::Path, sync::Arc};
 
 use anyhow::Result;
-use hashbrown::HashMap;
 
 use maybe_xml::{
     scanner::{Scanner, State},
@@ -128,27 +127,25 @@ impl Parser {
                     WildDocValue::Object(map) => {
                         if let Some(Some(key_name)) = attributes.get(b"key".as_ref()) {
                             for (key, value) in map {
-                                let mut vars = HashMap::new();
-                                vars.insert(
-                                    var.to_string().into_bytes(),
-                                    Arc::new(WildDocValue::from(value.clone())), //TODO Arc clone?
+                                self.state.stack().lock().push(
+                                    [
+                                        (var.to_string().into_bytes(), Arc::new(value.clone())),
+                                        (
+                                            key_name.to_string().into_bytes(),
+                                            Arc::new(serde_json::json!(key).into()),
+                                        ),
+                                    ]
+                                    .into(),
                                 );
-                                vars.insert(
-                                    key_name.to_string().into_bytes(),
-                                    Arc::new(WildDocValue::from(serde_json::json!(key))),
-                                );
-                                self.state.stack().lock().push(vars);
                                 r.extend(self.parse(xml).await?);
                                 self.state.stack().lock().pop();
                             }
                         } else {
                             for (_, value) in map {
-                                let mut vars = HashMap::new();
-                                vars.insert(
-                                    var.to_string().into_bytes(),
-                                    Arc::new(WildDocValue::from(value.clone())), //TODO Arc clone?
+                                self.state.stack().lock().push(
+                                    [(var.to_string().into_bytes(), Arc::new(value.clone()))]
+                                        .into(),
                                 );
-                                self.state.stack().lock().push(vars);
                                 r.extend(self.parse(xml).await?);
                                 self.state.stack().lock().pop();
                             }
@@ -159,28 +156,26 @@ impl Parser {
                         if let Some(Some(key_name)) = key_name {
                             let mut key = 0;
                             for value in vec {
-                                let mut vars = HashMap::new();
-                                vars.insert(
-                                    var.to_string().into_bytes(),
-                                    Arc::new(WildDocValue::from(value.clone())), //TODO Arc clone?
-                                );
-                                vars.insert(
-                                    key_name.to_string().into_bytes(),
-                                    Arc::new(WildDocValue::from(serde_json::json!(key))),
-                                );
                                 key += 1;
-                                self.state.stack().lock().push(vars);
+                                self.state.stack().lock().push(
+                                    [
+                                        (var.to_string().into_bytes(), Arc::new(value.clone())),
+                                        (
+                                            key_name.to_string().into_bytes(),
+                                            Arc::new(serde_json::json!(key).into()),
+                                        ),
+                                    ]
+                                    .into(),
+                                );
                                 r.extend(self.parse(xml).await?);
                                 self.state.stack().lock().pop();
                             }
                         } else {
                             for value in vec {
-                                let mut vars = HashMap::new();
-                                vars.insert(
-                                    var.to_string().into_bytes(),
-                                    Arc::new(WildDocValue::from(value.clone())), //TODO Arc clone?
+                                self.state.stack().lock().push(
+                                    [(var.to_string().into_bytes(), Arc::new(value.clone()))]
+                                        .into(),
                                 );
-                                self.state.stack().lock().push(vars);
                                 r.extend(self.parse(xml).await?);
                                 self.state.stack().lock().pop();
                             }

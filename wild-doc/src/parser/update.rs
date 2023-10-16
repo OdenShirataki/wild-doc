@@ -9,7 +9,6 @@ use async_recursion::async_recursion;
 use base64::{engine::general_purpose, Engine};
 use chrono::DateTime;
 use hashbrown::HashMap;
-use indexmap::IndexMap;
 use maybe_xml::{
     scanner::{Scanner, State},
     token,
@@ -89,33 +88,39 @@ impl Parser {
                 if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
                     self.register_global(
                         name.to_str().as_ref(),
-                        &WildDocValue::Object(IndexMap::from([
-                            (
-                                "commit_rows".to_owned(),
-                                WildDocValue::Array(
-                                    commit_rows
-                                        .iter()
-                                        .map(|v| {
-                                            WildDocValue::Object(IndexMap::from([
-                                                (
-                                                    "collection_id".to_owned(),
-                                                    WildDocValue::from(serde_json::Number::from(
-                                                        v.collection_id().get(),
-                                                    )),
-                                                ),
-                                                (
-                                                    "row".to_owned(),
-                                                    WildDocValue::from(serde_json::Number::from(
-                                                        v.row().get(),
-                                                    )),
-                                                ),
-                                            ]))
-                                        })
-                                        .collect(),
+                        &WildDocValue::Object(
+                            [
+                                (
+                                    "commit_rows".to_owned(),
+                                    WildDocValue::Array(
+                                        commit_rows
+                                            .iter()
+                                            .map(|v| {
+                                                WildDocValue::Object(
+                                                    [
+                                                        (
+                                                            "collection_id".to_owned(),
+                                                            serde_json::Number::from(
+                                                                v.collection_id().get(),
+                                                            )
+                                                            .into(),
+                                                        ),
+                                                        (
+                                                            "row".to_owned(),
+                                                            serde_json::Number::from(v.row().get())
+                                                                .into(),
+                                                        ),
+                                                    ]
+                                                    .into(),
+                                                )
+                                            })
+                                            .collect(),
+                                    ),
                                 ),
-                            ),
-                            ("session_rows".to_owned(), WildDocValue::Array(vec![])),
-                        ])),
+                                ("session_rows".to_owned(), WildDocValue::Array(vec![])),
+                            ]
+                            .into(),
+                        ),
                     );
                 }
             } else {
@@ -138,60 +143,69 @@ impl Parser {
                     if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
                         self.register_global(
                             name.to_str().as_ref(),
-                            &WildDocValue::Object(IndexMap::from([
-                                (
-                                    "commit_rows".to_owned(),
-                                    WildDocValue::Array(
-                                        commit_rows
-                                            .iter()
-                                            .map(|v| {
-                                                WildDocValue::Object(IndexMap::from([
-                                                    (
-                                                        "collection_id".to_owned(),
-                                                        WildDocValue::from(
-                                                            serde_json::Number::from(
-                                                                v.collection_id().get(),
+                            &WildDocValue::Object(
+                                [
+                                    (
+                                        "commit_rows".to_owned(),
+                                        WildDocValue::Array(
+                                            commit_rows
+                                                .iter()
+                                                .map(|v| {
+                                                    WildDocValue::Object(
+                                                        [
+                                                            (
+                                                                "collection_id".to_owned(),
+                                                                serde_json::Number::from(
+                                                                    v.collection_id().get(),
+                                                                )
+                                                                .into(),
                                                             ),
-                                                        ),
-                                                    ),
-                                                    (
-                                                        "row".to_owned(),
-                                                        WildDocValue::from(
-                                                            serde_json::Number::from(v.row().get()),
-                                                        ),
-                                                    ),
-                                                ]))
-                                            })
-                                            .collect(),
-                                    ),
-                                ),
-                                (
-                                    "session_rows".to_owned(),
-                                    WildDocValue::Array(
-                                        session_rows
-                                            .iter()
-                                            .map(|v| {
-                                                WildDocValue::Object(IndexMap::from([
-                                                    (
-                                                        "collection_id".to_owned(),
-                                                        WildDocValue::from(
-                                                            serde_json::Number::from(
-                                                                v.collection_id().get(),
+                                                            (
+                                                                "row".to_owned(),
+                                                                serde_json::Number::from(
+                                                                    v.row().get(),
+                                                                )
+                                                                .into(),
                                                             ),
-                                                        ),
-                                                    ),
-                                                    (
-                                                        "row".to_owned(),
-                                                        WildDocValue::from(
-                                                            serde_json::Number::from(v.row().get()),
-                                                        ),
-                                                    ),
-                                                ]))
-                                            })
-                                            .collect(),
+                                                        ]
+                                                        .into(),
+                                                    )
+                                                })
+                                                .collect(),
+                                        ),
                                     ),
-                                ),
-                            ])),
+                                    (
+                                        "session_rows".to_owned(),
+                                        WildDocValue::Array(
+                                            session_rows
+                                                .iter()
+                                                .map(|v| {
+                                                    WildDocValue::Object(
+                                                        [
+                                                            (
+                                                                "collection_id".to_owned(),
+                                                                serde_json::Number::from(
+                                                                    v.collection_id().get(),
+                                                                )
+                                                                .into(),
+                                                            ),
+                                                            (
+                                                                "row".to_owned(),
+                                                                serde_json::Number::from(
+                                                                    v.row().get(),
+                                                                )
+                                                                .into(),
+                                                            ),
+                                                        ]
+                                                        .into(),
+                                                    )
+                                                })
+                                                .collect(),
+                                        ),
+                                    ),
+                                ]
+                                .into(),
+                            ),
                         );
                     }
                 }

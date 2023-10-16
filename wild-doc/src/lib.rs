@@ -101,12 +101,15 @@ impl WildDoc {
         let global = Arc::new(Mutex::new(IndexMap::new()));
 
         let state = Arc::new(WildDocState::new(
-            vec![hashbrown::HashMap::from([(
+            vec![[(
                 b"input".to_vec(),
-                Arc::new(WildDocValue::from(
-                    serde_json::from_slice(input_json).unwrap_or(serde_json::json!({})),
-                )),
-            )])],
+                Arc::new(
+                    serde_json::from_slice(input_json)
+                        .unwrap_or(serde_json::json!({}))
+                        .into(),
+                ),
+            )]
+            .into()],
             Arc::clone(&global),
             self.cache_dir.clone(),
             include_adaptor,

@@ -26,10 +26,7 @@ impl Parser {
                     self.database.read().collection_id(&collection.to_string()),
                     row.to_string().parse::<NonZeroI64>(),
                 ) {
-                    inner.insert(
-                        "row".to_owned(),
-                        WildDocValue::Number(serde_json::Number::from(row.get())),
-                    );
+                    inner.insert("row".to_owned(), WildDocValue::Number(row.get().into()));
                     let mut find_session = false;
                     for i in (0..self.sessions.len()).rev() {
                         if let Some(temporary_collection) = self
@@ -52,15 +49,11 @@ impl Parser {
                                     ),
                                     (
                                         "term_begin".to_owned(),
-                                        WildDocValue::Number(serde_json::Number::from(
-                                            entity.term_begin(),
-                                        )),
+                                        WildDocValue::Number(entity.term_begin().into()),
                                     ),
                                     (
                                         "term_end".to_owned(),
-                                        WildDocValue::Number(serde_json::Number::from(
-                                            entity.term_end(),
-                                        )),
+                                        WildDocValue::Number(entity.term_end().into()),
                                     ),
                                     (
                                         "depends".to_owned(),
@@ -71,24 +64,25 @@ impl Parser {
                                                 .map(|d| {
                                                     (
                                                         d.key().to_string(),
-                                                        WildDocValue::Object(IndexMap::from([
-                                                            (
-                                                                "collection_id".to_owned(),
-                                                                WildDocValue::Number(
-                                                                    serde_json::Number::from(
-                                                                        d.collection_id().get(),
+                                                        WildDocValue::Object(
+                                                            [
+                                                                (
+                                                                    "collection_id".to_owned(),
+                                                                    WildDocValue::Number(
+                                                                        d.collection_id()
+                                                                            .get()
+                                                                            .into(),
                                                                     ),
                                                                 ),
-                                                            ),
-                                                            (
-                                                                "row".to_owned(),
-                                                                WildDocValue::Number(
-                                                                    serde_json::Number::from(
-                                                                        d.row().get(),
+                                                                (
+                                                                    "row".to_owned(),
+                                                                    WildDocValue::Number(
+                                                                        d.row().get().into(),
                                                                     ),
                                                                 ),
-                                                            ),
-                                                        ])),
+                                                            ]
+                                                            .into(),
+                                                        ),
                                                     )
                                                 })
                                                 .collect(),
@@ -178,19 +172,19 @@ impl Parser {
                             if let Some(term_begin) = collection.term_begin(row) {
                                 inner.insert(
                                     "term_begin".to_owned(),
-                                    WildDocValue::Number(serde_json::Number::from(term_begin)),
+                                    WildDocValue::Number(term_begin.into()),
                                 );
                             }
                             if let Some(term_end) = collection.term_end(row) {
                                 inner.insert(
                                     "term_end".to_owned(),
-                                    WildDocValue::Number(serde_json::Number::from(term_end)),
+                                    WildDocValue::Number(term_end.into()),
                                 );
                             }
                             if let Some(last_updated) = collection.last_updated(row) {
                                 inner.insert(
                                     "last_updated".to_owned(),
-                                    WildDocValue::Number(serde_json::Number::from(last_updated)),
+                                    WildDocValue::Number(last_updated.into()),
                                 );
                             }
                             inner.extend([
@@ -208,32 +202,34 @@ impl Parser {
                                                     |collection| {
                                                         (
                                                             d.key().to_string(),
-                                                            WildDocValue::Object(IndexMap::from([
-                                                                (
-                                                                    "collection_id".to_owned(),
-                                                                    WildDocValue::Number(
-                                                                        serde_json::Number::from(
-                                                                            collection_id.get(),
+                                                            WildDocValue::Object(
+                                                                [
+                                                                    (
+                                                                        "collection_id".to_owned(),
+                                                                        WildDocValue::Number(
+                                                                            collection_id
+                                                                                .get()
+                                                                                .into(),
                                                                         ),
                                                                     ),
-                                                                ),
-                                                                (
-                                                                    "collection_name".to_owned(),
-                                                                    WildDocValue::String(
-                                                                        collection
-                                                                            .name()
+                                                                    (
+                                                                        "collection_name"
                                                                             .to_owned(),
-                                                                    ),
-                                                                ),
-                                                                (
-                                                                    "row".to_owned(),
-                                                                    WildDocValue::Number(
-                                                                        serde_json::Number::from(
-                                                                            d.row().get(),
+                                                                        WildDocValue::String(
+                                                                            collection
+                                                                                .name()
+                                                                                .to_owned(),
                                                                         ),
                                                                     ),
-                                                                ),
-                                                            ])),
+                                                                    (
+                                                                        "row".to_owned(),
+                                                                        WildDocValue::Number(
+                                                                            d.row().get().into(),
+                                                                        ),
+                                                                    ),
+                                                                ]
+                                                                .into(),
+                                                            ),
                                                         )
                                                     },
                                                 )
@@ -299,7 +295,10 @@ impl Parser {
                         }
                     }
                 }
-                json.insert(var.to_string().into_bytes(), Arc::new(WildDocValue::Object(inner)));
+                json.insert(
+                    var.to_string().into_bytes(),
+                    Arc::new(WildDocValue::Object(inner)),
+                );
             }
         }
         self.state.stack().lock().push(json);

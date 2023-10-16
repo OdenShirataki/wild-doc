@@ -18,7 +18,7 @@ impl Parser {
                 let sessions = self.database.read().sessions();
                 json.insert(
                     var.to_string().into_bytes(),
-                    Arc::new(WildDocValue::from(json!(sessions))),
+                    Arc::new(json!(sessions).into()),
                 );
             }
         }
@@ -97,13 +97,11 @@ impl Parser {
             if let Some(cursor) = session_state.session.sequence_cursor() {
                 json.insert(
                     str_max.to_string().into_bytes(),
-                    Arc::new(WildDocValue::Number(serde_json::Number::from(cursor.max))),
+                    Arc::new(WildDocValue::Number(cursor.max.into())),
                 );
                 json.insert(
                     str_current.to_string().into_bytes(),
-                    Arc::new(WildDocValue::Number(serde_json::Number::from(
-                        cursor.current,
-                    ))),
+                    Arc::new(WildDocValue::Number(cursor.current.into())),
                 );
             }
         }

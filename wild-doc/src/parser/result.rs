@@ -3,7 +3,6 @@ mod custom_sort;
 use std::{ops::Deref, sync::Arc};
 
 use hashbrown::HashMap;
-use indexmap::IndexMap;
 use semilattice_database_session::{search::Search, Order, OrderKey};
 
 use self::custom_sort::WdCustomSort;
@@ -48,12 +47,13 @@ impl Parser {
                                     .await
                                     .iter()
                                     .map(|row| {
-                                        WildDocValue::Object(IndexMap::from([(
-                                            "row".to_owned(),
-                                            WildDocValue::Number(serde_json::Number::from(
-                                                row.get(),
-                                            )),
-                                        )]))
+                                        WildDocValue::Object(
+                                            [(
+                                                "row".to_owned(),
+                                                WildDocValue::Number(row.get().into()),
+                                            )]
+                                            .into(),
+                                        )
                                     })
                                     .collect();
                                 break;
@@ -74,10 +74,9 @@ impl Parser {
                         }
                         .iter()
                         .map(|row| {
-                            WildDocValue::Object(IndexMap::from([(
-                                "row".to_owned(),
-                                WildDocValue::Number(serde_json::Number::from(row.get())),
-                            )]))
+                            WildDocValue::Object(
+                                [("row".to_owned(), WildDocValue::Number(row.get().into()))].into(),
+                            )
                         })
                         .collect();
                     }
@@ -86,17 +85,17 @@ impl Parser {
 
                     vars.insert(
                         var.to_string().into_bytes(),
-                        Arc::new(WildDocValue::Object(IndexMap::from([
-                            (
-                                "collection_id".to_owned(),
-                                WildDocValue::Number(serde_json::Number::from(collection_id.get())),
-                            ),
-                            ("rows".to_owned(), WildDocValue::Array(rows)),
-                            (
-                                "len".to_owned(),
-                                WildDocValue::Number(serde_json::Number::from(len)),
-                            ),
-                        ]))),
+                        Arc::new(WildDocValue::Object(
+                            [
+                                (
+                                    "collection_id".to_owned(),
+                                    WildDocValue::Number(collection_id.get().into()),
+                                ),
+                                ("rows".to_owned(), WildDocValue::Array(rows)),
+                                ("len".to_owned(), WildDocValue::Number(len.into())),
+                            ]
+                            .into(),
+                        )),
                     );
                 }
             }

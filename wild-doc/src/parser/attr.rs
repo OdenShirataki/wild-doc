@@ -80,7 +80,7 @@ impl Parser {
                         let value = xml_util::quot_unescape(org_value);
                         if let Ok(json) = serde_json::from_str::<serde_json::Value>(value.as_str())
                         {
-                            WildDocValue::from(json)
+                            json.into()
                         } else {
                             WildDocValue::String(value)
                         }

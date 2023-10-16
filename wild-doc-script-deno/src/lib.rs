@@ -238,7 +238,7 @@ impl WildDocScript for Deno {
                 }
             } else {
                 if let Ok(serv) = serde_v8::from_v8::<serde_json::Value>(scope, v) {
-                    return Ok(WildDocValue::from(serv));
+                    return Ok(serv.into());
                 }
             }
         }
