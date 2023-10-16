@@ -31,6 +31,10 @@ impl WildDocScript for WdPy {
             let stack = PyCapsule::new(py, Arc::clone(state.stack()), Some(name))?;
             builtins.add("wdstack", stack)?;
 
+            let name = CString::new("builtins.global").unwrap();
+            let global = PyCapsule::new(py, Arc::clone(state.global()), Some(name))?;
+            builtins.add("wdglobal", global)?;
+
             Ok(())
         });
         Ok(WdPy {})
