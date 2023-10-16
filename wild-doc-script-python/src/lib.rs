@@ -1,8 +1,7 @@
-use std::{
-    ffi::CString,
-    sync::{Arc, RwLock},
-};
+use std::{ffi::CString, ops::Deref, sync::Arc};
 
+use indexmap::IndexMap;
+use parking_lot::Mutex;
 use pyo3::{
     pyfunction,
     types::{PyCapsule, PyDict, PyModule},
@@ -13,6 +12,7 @@ use wild_doc_script::{
 };
 
 pub struct WdPy {}
+
 
 #[async_trait(?Send)]
 impl WildDocScript for WdPy {
@@ -31,7 +31,7 @@ impl WildDocScript for WdPy {
             let stack = PyCapsule::new(py, Arc::clone(state.stack()), Some(name))?;
             builtins.add("wdstack", stack)?;
 
-            let name = CString::new("builtins.global").unwrap();
+            let name = CString::new("builtins.wdglobal").unwrap();
             let global = PyCapsule::new(py, Arc::clone(state.global()), Some(name))?;
             builtins.add("wdglobal", global)?;
 
@@ -66,26 +66,48 @@ impl WildDocScript for WdPy {
 #[pyo3(name = "v")]
 fn wdv(_py: Python, key: String) -> PyResult<PyObject> {
     Python::with_gil(|py| -> PyResult<PyObject> {
-        let name = CString::new("builtins.wdstack").unwrap();
-        let stack: &Arc<RwLock<VarsStack>> = unsafe { PyCapsule::import(py, name.as_ref())? };
-        for stack in stack.read().unwrap().iter().rev() {
-            if let Some(v) = stack.get(key.as_bytes()) {
-                return PyModule::from_code(
-                    py,
-                    r#"
+        if key == "global" {
+            let global: &Arc<Mutex<IndexMap<String, WildDocValue>>> =
+                unsafe { PyCapsule::import(py, CString::new("builtins.wdglobal")?.as_ref())? };
+
+            return PyModule::from_code(
+                py,
+                r#"
+            import json
+
+            def v(data):
+            return json.loads(data)
+            "#,
+                "",
+                "",
+            )?
+            .getattr("v")?
+            .call1((WildDocValue::Object(global.lock().deref().clone()).to_string(),))?
+            .extract();
+        } else {
+            let stack: &Arc<Mutex<VarsStack>> =
+                unsafe { PyCapsule::import(py, CString::new("builtins.wdstack")?.as_ref())? };
+
+            for stack in stack.lock().iter().rev() {
+                if let Some(v) = stack.get(key.as_bytes()) {
+                    return PyModule::from_code(
+                        py,
+                        r#"
 import json
 
 def v(data):
     return json.loads(data)
 "#,
-                    "",
-                    "",
-                )?
-                .getattr("v")?
-                .call1((v.to_string(),))?
-                .extract();
+                        "",
+                        "",
+                    )?
+                    .getattr("v")?
+                    .call1((v.to_string(),))?
+                    .extract();
+                }
             }
         }
+
         Ok(PyDict::new(py).into())
     })
 }
