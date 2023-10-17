@@ -98,7 +98,7 @@ impl WildDoc {
         input_json: &[u8],
         include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
     ) -> Result<WildDocResult> {
-        let global = Arc::new(Mutex::new(IndexMap::new()));
+        let global = Mutex::new(IndexMap::new());
 
         let state = Arc::new(WildDocState::new(
             vec![[(
@@ -110,21 +110,24 @@ impl WildDoc {
                 ),
             )]
             .into()],
-            Arc::clone(&global),
+            global,
             self.cache_dir.clone(),
             include_adaptor,
         ));
 
-        let body = tokio::runtime::Runtime::new()?.block_on(
-            Parser::new(
-                Arc::clone(&self.database),
-                self.setup_scripts(Arc::clone(&state))?,
-                state,
-            )?
-            .parse(xml),
+        let mut parser = Parser::new(
+            Arc::clone(&self.database),
+            self.setup_scripts(Arc::clone(&state))?,
+            Arc::clone(&state),
         )?;
+        let body = tokio::runtime::Runtime::new()?.block_on(parser.parse(xml))?;
 
-        let options = global.lock().get("result_options").cloned();
+        let options = parser
+            .state()
+            .global()
+            .lock()
+            .get("result_options")
+            .cloned();
         Ok(WildDocResult { body, options })
     }
     pub fn run(&mut self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {

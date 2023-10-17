@@ -57,6 +57,10 @@ impl Parser {
         })
     }
 
+    pub fn state(&self) -> &Arc<WildDocState> {
+        &self.state
+    }
+
     #[async_recursion(?Send)]
     async fn parse_wd_start_or_empty_tag(
         &mut self,
