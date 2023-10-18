@@ -404,7 +404,7 @@ impl Parser {
                 State::ScannedStartTag(pos) => {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
-                    let token_collection = token::borrowed::StartTag::from(token_bytes);
+                    let token_collection = token::StartTag::from(token_bytes);
                     if token_collection.name().as_bytes() == b"collection" {
                         let token_attributes =
                             self.parse_attibutes(token_collection.attributes()).await;
@@ -426,7 +426,7 @@ impl Parser {
 
                                         let token_bytes = &xml[..pos];
                                         xml = &xml[pos..];
-                                        let token = token::borrowed::StartTag::from(token_bytes);
+                                        let token = token::StartTag::from(token_bytes);
                                         let attributes =
                                             self.parse_attibutes(token.attributes()).await;
                                         let name = token.name();
@@ -483,8 +483,7 @@ impl Parser {
                                     State::ScannedEmptyElementTag(pos) => {
                                         let token_bytes = &xml[..pos];
                                         xml = &xml[pos..];
-                                        let token =
-                                            token::borrowed::EmptyElementTag::from(token_bytes);
+                                        let token = token::EmptyElementTag::from(token_bytes);
                                         let name = token.name();
                                         match name.as_bytes() {
                                             b"depend" => {
@@ -498,9 +497,7 @@ impl Parser {
                                     State::ScannedEndTag(pos) => {
                                         let token_bytes = &xml[..pos];
                                         xml = &xml[pos..];
-                                        if token::borrowed::EndTag::from(token_bytes)
-                                            .name()
-                                            .as_bytes()
+                                        if token::EndTag::from(token_bytes).name().as_bytes()
                                             == b"collection"
                                         {
                                             break;

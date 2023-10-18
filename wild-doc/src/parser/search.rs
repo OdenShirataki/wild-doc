@@ -123,7 +123,7 @@ impl Parser {
                 State::ScannedStartTag(pos) => {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
-                    let token = token::borrowed::StartTag::from(token_bytes);
+                    let token = token::StartTag::from(token_bytes);
                     let name = token.name();
                     if let None = name.namespace_prefix() {
                         match name.local().as_bytes() {
@@ -159,7 +159,7 @@ impl Parser {
                 State::ScannedEmptyElementTag(pos) => {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
-                    let token = token::borrowed::EmptyElementTag::from(token_bytes);
+                    let token = token::EmptyElementTag::from(token_bytes);
                     let attributes = self.parse_attibutes(token.attributes()).await;
                     let name = token.name();
                     match name.local().as_bytes() {
@@ -175,7 +175,7 @@ impl Parser {
                     }
                 }
                 State::ScannedEndTag(pos) => {
-                    let token = token::borrowed::EndTag::from(&xml[..pos]);
+                    let token = token::EndTag::from(&xml[..pos]);
                     xml = &xml[pos..];
                     match token.name().as_bytes() {
                         b"wd:search" | b"narrow" | b"wide" => {

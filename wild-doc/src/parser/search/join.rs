@@ -37,7 +37,7 @@ impl Parser {
                 State::ScannedEmptyElementTag(pos) => {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
-                    let token = token::borrowed::EmptyElementTag::from(token_bytes);
+                    let token = token::EmptyElementTag::from(token_bytes);
                     let name = token.name();
                     match name.local().as_bytes() {
                         b"pends" => {
@@ -49,7 +49,7 @@ impl Parser {
                     }
                 }
                 State::ScannedEndTag(pos) => {
-                    let token = token::borrowed::EndTag::from(&xml[..pos]);
+                    let token = token::EndTag::from(&xml[..pos]);
                     xml = &xml[pos..];
                     match token.name().as_bytes() {
                         b"join" => {

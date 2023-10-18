@@ -65,7 +65,7 @@ impl Parser {
                 State::ScannedStartTag(pos) => {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
-                    let token = token::borrowed::StartTag::from(token_bytes);
+                    let token = token::StartTag::from(token_bytes);
                     let name = token.name();
 
                     match name.as_bytes() {

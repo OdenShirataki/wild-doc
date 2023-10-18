@@ -133,7 +133,7 @@ impl Parser {
             match state {
                 State::ScannedProcessingInstruction(pos) => {
                     let token_bytes = &xml[..pos];
-                    let token = token::borrowed::ProcessingInstruction::from(token_bytes);
+                    let token = token::ProcessingInstruction::from(token_bytes);
                     let target = token.target();
                     if let Some(script) = self.scripts.get_mut(target.to_str()?) {
                         if let Some(i) = token.instructions() {
@@ -155,7 +155,7 @@ impl Parser {
                 State::ScannedStartTag(pos) => {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
-                    let token = token::borrowed::StartTag::from(token_bytes);
+                    let token = token::StartTag::from(token_bytes);
                     let name = token.name();
                     if Self::is_wd_tag(&name) {
                         if let Some(parsed) = self
@@ -292,7 +292,7 @@ impl Parser {
                 State::ScannedEmptyElementTag(pos) => {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
-                    let token = token::borrowed::EmptyElementTag::from(token_bytes);
+                    let token = token::EmptyElementTag::from(token_bytes);
                     let name = token.name();
                     if name.as_bytes() == b"wd:tag" {
                         let attributes = self.parse_attibutes(token.attributes()).await;
@@ -327,7 +327,7 @@ impl Parser {
                 State::ScannedEndTag(pos) => {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
-                    let token = token::borrowed::EndTag::from(token_bytes);
+                    let token = token::EndTag::from(token_bytes);
                     let name = token.name();
                     if name
                         .namespace_prefix()
