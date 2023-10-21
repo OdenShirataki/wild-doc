@@ -120,7 +120,11 @@ impl WildDoc {
             self.setup_scripts(Arc::clone(&state))?,
             Arc::clone(&state),
         )?;
-        let body = tokio::runtime::Runtime::new()?.block_on(parser.parse(xml))?;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .max_blocking_threads(32)
+            .build()?;
+        let body = rt.block_on(parser.parse(xml))?;
 
         let options = parser
             .state()

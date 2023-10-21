@@ -61,11 +61,10 @@ impl Parser {
         &self.state
     }
 
-    #[async_recursion(?Send)]
     async fn parse_wd_start_or_empty_tag(
         &mut self,
         name: &[u8],
-        attributes: Option<Attributes<'async_recursion>>,
+        attributes: Option<Attributes<'_>>,
     ) -> Result<Option<Vec<u8>>> {
         match name {
             b"print" => {
