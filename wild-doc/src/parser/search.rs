@@ -144,13 +144,8 @@ impl Parser {
                                 }
                             }
                             b"join" => {
-                                xml = self
-                                    .join(
-                                        xml,
-                                        &self.parse_attibutes(token.attributes()).await,
-                                        &mut join,
-                                    )
-                                    .await;
+                                let attributes = self.parse_attibutes(token.attributes()).await;
+                                xml = self.join(xml, &attributes, &mut join).await;
                             }
                             _ => {}
                         }

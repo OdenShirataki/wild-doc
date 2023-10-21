@@ -18,7 +18,7 @@ use wild_doc_script::{
 use module_loader::WdModuleLoader;
 
 pub struct Deno {
-    worker: Mutex<MainWorker>,
+    worker: MainWorker,
 }
 
 fn wdmap2v8obj<'s>(
@@ -231,27 +231,24 @@ impl WildDocScript for Deno {
                 );
             }
         }
-        Ok(Self {
-            worker: Mutex::new(worker),
-        })
+        Ok(Self { worker })
     }
 
-    async fn evaluate_module(&self, file_name: &str, src: &[u8]) -> Result<()> {
-        let mut worker = self.worker.lock();
-        let mod_id = worker
+    async fn evaluate_module(&mut self, file_name: &str, src: &[u8]) -> Result<()> {
+        let mod_id = self
+            .worker
             .js_runtime
             .load_side_module(
                 &(ModuleSpecifier::parse(&("wd://script".to_owned() + file_name))?),
                 Some(String::from_utf8(src.to_vec())?.into()),
             )
             .await?;
-        worker.evaluate_module(mod_id).await?;
+        self.worker.evaluate_module(mod_id).await?;
         Ok(())
     }
 
-    async fn eval(&self, code: &[u8]) -> Result<WildDocValue> {
-        let mut worker = self.worker.lock();
-        let scope = &mut worker.js_runtime.handle_scope();
+    async fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
+        let scope = &mut self.worker.js_runtime.handle_scope();
 
         let code = std::str::from_utf8(code)?;
 
