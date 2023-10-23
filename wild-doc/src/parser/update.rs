@@ -88,13 +88,13 @@ impl Parser {
                 if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
                     self.register_global(
                         name.to_str().as_ref(),
-                        &WildDocValue::Object(
+                        WildDocValue::Object(
                             [
                                 (
                                     "commit_rows".to_owned(),
                                     WildDocValue::Array(
                                         commit_rows
-                                            .iter()
+                                            .into_iter()
                                             .map(|v| {
                                                 WildDocValue::Object(
                                                     [
@@ -143,13 +143,13 @@ impl Parser {
                     if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
                         self.register_global(
                             name.to_str().as_ref(),
-                            &WildDocValue::Object(
+                            WildDocValue::Object(
                                 [
                                     (
                                         "commit_rows".to_owned(),
                                         WildDocValue::Array(
                                             commit_rows
-                                                .iter()
+                                                .into_iter()
                                                 .map(|v| {
                                                     WildDocValue::Object(
                                                         [
@@ -178,7 +178,7 @@ impl Parser {
                                         "session_rows".to_owned(),
                                         WildDocValue::Array(
                                             session_rows
-                                                .iter()
+                                                .into_iter()
                                                 .map(|v| {
                                                     WildDocValue::Object(
                                                         [

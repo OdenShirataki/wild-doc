@@ -82,7 +82,7 @@ pub(super) async fn request(
 
     let headers: HashMap<String, String> = req
         .headers()
-        .iter()
+        .into_iter()
         .map(|(k, v)| (k.to_string(), v.to_str().unwrap().to_owned()))
         .collect();
     if let Some(host) = headers.get("host") {

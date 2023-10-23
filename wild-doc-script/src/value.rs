@@ -66,7 +66,7 @@ impl std::fmt::Display for WildDocValue {
             Self::String(v) => v.fmt(f),
             Self::Array(v) => {
                 write!(f, "[")?;
-                let mut iter = v.iter();
+                let mut iter = v.into_iter();
                 if let Some(i) = iter.next() {
                     i.fmt(f)?;
                 }
@@ -78,7 +78,7 @@ impl std::fmt::Display for WildDocValue {
             }
             Self::Object(v) => {
                 write!(f, "{{")?;
-                let mut iter = v.iter();
+                let mut iter = v.into_iter();
                 if let Some((k, v)) = iter.next() {
                     write!(f, "\"{}\" : ", k)?;
                     v.fmt(f)?;

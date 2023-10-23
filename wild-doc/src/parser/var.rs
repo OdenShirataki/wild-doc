@@ -22,18 +22,15 @@ impl Parser {
     }
 
     #[inline(always)]
-    pub(crate) fn register_global(&self, name: &str, value: &WildDocValue) {
+    pub(crate) fn register_global(&self, name: &str, value: WildDocValue) {
         let mut splited: VecDeque<_> = name.split('.').collect();
         if let Some(last) = splited.pop_back() {
             if splited.len() > 0 {
                 if let Some(map) = Self::route_map(&mut self.state.global().lock(), splited) {
-                    map.insert(last.to_owned(), value.clone());
+                    map.insert(last.to_owned(), value);
                 }
             } else {
-                self.state
-                    .global()
-                    .lock()
-                    .insert(last.to_owned(), value.clone());
+                self.state.global().lock().insert(last.to_owned(), value);
             }
         }
     }
@@ -42,8 +39,8 @@ impl Parser {
     pub(super) fn local(&self, attributes: AttributeMap) {
         self.state.stack().lock().push(
             attributes
-                .iter()
-                .filter_map(|(k, v)| v.as_ref().map(|v| (k.to_vec(), Arc::clone(v))))
+                .into_iter()
+                .map(|(k, v)| (k, Arc::new(v.unwrap_or(WildDocValue::Null))))
                 .collect(),
         );
     }

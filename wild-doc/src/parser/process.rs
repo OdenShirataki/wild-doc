@@ -123,7 +123,7 @@ impl Parser {
         ) {
             let var = var.to_str();
             if var != "" {
-                match r#in.as_ref() {
+                match r#in {
                     WildDocValue::Object(map) => {
                         if let Some(Some(key_name)) = attributes.get(b"key".as_ref()) {
                             for (key, value) in map {

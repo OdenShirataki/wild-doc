@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use hashbrown::HashMap;
 use maybe_xml::token::prop::Attributes;
 use wild_doc_script::WildDocValue;
@@ -45,38 +43,76 @@ impl Parser {
         }
     }
 
+    fn script_name(name: &[u8]) -> Option<&str> {
+        let mut splited = name.split(|p| *p == b':').collect::<Vec<&[u8]>>();
+        if splited.len() >= 2 {
+            Some(unsafe { std::str::from_utf8_unchecked(splited.pop().unwrap()) })
+        } else {
+            None
+        }
+    }
     pub(super) async fn parse_attibutes(
         &mut self,
         attributes: Option<Attributes<'_>>,
     ) -> AttributeMap {
-        let mut r: AttributeMap = HashMap::new();
+        let mut r = AttributeMap::new();
+
+        let mut values_per_script = HashMap::new();
+        let mut futs_noscript = vec![];
+
         if let Some(attributes) = attributes {
             for attr in attributes.into_iter() {
                 let name = attr.name().as_bytes();
                 if let Some(value) = attr.value() {
-                    let org_value = value.as_bytes();
-                    let (name, value) = self.attibute_var_or_script(name, org_value).await;
-                    //TODO: Consider, to future per script type
-                    r.insert(
-                        name.to_vec(),
-                        Some(Arc::new(if let Some(value) = value {
-                            value
-                        } else {
-                            let value = xml_util::quot_unescape(org_value);
-                            if let Ok(json) =
-                                serde_json::from_str::<serde_json::Value>(value.as_str())
-                            {
-                                json.into()
-                            } else {
-                                WildDocValue::String(value)
-                            }
-                        })),
-                    );
+                    if let Some(script_name) = Self::script_name(name) {
+                        let new_name = &name[..name.len() - (script_name.len() + 1)];
+                        let v = values_per_script.entry(script_name).or_insert(vec![]);
+                        v.push((new_name, value));
+                    } else {
+                        futs_noscript.push(async move {
+                            (
+                                name.to_vec(),
+                                Some({
+                                    let value = xml_util::quot_unescape(value.as_bytes());
+                                    if let Ok(json) =
+                                        serde_json::from_str::<serde_json::Value>(value.as_str())
+                                    {
+                                        json.into()
+                                    } else {
+                                        WildDocValue::String(value)
+                                    }
+                                }),
+                            )
+                        });
+                    }
                 } else {
                     r.insert(name.to_vec(), None);
                 }
             }
         }
+
+        let mut futs = vec![];
+        for (script_name, script) in self.scripts.iter_mut() {
+            if let Some(v) = values_per_script.get(script_name.as_str()) {
+                futs.push(async move {
+                    let mut r = AttributeMap::new();
+                    for (name, value) in v.into_iter() {
+                        if let Ok(v) = script.eval(value.as_bytes()).await {
+                            r.insert(name.to_vec(), Some(v));
+                        }
+                    }
+                    r
+                })
+            }
+        }
+
+        let (f1, f2) = futures::future::join(
+            futures::future::join_all(futs),
+            futures::future::join_all(futs_noscript),
+        )
+        .await;
+        r.extend(f1.into_iter().flatten());
+        r.extend(f2.into_iter());
         r
     }
 
@@ -87,17 +123,15 @@ impl Parser {
         r.push(b'"');
     }
 
-    async fn attibute_var_or_script<'a>(
+    pub(crate) async fn attibute_var_or_script<'a>(
         &mut self,
         name: &'a [u8],
         value: &'a [u8],
     ) -> (&'a [u8], Option<WildDocValue>) {
-        let mut splited = name.split(|p| *p == b':').collect::<Vec<&[u8]>>();
-        if splited.len() >= 2 {
-            let script = unsafe { std::str::from_utf8_unchecked(splited.pop().unwrap()) };
+        if let Some(script_name) = Self::script_name(name) {
             (
-                &name[..name.len() - (script.len() + 1)],
-                if let Some(script) = self.scripts.get_mut(script) {
+                &name[..name.len() - (script_name.len() + 1)],
+                if let Some(script) = self.scripts.get_mut(script_name) {
                     script
                         .eval(xml_util::quot_unescape(value).as_bytes())
                         .await

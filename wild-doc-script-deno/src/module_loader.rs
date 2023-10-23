@@ -250,7 +250,7 @@ pub fn checksum_gen(v: &[impl AsRef<[u8]>]) -> String {
     let digest = ctx.finish();
     let out: Vec<String> = digest
         .as_ref()
-        .iter()
+        .into_iter()
         .map(|byte| format!("{:02x}", byte))
         .collect();
     out.join("")

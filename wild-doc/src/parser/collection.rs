@@ -19,7 +19,7 @@ impl Parser {
                         self.database
                             .read()
                             .collections()
-                            .iter()
+                            .into_iter()
                             .map(|v| WildDocValue::String(v.to_owned()))
                             .collect(),
                     )),

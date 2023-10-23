@@ -11,7 +11,7 @@ use wild_doc_script::WildDocValue;
 use super::Parser;
 
 impl Parser {
-    pub(super) fn record(&self, attributes: HashMap<Vec<u8>, Option<Arc<WildDocValue>>>) {
+    pub(super) fn record(&self, attributes: HashMap<Vec<u8>, Option<WildDocValue>>) {
         let mut json = HashMap::new();
 
         if let (Some(Some(collection)), Some(Some(row)), Some(Some(var))) = (
@@ -60,7 +60,7 @@ impl Parser {
                                         WildDocValue::Object(
                                             entity
                                                 .depends()
-                                                .iter()
+                                                .into_iter()
                                                 .map(|d| {
                                                     (
                                                         d.key().to_string(),
@@ -94,12 +94,11 @@ impl Parser {
                                             if let Some(Some(field_mask)) =
                                                 attributes.get(b"fields".as_ref())
                                             {
-                                                if let WildDocValue::Array(field_mask) =
-                                                    field_mask.as_ref()
+                                                if let WildDocValue::Array(field_mask) = field_mask
                                                 {
                                                     let entities = entity.fields();
                                                     field_mask
-                                                        .iter()
+                                                        .into_iter()
                                                         .map(|field_name| {
                                                             let field_name = field_name.to_str();
                                                             if let Some(bytes) =
@@ -131,7 +130,7 @@ impl Parser {
                                             } else {
                                                 entity
                                                     .fields()
-                                                    .iter()
+                                                    .into_iter()
                                                     .map(|(field_name, value)| {
                                                         (
                                                             field_name.as_str().to_owned(),
@@ -195,7 +194,7 @@ impl Parser {
                                             .read()
                                             .relation()
                                             .depends(None, &CollectionRow::new(collection_id, row))
-                                            .iter()
+                                            .into_iter()
                                             .map(|d| {
                                                 let collection_id = d.collection_id();
                                                 self.database.read().collection(collection_id).map(
@@ -244,11 +243,9 @@ impl Parser {
                                         if let Some(Some(field_mask)) =
                                             attributes.get(b"fields".as_ref())
                                         {
-                                            if let WildDocValue::Array(field_mask) =
-                                                field_mask.as_ref()
-                                            {
+                                            if let WildDocValue::Array(field_mask) = field_mask {
                                                 field_mask
-                                                    .iter()
+                                                    .into_iter()
                                                     .map(|field_name| {
                                                         let field_name = field_name.to_str();
                                                         let bytes = collection
@@ -273,7 +270,7 @@ impl Parser {
                                         } else {
                                             collection
                                                 .field_names()
-                                                .iter()
+                                                .into_iter()
                                                 .map(|field_name| {
                                                     let bytes =
                                                         collection.field_bytes(row, field_name);

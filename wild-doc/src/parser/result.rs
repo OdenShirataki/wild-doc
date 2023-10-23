@@ -45,7 +45,7 @@ impl Parser {
                                     .session
                                     .result_with(&mut search, self.database.read().deref(), &orders)
                                     .await
-                                    .iter()
+                                    .into_iter()
                                     .map(|row| {
                                         WildDocValue::Object(
                                             [(
@@ -72,7 +72,7 @@ impl Parser {
                         } else {
                             vec![]
                         }
-                        .iter()
+                        .into_iter()
                         .map(|row| {
                             WildDocValue::Object(
                                 [("row".to_owned(), WildDocValue::Number(row.get().into()))].into(),

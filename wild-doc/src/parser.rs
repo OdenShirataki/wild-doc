@@ -8,7 +8,7 @@ mod session;
 mod update;
 mod var;
 
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use async_recursion::async_recursion;
@@ -27,7 +27,7 @@ use wild_doc_script::{WildDocScript, WildDocState, WildDocValue};
 
 use crate::xml_util;
 
-type AttributeMap = HashMap<Vec<u8>, Option<Arc<WildDocValue>>>;
+type AttributeMap = HashMap<Vec<u8>, Option<WildDocValue>>;
 
 struct SessionState {
     session: Session,
@@ -73,19 +73,36 @@ impl Parser {
                     .await
                     .get(b"value".as_ref())
                     .and_then(|v| v.as_ref())
-                    .map(|v| match v.deref() {
+                    .map(|v| match v {
                         WildDocValue::String(s) => s.to_owned().into_bytes(),
                         WildDocValue::Binary(v) => v.to_vec(),
-                        _ => v.deref().to_string().into_bytes(),
+                        _ => v.to_string().into_bytes(),
                     }));
             }
             b"global" => {
-                let attributes = self.parse_attibutes(attributes).await;
-                if let (Some(Some(var)), Some(Some(value))) = (
-                    attributes.get(b"var".as_ref()),
-                    attributes.get(b"value".as_ref()),
-                ) {
-                    self.register_global(&var.to_str(), value);
+                if let Some(attributes) = attributes {
+                    let mut key = None;
+                    let mut value = None;
+                    for attr in attributes.into_iter() {
+                        let name = attr.name().as_bytes();
+                        if name.starts_with(b"var:") {
+                            if let Some(v) = attr.value() {
+                                key = Some((name, v.as_bytes()));
+                            }
+                        } else if name.starts_with(b"value:") {
+                            if let Some(v) = attr.value() {
+                                value = Some((name, v.as_bytes()));
+                            }
+                        }
+                    }
+                    if let (Some(key), Some(value)) = (key, value) {
+                        if let ((_, Some(key_value)), (_, Some(value_value))) = (
+                            self.attibute_var_or_script(key.0, key.1).await,
+                            self.attibute_var_or_script(value.0, value.1).await,
+                        ) {
+                            self.register_global(&key_value.to_str(), value_value);
+                        }
+                    }
                 }
             }
             b"print_escape_html" => {
