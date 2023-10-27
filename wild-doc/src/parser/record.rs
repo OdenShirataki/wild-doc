@@ -8,10 +8,10 @@ use indexmap::IndexMap;
 use semilattice_database_session::{Activity, CollectionRow, Uuid};
 use wild_doc_script::WildDocValue;
 
-use super::Parser;
+use super::{AttributeMap, Parser};
 
 impl Parser {
-    pub(super) fn record(&self, attributes: HashMap<Vec<u8>, Option<WildDocValue>>) {
+    pub(super) fn record(&self, attributes: AttributeMap) {
         let mut json = HashMap::new();
 
         if let (Some(Some(collection)), Some(Some(row)), Some(Some(var))) = (

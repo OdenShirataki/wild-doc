@@ -4,7 +4,6 @@ mod script;
 mod xml_util;
 
 pub use include::IncludeLocal;
-use indexmap::IndexMap;
 pub use semilattice_database_session::DataOption;
 
 use std::{
@@ -18,16 +17,9 @@ use parking_lot::{Mutex, RwLock};
 
 use semilattice_database_session::SessionDatabase;
 
-use wild_doc_script::{IncludeAdaptor, WildDocScript, WildDocState, WildDocValue};
+use wild_doc_script::{IncludeAdaptor, WildDocState, WildDocValue};
 
 use parser::Parser;
-use script::Var;
-
-#[cfg(feature = "js")]
-use wild_doc_script_deno::Deno;
-
-#[cfg(feature = "py")]
-use wild_doc_script_python::WdPy;
 
 pub struct WildDocResult {
     body: Vec<u8>,
@@ -37,6 +29,7 @@ impl WildDocResult {
     pub fn body(&self) -> &[u8] {
         &self.body
     }
+
     pub fn options(&self) -> &Option<WildDocValue> {
         &self.options
     }
@@ -75,56 +68,34 @@ impl WildDoc {
         &self.database
     }
 
-    fn setup_scripts(
-        &mut self,
-        state: Arc<WildDocState>,
-    ) -> Result<hashbrown::HashMap<String, Box<dyn WildDocScript>>> {
-        let mut scripts: hashbrown::HashMap<String, Box<dyn WildDocScript>> =
-            hashbrown::HashMap::new();
-
-        scripts.insert("var".to_owned(), Box::new(Var::new(Arc::clone(&state))?));
-
-        #[cfg(feature = "js")]
-        scripts.insert("js".to_owned(), Box::new(Deno::new(Arc::clone(&state))?));
-
-        #[cfg(feature = "py")]
-        scripts.insert("py".to_owned(), Box::new(WdPy::new(Arc::clone(&state))?));
-
-        Ok(scripts)
-    }
     fn run_inner(
         &mut self,
         xml: &[u8],
         input_json: &[u8],
         include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
     ) -> Result<WildDocResult> {
-        let global = Mutex::new(IndexMap::new());
-
-        let state = Arc::new(WildDocState::new(
-            vec![[(
-                b"input".to_vec(),
-                Arc::new(
-                    serde_json::from_slice(input_json)
-                        .unwrap_or(serde_json::json!({}))
-                        .into(),
-                ),
-            )]
-            .into()],
-            global,
-            self.cache_dir.clone(),
-            include_adaptor,
-        ));
-
         let mut parser = Parser::new(
             Arc::clone(&self.database),
-            self.setup_scripts(Arc::clone(&state))?,
-            Arc::clone(&state),
+            WildDocState::new(
+                vec![[(
+                    b"input".to_vec(),
+                    Arc::new(
+                        serde_json::from_slice(input_json)
+                            .unwrap_or(serde_json::json!({}))
+                            .into(),
+                    ),
+                )]
+                .into()],
+                self.cache_dir.clone(),
+                include_adaptor,
+            ),
         )?;
-        let rt = tokio::runtime::Builder::new_current_thread()
+
+        let body = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .max_blocking_threads(32)
-            .build()?;
-        let body = rt.block_on(parser.parse(xml))?;
+            .build()?
+            .block_on(parser.parse(xml))?;
 
         let options = parser
             .state()
@@ -132,11 +103,14 @@ impl WildDoc {
             .lock()
             .get("result_options")
             .cloned();
+
         Ok(WildDocResult { body, options })
     }
+
     pub fn run(&mut self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {
         self.run_inner(xml, input_json, Arc::clone(&self.default_include_adaptor))
     }
+
     pub fn run_with_include_adaptor(
         &mut self,
         xml: &[u8],

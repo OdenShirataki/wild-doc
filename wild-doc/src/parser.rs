@@ -25,7 +25,13 @@ use maybe_xml::{
 use semilattice_database_session::{Session, SessionDatabase};
 use wild_doc_script::{WildDocScript, WildDocState, WildDocValue};
 
-use crate::xml_util;
+use crate::{script::Var, xml_util};
+
+#[cfg(feature = "js")]
+use wild_doc_script_deno::Deno;
+
+#[cfg(feature = "py")]
+use wild_doc_script_python::WdPy;
 
 type AttributeMap = HashMap<Vec<u8>, Option<WildDocValue>>;
 
@@ -42,12 +48,22 @@ pub struct Parser {
     state: Arc<WildDocState>,
     include_stack: Vec<String>,
 }
+
 impl Parser {
-    pub fn new(
-        database: Arc<RwLock<SessionDatabase>>,
-        scripts: HashMap<String, Box<dyn WildDocScript>>,
-        state: Arc<WildDocState>,
-    ) -> Result<Self> {
+    pub fn new(database: Arc<RwLock<SessionDatabase>>, state: WildDocState) -> Result<Self> {
+        let state = Arc::new(state);
+
+        let mut scripts: hashbrown::HashMap<String, Box<dyn WildDocScript>> =
+            hashbrown::HashMap::new();
+
+        scripts.insert("var".to_owned(), Box::new(Var::new(Arc::clone(&state))?));
+
+        #[cfg(feature = "js")]
+        scripts.insert("js".to_owned(), Box::new(Deno::new(Arc::clone(&state))?));
+
+        #[cfg(feature = "py")]
+        scripts.insert("py".to_owned(), Box::new(WdPy::new(Arc::clone(&state))?));
+
         Ok(Self {
             scripts,
             sessions: vec![],

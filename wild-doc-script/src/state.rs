@@ -18,13 +18,12 @@ pub struct WildDocState {
 impl WildDocState {
     pub fn new(
         initial_stack: VarsStack,
-        global: Mutex<IndexMap<String, WildDocValue>>,
         cache_dir: PathBuf,
         include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
     ) -> Self {
         Self {
             stack: Mutex::new(initial_stack),
-            global,
+            global: Mutex::new(IndexMap::new()),
             cache_dir,
             include_adaptor,
         }
