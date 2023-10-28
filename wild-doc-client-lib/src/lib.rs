@@ -63,7 +63,7 @@ impl WildDocClient {
                     recv_include.remove(recv_include.len() - 1);
                     let mut exists = false;
                     if let Ok(str) = std::str::from_utf8(&recv_include) {
-                        let s: Vec<&str> = str.split("include:/").collect();
+                        let s: Vec<_> = str.split("include:/").collect();
                         if s.len() >= 2 {
                             let mut path = self.document_root.clone();
                             path.push(s[1]);
