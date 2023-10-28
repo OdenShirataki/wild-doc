@@ -88,39 +88,48 @@ impl Parser {
                 if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
                     self.register_global(
                         name.to_str().as_ref(),
-                        WildDocValue::Object(
+                        Arc::new(WildDocValue::Object(
                             [
                                 (
                                     "commit_rows".to_owned(),
-                                    WildDocValue::Array(
+                                    Arc::new(WildDocValue::Array(
                                         commit_rows
                                             .into_iter()
                                             .map(|v| {
-                                                WildDocValue::Object(
+                                                Arc::new(WildDocValue::Object(
                                                     [
                                                         (
                                                             "collection_id".to_owned(),
-                                                            serde_json::Number::from(
-                                                                v.collection_id().get(),
-                                                            )
-                                                            .into(),
+                                                            Arc::new(
+                                                                serde_json::Number::from(
+                                                                    v.collection_id().get(),
+                                                                )
+                                                                .into(),
+                                                            ),
                                                         ),
                                                         (
                                                             "row".to_owned(),
-                                                            serde_json::Number::from(v.row().get())
+                                                            Arc::new(
+                                                                serde_json::Number::from(
+                                                                    v.row().get(),
+                                                                )
                                                                 .into(),
+                                                            ),
                                                         ),
                                                     ]
                                                     .into(),
-                                                )
+                                                ))
                                             })
                                             .collect(),
-                                    ),
+                                    )),
                                 ),
-                                ("session_rows".to_owned(), WildDocValue::Array(vec![])),
+                                (
+                                    "session_rows".to_owned(),
+                                    Arc::new(WildDocValue::Array(vec![])),
+                                ),
                             ]
                             .into(),
-                        ),
+                        )),
                     );
                 }
             } else {
@@ -143,69 +152,77 @@ impl Parser {
                     if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
                         self.register_global(
                             name.to_str().as_ref(),
-                            WildDocValue::Object(
+                            Arc::new(WildDocValue::Object(
                                 [
                                     (
                                         "commit_rows".to_owned(),
-                                        WildDocValue::Array(
+                                        Arc::new(WildDocValue::Array(
                                             commit_rows
                                                 .into_iter()
                                                 .map(|v| {
-                                                    WildDocValue::Object(
+                                                    Arc::new(WildDocValue::Object(
                                                         [
                                                             (
                                                                 "collection_id".to_owned(),
-                                                                serde_json::Number::from(
-                                                                    v.collection_id().get(),
-                                                                )
-                                                                .into(),
+                                                                Arc::new(
+                                                                    serde_json::Number::from(
+                                                                        v.collection_id().get(),
+                                                                    )
+                                                                    .into(),
+                                                                ),
                                                             ),
                                                             (
                                                                 "row".to_owned(),
-                                                                serde_json::Number::from(
-                                                                    v.row().get(),
-                                                                )
-                                                                .into(),
+                                                                Arc::new(
+                                                                    serde_json::Number::from(
+                                                                        v.row().get(),
+                                                                    )
+                                                                    .into(),
+                                                                ),
                                                             ),
                                                         ]
                                                         .into(),
-                                                    )
+                                                    ))
                                                 })
                                                 .collect(),
-                                        ),
+                                        )),
                                     ),
                                     (
                                         "session_rows".to_owned(),
-                                        WildDocValue::Array(
+                                        Arc::new(WildDocValue::Array(
                                             session_rows
                                                 .into_iter()
                                                 .map(|v| {
-                                                    WildDocValue::Object(
+                                                    Arc::new(WildDocValue::Object(
                                                         [
                                                             (
                                                                 "collection_id".to_owned(),
-                                                                serde_json::Number::from(
-                                                                    v.collection_id().get(),
-                                                                )
-                                                                .into(),
+                                                                Arc::new(
+                                                                    serde_json::Number::from(
+                                                                        v.collection_id().get(),
+                                                                    )
+                                                                    .into(),
+                                                                ),
                                                             ),
                                                             (
                                                                 "row".to_owned(),
-                                                                serde_json::Number::from(
-                                                                    v.row().get(),
-                                                                )
-                                                                .into(),
+                                                                Arc::new(
+                                                                    serde_json::Number::from(
+                                                                        v.row().get(),
+                                                                    )
+                                                                    .into(),
+                                                                ),
                                                             ),
                                                         ]
                                                         .into(),
-                                                    )
+                                                    ))
                                                 })
                                                 .collect(),
-                                        ),
+                                        )),
                                     ),
                                 ]
                                 .into(),
-                            ),
+                            )),
                         );
                     }
                 }

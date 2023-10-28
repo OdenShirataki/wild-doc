@@ -100,7 +100,7 @@ impl Parser {
                     let mut r = AttributeMap::new();
                     for (name, value) in v.into_iter() {
                         if let Ok(v) = script.eval(value.as_bytes()).await {
-                            r.insert(name.to_vec(), Some(Arc::new(v)));
+                            r.insert(name.to_vec(), Some(v));
                         }
                     }
                     r
@@ -129,7 +129,7 @@ impl Parser {
         &mut self,
         name: &'a [u8],
         value: &'a [u8],
-    ) -> (&'a [u8], Option<WildDocValue>) {
+    ) -> (&'a [u8], Option<Arc<WildDocValue>>) {
         if let Some(script_name) = Self::script_name(name) {
             (
                 &name[..name.len() - (script_name.len() + 1)],

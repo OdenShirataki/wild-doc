@@ -10,8 +10,8 @@ pub enum WildDocValue {
     Bool(bool),
     Number(serde_json::Number),
     String(String),
-    Array(Vec<WildDocValue>),
-    Object(IndexMap<String, WildDocValue>),
+    Array(Vec<Arc<WildDocValue>>),
+    Object(IndexMap<String, Arc<WildDocValue>>),
     Binary(Vec<u8>),
 }
 
@@ -40,11 +40,13 @@ impl From<serde_json::Value> for WildDocValue {
             serde_json::Value::Number(v) => Self::Number(v),
             serde_json::Value::String(v) => Self::String(v),
             serde_json::Value::Array(v) => {
-                Self::Array(v.into_iter().map(|v| Self::from(v)).collect())
+                Self::Array(v.into_iter().map(|v| Arc::new(Self::from(v))).collect())
             }
-            serde_json::Value::Object(v) => {
-                Self::Object(v.into_iter().map(|(k, v)| (k, Self::from(v))).collect())
-            }
+            serde_json::Value::Object(v) => Self::Object(
+                v.into_iter()
+                    .map(|(k, v)| (k, Arc::new(Self::from(v))))
+                    .collect(),
+            ),
         }
     }
 }

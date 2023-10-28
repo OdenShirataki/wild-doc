@@ -9,11 +9,8 @@ use deno_runtime::{
     worker::{MainWorker, WorkerOptions},
 };
 use indexmap::IndexMap;
-use parking_lot::Mutex;
 
-use wild_doc_script::{
-    async_trait, serde_json, IncludeAdaptor, WildDocScript, WildDocState, WildDocValue,
-};
+use wild_doc_script::{async_trait, serde_json, WildDocScript, WildDocState, WildDocValue};
 
 use module_loader::WdModuleLoader;
 
@@ -22,18 +19,18 @@ pub struct Deno {
 }
 
 fn wdmap2v8obj<'s>(
-    wdv: &IndexMap<String, WildDocValue>,
+    wdv: &IndexMap<String, Arc<WildDocValue>>,
     scope: &'s mut HandleScope,
 ) -> v8::Local<'s, v8::Object> {
     let root = v8::Object::new(scope);
-    let mut obj_stack: Vec<(v8::Local<v8::Object>, &IndexMap<String, WildDocValue>)> =
+    let mut obj_stack: Vec<(v8::Local<v8::Object>, &IndexMap<String, Arc<WildDocValue>>)> =
         vec![(root, wdv)];
 
     loop {
         if let Some((current_obj, current_values)) = obj_stack.pop() {
             for (key, value) in current_values {
                 if let Some(v8_key) = v8::String::new(scope, key) {
-                    match value {
+                    match value.as_ref() {
                         WildDocValue::Binary(v) => {
                             let ab = v8::ArrayBuffer::with_backing_store(
                                 scope,
@@ -90,6 +87,20 @@ fn wd2v8<'s>(wdv: &WildDocValue, scope: &'s mut HandleScope) -> Option<v8::Local
     None
 }
 
+fn get_state<'a, 'b>(scope: &'a mut v8::HandleScope) -> Option<&'b WildDocState>
+where
+    'b: 'a,
+{
+    if let Some(state) = v8::String::new(scope, "wd.state")
+        .and_then(|code| v8::Script::compile(scope, code, None))
+        .and_then(|v| v.run(scope))
+    {
+        Some(unsafe { &*(v8::Local::<v8::External>::cast(state).value() as *const WildDocState) })
+    } else {
+        None
+    }
+}
+
 #[async_trait(?Send)]
 impl WildDocScript for Deno {
     fn new(state: Arc<WildDocState>) -> Result<Self> {
@@ -117,19 +128,13 @@ impl WildDocScript for Deno {
                 |scope: &mut v8::HandleScope,
                  args: v8::FunctionCallbackArguments,
                  mut retval: v8::ReturnValue| {
-                    if let Some(include_adaptor) = v8::String::new(scope, "wd.include_adaptor")
-                        .and_then(|code| v8::Script::compile(scope, code, None))
-                        .and_then(|v| v.run(scope))
-                    {
+                    if let Some(state) = get_state(scope) {
                         let filename = args
                             .get(0)
                             .to_string(scope)
                             .unwrap()
                             .to_rust_string_lossy(scope);
-                        let include_adaptor = unsafe {
-                            &mut *(v8::Local::<v8::External>::cast(include_adaptor).value()
-                                as *mut Mutex<Box<dyn IncludeAdaptor + Send>>)
-                        };
+                        let include_adaptor = state.include_adaptor();
                         if let Some(contents) =
                             include_adaptor.lock().include(Path::new(filename.as_str()))
                         {
@@ -146,21 +151,14 @@ impl WildDocScript for Deno {
                 |scope: &mut v8::HandleScope,
                  args: v8::FunctionCallbackArguments,
                  mut retval: v8::ReturnValue| {
-                    if let Some(state) = v8::String::new(scope, "wd.state")
-                        .and_then(|code| v8::Script::compile(scope, code, None))
-                        .and_then(|v| v.run(scope))
-                    {
-                        let state = unsafe {
-                            &*(v8::Local::<v8::External>::cast(state).value()
-                                as *const WildDocState)
-                        };
+                    if let Some(state) = get_state(scope) {
                         let key = args
                             .get(0)
                             .to_string(scope)
                             .unwrap()
                             .to_rust_string_lossy(scope);
                         if key == "global" {
-                            let r = wdmap2v8obj(state.global().lock().deref(), scope);
+                            let r = wdmap2v8obj(&state.global().lock().deref(), scope);
                             retval.set(r.into());
                         } else {
                             for stack in state.stack().lock().iter().rev() {
@@ -178,7 +176,6 @@ impl WildDocScript for Deno {
 
             if let (
                 Some(wd),
-                Some(v8str_include_adaptor),
                 Some(v8str_get_contents),
                 Some(v8func_get_contents),
                 Some(v8str_state),
@@ -189,25 +186,12 @@ impl WildDocScript for Deno {
                     .and_then(|code| v8::Script::compile(scope, code, None))
                     .and_then(|v| v.run(scope))
                     .and_then(|v| v8::Local::<v8::Object>::try_from(v).ok()),
-                v8::String::new(scope, "include_adaptor"),
                 v8::String::new(scope, "get_contents"),
                 func_get_contents,
                 v8::String::new(scope, "state"),
                 v8::String::new(scope, "v"),
                 func_v,
             ) {
-                let v8ext_include_adaptor = v8::External::new(
-                    scope,
-                    state.include_adaptor() as *const Mutex<Box<dyn IncludeAdaptor + Send>>
-                        as *mut c_void,
-                );
-                wd.define_own_property(
-                    scope,
-                    v8str_include_adaptor.into(),
-                    v8ext_include_adaptor.into(),
-                    PropertyAttribute::READ_ONLY,
-                );
-
                 let v8ext_state =
                     v8::External::new(scope, state.as_ref() as *const WildDocState as *mut c_void);
                 wd.define_own_property(
@@ -247,7 +231,7 @@ impl WildDocScript for Deno {
         Ok(())
     }
 
-    async fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
+    async fn eval(&mut self, code: &[u8]) -> Result<Arc<WildDocValue>> {
         let scope = &mut self.worker.js_runtime.handle_scope();
 
         let code = std::str::from_utf8(code)?;
@@ -264,7 +248,7 @@ impl WildDocScript for Deno {
                 if let Ok(a) = v8::Local::<v8::ArrayBufferView>::try_from(v) {
                     if let Some(b) = a.buffer(scope) {
                         if let Some(d) = b.data() {
-                            return Ok(WildDocValue::Binary(
+                            return Ok(Arc::new(WildDocValue::Binary(
                                 unsafe {
                                     std::slice::from_raw_parts::<u8>(
                                         d.as_ptr() as *const u8,
@@ -272,17 +256,17 @@ impl WildDocScript for Deno {
                                     )
                                 }
                                 .to_vec(),
-                            ));
+                            )));
                         }
                     }
                 }
             } else {
                 if let Ok(serv) = serde_v8::from_v8::<serde_json::Value>(scope, v) {
-                    return Ok(serv.into());
+                    return Ok(Arc::new(serv.into()));
                 }
             }
         }
 
-        Ok(WildDocValue::Null)
+        Ok(Arc::new(WildDocValue::Null))
     }
 }

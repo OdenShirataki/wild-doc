@@ -129,7 +129,7 @@ impl Parser {
                             for (key, value) in map {
                                 self.state.stack().lock().push(
                                     [
-                                        (var.to_string().into_bytes(), Arc::new(value.clone())),
+                                        (var.to_string().into_bytes(), Arc::clone(value)),
                                         (
                                             key_name.to_string().into_bytes(),
                                             Arc::new(serde_json::json!(key).into()),
@@ -143,8 +143,7 @@ impl Parser {
                         } else {
                             for (_, value) in map {
                                 self.state.stack().lock().push(
-                                    [(var.to_string().into_bytes(), Arc::new(value.clone()))]
-                                        .into(),
+                                    [(var.to_string().into_bytes(), Arc::clone(value))].into(),
                                 );
                                 r.extend(self.parse(xml).await?);
                                 self.state.stack().lock().pop();
@@ -159,7 +158,7 @@ impl Parser {
                                 key += 1;
                                 self.state.stack().lock().push(
                                     [
-                                        (var.to_string().into_bytes(), Arc::new(value.clone())),
+                                        (var.to_string().into_bytes(), Arc::clone(value)),
                                         (
                                             key_name.to_string().into_bytes(),
                                             Arc::new(serde_json::json!(key).into()),
@@ -173,8 +172,7 @@ impl Parser {
                         } else {
                             for value in vec {
                                 self.state.stack().lock().push(
-                                    [(var.to_string().into_bytes(), Arc::new(value.clone()))]
-                                        .into(),
+                                    [(var.to_string().into_bytes(), Arc::clone(value))].into(),
                                 );
                                 r.extend(self.parse(xml).await?);
                                 self.state.stack().lock().pop();

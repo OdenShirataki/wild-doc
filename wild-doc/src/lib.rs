@@ -23,14 +23,14 @@ use parser::Parser;
 
 pub struct WildDocResult {
     body: Vec<u8>,
-    options: Option<WildDocValue>,
+    options: Option<Arc<WildDocValue>>,
 }
 impl WildDocResult {
     pub fn body(&self) -> &[u8] {
         &self.body
     }
 
-    pub fn options(&self) -> &Option<WildDocValue> {
+    pub fn options(&self) -> &Option<Arc<WildDocValue>> {
         &self.options
     }
 }

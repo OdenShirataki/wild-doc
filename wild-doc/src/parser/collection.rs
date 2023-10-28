@@ -20,7 +20,7 @@ impl Parser {
                             .read()
                             .collections()
                             .into_iter()
-                            .map(|v| WildDocValue::String(v.to_owned()))
+                            .map(|v| Arc::new(WildDocValue::String(v.to_owned())))
                             .collect(),
                     )),
                 );

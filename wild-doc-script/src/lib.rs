@@ -20,5 +20,5 @@ pub trait WildDocScript {
     where
         Self: Sized;
     async fn evaluate_module(&mut self, file_name: &str, src: &[u8]) -> Result<()>;
-    async fn eval(&mut self, code: &[u8]) -> Result<WildDocValue>;
+    async fn eval(&mut self, code: &[u8]) -> Result<Arc<WildDocValue>>;
 }

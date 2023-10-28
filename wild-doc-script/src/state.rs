@@ -10,7 +10,7 @@ use crate::{IncludeAdaptor, VarsStack, WildDocValue};
 
 pub struct WildDocState {
     stack: Mutex<VarsStack>,
-    global: Mutex<IndexMap<String, WildDocValue>>,
+    global: Mutex<IndexMap<String, Arc<WildDocValue>>>,
     cache_dir: PathBuf,
     include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
 }
@@ -40,7 +40,7 @@ impl WildDocState {
     }
 
     #[inline(always)]
-    pub fn global(&self) -> &Mutex<IndexMap<String, WildDocValue>> {
+    pub fn global(&self) -> &Mutex<IndexMap<String, Arc<WildDocValue>>> {
         &self.global
     }
 

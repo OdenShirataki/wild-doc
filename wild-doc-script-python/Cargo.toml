@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-script-python"
-version = "0.10.1"
+version = "0.11.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -18,7 +18,7 @@ categories = ["database","database-implementations","text-processing","web-progr
 parking_lot.workspace = true
 indexmap.workspace = true
 
-wild-doc-script = { version = "0.16", path = "../wild-doc-script" }
+wild-doc-script = { version = "0.17", path = "../wild-doc-script" }
 
 [dependencies.pyo3]
 version = "0.20.0"

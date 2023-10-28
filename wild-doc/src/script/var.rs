@@ -32,83 +32,65 @@ impl WildDocScript for Var {
         Ok(())
     }
 
-    async fn eval(&mut self, code: &[u8]) -> Result<WildDocValue> {
-        let mut value = WildDocValue::Null;
-
+    async fn eval(&mut self, code: &[u8]) -> Result<Arc<WildDocValue>> {
         let mut splited = code.split(|c| *c == b'.');
         if let Some(root) = splited.next() {
-            if root == b"global" {
+            if let Some(root) = if root == b"global" {
                 if let Some(global_root) = splited.next() {
-                    if let Some(next_value) = self
-                        .state
+                    self.state
                         .global()
                         .lock()
                         .get(unsafe { std::str::from_utf8_unchecked(global_root) })
-                    {
-                        let mut next_value = next_value;
-                        while {
-                            splited.next().map_or_else(
-                                || {
-                                    value = next_value.clone();
-                                    false
-                                },
-                                |next| match next_value {
-                                    WildDocValue::Object(map) => map
-                                        .get(unsafe { std::str::from_utf8_unchecked(next) })
-                                        .map_or(false, |v| {
-                                            next_value = v;
-                                            true
-                                        }),
-                                    WildDocValue::Array(map) => {
-                                        unsafe { std::str::from_utf8_unchecked(next) }
-                                            .parse::<usize>()
-                                            .map_or(false, |v| {
-                                                map.get(v).map_or(false, |v| {
-                                                    next_value = v;
-                                                    true
-                                                })
-                                            })
-                                    }
-                                    _ => false,
-                                },
-                            )
-                        } {}
-                    }
+                        .cloned()
+                } else {
+                    None
                 }
             } else {
-                if let Some(ref root) = self.search_stack(root) {
-                    let mut next_value = root.as_ref();
-                    while {
-                        splited.next().map_or_else(
-                            || {
-                                value = next_value.clone();
-                                false
-                            },
-                            |next| match next_value {
-                                WildDocValue::Object(map) => map
-                                    .get(unsafe { std::str::from_utf8_unchecked(next) })
-                                    .map_or(false, |v| {
-                                        next_value = v;
-                                        true
-                                    }),
-                                WildDocValue::Array(map) => {
-                                    unsafe { std::str::from_utf8_unchecked(next) }
-                                        .parse::<usize>()
-                                        .map_or(false, |v| {
-                                            map.get(v).map_or(false, |v| {
+                self.search_stack(root)
+            } {
+                if let Some(next) = splited.next() {
+                    if let Some(mut next_value) = match root.as_ref() {
+                        WildDocValue::Object(map) => {
+                            map.get(unsafe { std::str::from_utf8_unchecked(next) })
+                        }
+                        WildDocValue::Array(map) => unsafe { std::str::from_utf8_unchecked(next) }
+                            .parse::<usize>()
+                            .map_or(None, |v| map.get(v)),
+                        _ => None,
+                    } {
+                        loop {
+                            if let Some(next) = splited.next() {
+                                match next_value.as_ref() {
+                                    WildDocValue::Object(map) => {
+                                        if let Some(v) =
+                                            map.get(unsafe { std::str::from_utf8_unchecked(next) })
+                                        {
+                                            next_value = v;
+                                        }
+                                    }
+                                    WildDocValue::Array(map) => {
+                                        if let Ok(v) =
+                                            unsafe { std::str::from_utf8_unchecked(next) }
+                                                .parse::<usize>()
+                                        {
+                                            if let Some(v) = map.get(v) {
                                                 next_value = v;
-                                                true
-                                            })
-                                        })
+                                            }
+                                        }
+                                    }
+                                    _ => break,
                                 }
-                                _ => false,
-                            },
-                        )
-                    } {}
+                            } else {
+                                return Ok(Arc::clone(next_value));
+                            }
+                        }
+                    }
+                } else {
+                    return Ok(Arc::clone(&root));
                 }
             }
         }
 
-        Ok(value)
+        Ok(Arc::new(WildDocValue::Null))
     }
 }
