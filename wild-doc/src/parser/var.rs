@@ -33,13 +33,16 @@ impl Parser {
     }
 
     #[inline(always)]
-    pub(crate) fn register_global(&self, name: &str, value: Arc<WildDocValue>) {
+    pub(crate) fn register_global(&self, name: &str, value: &Arc<WildDocValue>) {
         let mut splited: VecDeque<_> = name.split('.').collect();
         if let Some(last) = splited.pop_back() {
             if splited.len() > 0 {
-                Self::route_map(&mut self.state.global().lock(), splited, &value);
+                Self::route_map(&mut self.state.global().lock(), splited, value);
             } else {
-                self.state.global().lock().insert(last.to_owned(), value);
+                self.state
+                    .global()
+                    .lock()
+                    .insert(last.to_owned(), Arc::clone(value));
             }
         }
     }

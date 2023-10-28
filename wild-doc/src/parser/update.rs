@@ -88,7 +88,7 @@ impl Parser {
                 if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
                     self.register_global(
                         name.to_str().as_ref(),
-                        Arc::new(WildDocValue::Object(
+                        &Arc::new(WildDocValue::Object(
                             [
                                 (
                                     "commit_rows".to_owned(),
@@ -152,7 +152,7 @@ impl Parser {
                     if let Some(Some(name)) = attributes.get(b"rows_set_global".as_ref()) {
                         self.register_global(
                             name.to_str().as_ref(),
-                            Arc::new(WildDocValue::Object(
+                            &Arc::new(WildDocValue::Object(
                                 [
                                     (
                                         "commit_rows".to_owned(),

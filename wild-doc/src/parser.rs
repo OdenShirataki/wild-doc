@@ -96,29 +96,12 @@ impl Parser {
                     }));
             }
             b"global" => {
-                if let Some(attributes) = attributes {
-                    let mut key = None;
-                    let mut value = None;
-                    for attr in attributes.into_iter() {
-                        let name = attr.name().as_bytes();
-                        if name.starts_with(b"var:") {
-                            if let Some(v) = attr.value() {
-                                key = Some((name, v.as_bytes()));
-                            }
-                        } else if name.starts_with(b"value:") {
-                            if let Some(v) = attr.value() {
-                                value = Some((name, v.as_bytes()));
-                            }
-                        }
-                    }
-                    if let (Some(key), Some(value)) = (key, value) {
-                        if let ((_, Some(key_value)), (_, Some(value_value))) = (
-                            self.attibute_var_or_script(key.0, key.1).await,
-                            self.attibute_var_or_script(value.0, value.1).await,
-                        ) {
-                            self.register_global(&key_value.to_str(), value_value);
-                        }
-                    }
+                let attributes = self.parse_attibutes(attributes).await;
+                if let (Some(Some(var)), Some(Some(value))) = (
+                    attributes.get(b"var".as_ref()),
+                    attributes.get(b"value".as_ref()),
+                ) {
+                    self.register_global(&var.to_str(), value);
                 }
             }
             b"print_escape_html" => {
