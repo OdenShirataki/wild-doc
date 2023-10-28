@@ -64,31 +64,38 @@ impl Parser {
 
         if let Some(attributes) = attributes {
             for attr in attributes.into_iter() {
-                let name = attr.name().as_bytes();
-                if let Some(value) = attr.value() {
-                    if let Some(script_name) = Self::script_name(name) {
-                        let new_name = &name[..name.len() - (script_name.len() + 1)];
-                        let v = values_per_script.entry(script_name).or_insert(vec![]);
-                        v.push((new_name, value));
+                let name = attr.name();
+                if let Ok(str_name) = name.to_str() {
+                    if let Some(value) = attr.value() {
+                        let name_bytes = name.as_bytes();
+                        if let Some(script_name) = Self::script_name(name_bytes) {
+                            let new_name = unsafe {
+                                std::str::from_utf8_unchecked(
+                                    &name_bytes[..name_bytes.len() - (script_name.len() + 1)],
+                                )
+                            };
+                            let v = values_per_script.entry(script_name).or_insert(vec![]);
+                            v.push((new_name, value));
+                        } else {
+                            futs_noscript.push(async move {
+                                (
+                                    str_name.into(),
+                                    Some(Arc::new({
+                                        let value = xml_util::quot_unescape(value.as_bytes());
+                                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(
+                                            value.as_str(),
+                                        ) {
+                                            json.into()
+                                        } else {
+                                            WildDocValue::String(value)
+                                        }
+                                    })),
+                                )
+                            });
+                        }
                     } else {
-                        futs_noscript.push(async move {
-                            (
-                                name.to_vec(),
-                                Some(Arc::new({
-                                    let value = xml_util::quot_unescape(value.as_bytes());
-                                    if let Ok(json) =
-                                        serde_json::from_str::<serde_json::Value>(value.as_str())
-                                    {
-                                        json.into()
-                                    } else {
-                                        WildDocValue::String(value)
-                                    }
-                                })),
-                            )
-                        });
+                        r.insert(str_name.into(), None);
                     }
-                } else {
-                    r.insert(name.to_vec(), None);
                 }
             }
         }
@@ -100,7 +107,7 @@ impl Parser {
                     let mut r = AttributeMap::new();
                     for (name, value) in v.into_iter() {
                         if let Ok(v) = script.eval(value.as_bytes()).await {
-                            r.insert(name.to_vec(), Some(v));
+                            r.insert(name.to_string(), Some(v));
                         }
                     }
                     r

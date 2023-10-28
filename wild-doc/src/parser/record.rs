@@ -15,9 +15,9 @@ impl Parser {
         let mut json = HashMap::new();
 
         if let (Some(Some(collection)), Some(Some(row)), Some(Some(var))) = (
-            attributes.get(b"collection".as_ref()),
-            attributes.get(b"row".as_ref()),
-            attributes.get(b"var".as_ref()),
+            attributes.get("collection"),
+            attributes.get("row"),
+            attributes.get("var"),
         ) {
             let var = var.to_str();
             if var != "" {
@@ -68,7 +68,7 @@ impl Parser {
                                                 .into_iter()
                                                 .map(|d| {
                                                     (
-                                                        d.key().to_string(),
+                                                        d.key().into(),
                                                         Arc::new(WildDocValue::Object(
                                                             [
                                                                 (
@@ -96,8 +96,7 @@ impl Parser {
                                     (
                                         "field".to_owned(),
                                         Arc::new(WildDocValue::Object(
-                                            if let Some(Some(field_mask)) =
-                                                attributes.get(b"fields".as_ref())
+                                            if let Some(Some(field_mask)) = attributes.get("fields")
                                             {
                                                 if let WildDocValue::Array(field_mask) =
                                                     field_mask.as_ref()
@@ -111,7 +110,7 @@ impl Parser {
                                                                 entities.get(field_name.as_ref())
                                                             {
                                                                 Some((
-                                                                    field_name.to_string(),
+                                                                    field_name.into(),
                                                                     Arc::new(
                                                                         if let Ok(str) =
                                                                             std::str::from_utf8(
@@ -217,7 +216,7 @@ impl Parser {
                                                 self.database.read().collection(collection_id).map(
                                                     |collection| {
                                                         (
-                                                            d.key().to_string(),
+                                                            d.key().into(),
                                                             Arc::new(WildDocValue::Object(
                                                                 [
                                                                     (
@@ -265,9 +264,7 @@ impl Parser {
                                 (
                                     "field".to_owned(),
                                     Arc::new(WildDocValue::Object(
-                                        if let Some(Some(field_mask)) =
-                                            attributes.get(b"fields".as_ref())
-                                        {
+                                        if let Some(Some(field_mask)) = attributes.get("fields") {
                                             if let WildDocValue::Array(field_mask) =
                                                 field_mask.as_ref()
                                             {
@@ -278,7 +275,7 @@ impl Parser {
                                                         let bytes = collection
                                                             .field_bytes(row, field_name.as_ref());
                                                         (
-                                                            field_name.to_string(),
+                                                            field_name.into(),
                                                             Arc::new(
                                                                 if let Ok(str) =
                                                                     std::str::from_utf8(bytes)
@@ -306,7 +303,7 @@ impl Parser {
                                                     let bytes =
                                                         collection.field_bytes(row, field_name);
                                                     (
-                                                        field_name.to_string(),
+                                                        field_name.into(),
                                                         Arc::new(
                                                             if let Ok(str) =
                                                                 std::str::from_utf8(bytes)
@@ -328,10 +325,7 @@ impl Parser {
                         }
                     }
                 }
-                json.insert(
-                    var.to_string().into_bytes(),
-                    Arc::new(WildDocValue::Object(inner)),
-                );
+                json.insert(var.into(), Arc::new(WildDocValue::Object(inner)));
             }
         }
         self.state.stack().lock().push(json);

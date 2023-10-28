@@ -14,12 +14,12 @@ impl Parser {
         attributes: &AttributeMap,
         search_map: &mut HashMap<String, Join>,
     ) -> &'a [u8] {
-        if let Some(Some(name)) = attributes.get(b"name".as_ref()) {
+        if let Some(Some(name)) = attributes.get("name") {
             let name = name.to_str();
             if name != "" {
                 if let Some(collection_id) = self.collection_id(attributes) {
                     let (last_xml, condition) = self.join_condition_loop(xml).await;
-                    search_map.insert(name.to_string(), Join::new(collection_id, condition));
+                    search_map.insert(name.into(), Join::new(collection_id, condition));
                     return last_xml;
                 }
             }
@@ -78,7 +78,7 @@ impl Parser {
     async fn join_condition_pends(attributes: AttributeMap) -> JoinCondition {
         JoinCondition::Pends {
             key: attributes
-                .get(b"key".as_ref())
+                .get("key")
                 .and_then(|v| v.as_ref())
                 .map(|v| v.to_string()),
         }

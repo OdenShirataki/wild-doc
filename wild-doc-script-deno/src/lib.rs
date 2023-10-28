@@ -162,7 +162,7 @@ impl WildDocScript for Deno {
                             retval.set(r.into());
                         } else {
                             for stack in state.stack().lock().iter().rev() {
-                                if let Some(v) = stack.get(key.as_bytes()) {
+                                if let Some(v) = stack.get(&key) {
                                     if let Some(v) = wd2v8(v, scope) {
                                         retval.set(v);
                                     }

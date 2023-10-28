@@ -80,7 +80,7 @@ fn wdv(_py: Python, key: String) -> PyResult<PyObject> {
             .extract();
         } else {
             for stack in state.stack().lock().iter().rev() {
-                if let Some(v) = stack.get(key.as_bytes()) {
+                if let Some(v) = stack.get(&key) {
                     return PyModule::from_code(
                         py,
                         r#"

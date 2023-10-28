@@ -16,10 +16,9 @@ impl Parser {
         search_map: &mut HashMap<String, Search>,
     ) {
         let mut vars = HashMap::new();
-        if let (Some(Some(search)), Some(Some(var))) = (
-            attributes.get(b"search".as_ref()),
-            attributes.get(b"var".as_ref()),
-        ) {
+        if let (Some(Some(search)), Some(Some(var))) =
+            (attributes.get("search"), attributes.get("var"))
+        {
             let search = search.to_str();
             let var = var.to_str();
             if search != "" && var != "" {
@@ -29,7 +28,7 @@ impl Parser {
                     let orders = make_order(
                         search,
                         &attributes
-                            .get(b"sort".as_ref())
+                            .get("sort")
                             .and_then(|v| v.as_ref())
                             .map_or_else(|| "".to_owned(), |v| v.to_string()),
                     );
@@ -88,7 +87,7 @@ impl Parser {
                     let len = rows.len();
 
                     vars.insert(
-                        var.to_string().into_bytes(),
+                        var.to_string(),
                         Arc::new(WildDocValue::Object(
                             [
                                 (

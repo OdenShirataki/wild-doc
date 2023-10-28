@@ -78,7 +78,7 @@ impl WildDoc {
             Arc::clone(&self.database),
             WildDocState::new(
                 vec![[(
-                    b"input".to_vec(),
+                    "input".into(),
                     Arc::new(
                         serde_json::from_slice(input_json)
                             .unwrap_or(serde_json::json!({}))

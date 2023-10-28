@@ -9,7 +9,7 @@ pub struct Var {
 }
 
 impl Var {
-    fn search_stack(&self, key: &[u8]) -> Option<Arc<WildDocValue>> {
+    fn search_stack(&self, key: &str) -> Option<Arc<WildDocValue>> {
         for stack in self.state.stack().lock().iter().rev() {
             if let Some(v) = stack.get(key) {
                 return Some(Arc::clone(v));
@@ -46,7 +46,7 @@ impl WildDocScript for Var {
                     None
                 }
             } else {
-                self.search_stack(root)
+                self.search_stack(unsafe { std::str::from_utf8_unchecked(root) })
             } {
                 if let Some(next) = splited.next() {
                     if let Some(mut next_value) = match root.as_ref() {

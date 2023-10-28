@@ -26,15 +26,13 @@ use super::{AttributeMap, Parser};
 impl Parser {
     #[inline(always)]
     fn collection_id(&self, attributes: &AttributeMap) -> Option<NonZeroI32> {
-        if let Some(Some(collection_name)) = attributes.get(b"collection".as_ref()) {
+        if let Some(Some(collection_name)) = attributes.get("collection") {
             let collection_name = collection_name.to_string();
             if let Some(collection_id) = self.database.read().collection_id(&collection_name) {
                 return Some(collection_id);
             }
             if collection_name != "" {
-                if let Some(Some(value)) =
-                    attributes.get(b"create_collection_if_not_exists".as_ref())
-                {
+                if let Some(Some(value)) = attributes.get("create_collection_if_not_exists") {
                     if value.as_bool().map_or(false, |v| *v) {
                         return Some(
                             self.database
@@ -54,7 +52,7 @@ impl Parser {
         attributes: AttributeMap,
         search_map: &mut HashMap<String, Search>,
     ) -> &'a [u8] {
-        if let Some(Some(name)) = attributes.get(b"name".as_ref()) {
+        if let Some(Some(name)) = attributes.get("name") {
             let name = name.to_str();
             if name != "" {
                 if let Some(collection_id) = self.collection_id(&attributes) {
@@ -77,14 +75,14 @@ impl Parser {
     ) -> (&'a [u8], Vec<Condition>, HashMap<String, Join>) {
         let (last_xml, mut conditions, join) = self.condition_loop(xml).await;
 
-        if let Some(Some(activity)) = attributes.get(b"activity".as_ref()) {
+        if let Some(Some(activity)) = attributes.get("activity") {
             conditions.push(Condition::Activity(if activity.to_str() == "inactive" {
                 Activity::Inactive
             } else {
                 Activity::Active
             }));
         }
-        if let Some(Some(term)) = attributes.get(b"term".as_ref()) {
+        if let Some(Some(term)) = attributes.get("term") {
             let term = term.to_string();
             if term != "all" {
                 let term: Vec<&str> = term.split('@').collect();
@@ -158,9 +156,9 @@ impl Parser {
                     let attributes = self.parse_attibutes(token.attributes()).await;
                     let name = token.name();
                     match name.local().as_bytes() {
-                        b"row" => futs.push(Self::condition_row(attributes).boxed()),
-                        b"field" => futs.push(Self::condition_field(attributes).boxed()),
-                        b"uuid" => futs.push(Self::condition_uuid(attributes).boxed()),
+                        b"row" => futs.push(Self::condition_row(attributes).boxed_local()),
+                        b"field" => futs.push(Self::condition_field(attributes).boxed_local()),
+                        b"uuid" => futs.push(Self::condition_uuid(attributes).boxed_local()),
                         b"depend" => {
                             if let Some(c) = self.condition_depend(attributes).await {
                                 result_conditions.push(c);
@@ -194,10 +192,9 @@ impl Parser {
     }
 
     async fn condition_depend(&self, attributes: AttributeMap) -> Option<Condition> {
-        if let (Some(Some(row)), Some(Some(collection_name))) = (
-            attributes.get(b"row".as_ref()),
-            attributes.get(b"collection".as_ref()),
-        ) {
+        if let (Some(Some(row)), Some(Some(collection_name))) =
+            (attributes.get("row"), attributes.get("collection"))
+        {
             let row = row.to_string();
             let collection_name = collection_name.to_string();
             if row != "" && collection_name != "" {
@@ -207,7 +204,7 @@ impl Parser {
                 ) {
                     return Some(Condition::Depend(
                         attributes
-                            .get(b"key".as_ref())
+                            .get("key")
                             .and_then(|v| v.as_ref())
                             .map(|v| v.to_string()),
                         if row.get() < 0 {
@@ -223,10 +220,9 @@ impl Parser {
     }
 
     async fn condition_row(attributes: AttributeMap) -> Option<Condition> {
-        if let (Some(Some(method)), Some(Some(value))) = (
-            attributes.get(b"method".as_ref()),
-            attributes.get(b"value".as_ref()),
-        ) {
+        if let (Some(Some(method)), Some(Some(value))) =
+            (attributes.get("method"), attributes.get("value"))
+        {
             let value = value.to_str();
             if value != "" {
                 let method = method.to_str();
@@ -266,7 +262,7 @@ impl Parser {
     }
 
     async fn condition_uuid(attributes: AttributeMap) -> Option<Condition> {
-        if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
+        if let Some(Some(value)) = attributes.get("value") {
             let value = value.to_string();
             (value != "")
                 .then(|| {
@@ -284,9 +280,9 @@ impl Parser {
 
     async fn condition_field(attributes: AttributeMap) -> Option<Condition> {
         if let (Some(Some(name)), Some(Some(method)), Some(Some(value))) = (
-            attributes.get(b"name".as_ref()),
-            attributes.get(b"method".as_ref()),
-            attributes.get(b"value".as_ref()),
+            attributes.get("name"),
+            attributes.get("method"),
+            attributes.get("value"),
         ) {
             let name = name.to_str();
             let method = method.to_str();
@@ -300,9 +296,9 @@ impl Parser {
                         "match" => Some(search::Field::Match(value.to_string().into_bytes())),
                         "min" => Some(search::Field::Min(value.to_string().into_bytes())),
                         "max" => Some(search::Field::Max(value.to_string().into_bytes())),
-                        "partial" => Some(search::Field::Partial(Arc::new(value.to_string()))),
-                        "forward" => Some(search::Field::Forward(Arc::new(value.to_string()))),
-                        "backward" => Some(search::Field::Backward(Arc::new(value.to_string()))),
+                        "partial" => Some(search::Field::Partial(Arc::new(value.into()))),
+                        "forward" => Some(search::Field::Forward(Arc::new(value.into()))),
+                        "backward" => Some(search::Field::Backward(Arc::new(value.into()))),
                         "range" => {
                             let s: Vec<&str> = value.split("..").collect();
                             (s.len() == 2).then(|| {
@@ -313,17 +309,17 @@ impl Parser {
                             })
                         }
                         "value_forward" => {
-                            Some(search::Field::ValueForward(Arc::new(value.to_string())))
+                            Some(search::Field::ValueForward(Arc::new(value.into())))
                         }
                         "value_backward" => {
-                            Some(search::Field::ValueBackward(Arc::new(value.to_string())))
+                            Some(search::Field::ValueBackward(Arc::new(value.into())))
                         }
                         "value_partial" => {
-                            Some(search::Field::ValuePartial(Arc::new(value.to_string())))
+                            Some(search::Field::ValuePartial(Arc::new(value.into())))
                         }
                         _ => None,
                     }
-                    .map(|method| Condition::Field(name.to_string(), method))
+                    .map(|method| Condition::Field(name.into(), method))
                 })
                 .and_then(|v| v)
         } else {

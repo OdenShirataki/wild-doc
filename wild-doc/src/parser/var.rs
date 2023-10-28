@@ -13,7 +13,7 @@ impl Parser {
     ) -> Option<Arc<WildDocValue>> {
         keys.pop_front().and_then(|key| {
             if keys.is_empty() {
-                map.insert(key.to_string(), Arc::clone(last_val));
+                map.insert(key.into(), Arc::clone(last_val));
             } else {
                 if let Some(rm) = Self::route_map(
                     &mut if let Some(WildDocValue::Object(o)) = map.get(key).map(|v| v.as_ref()) {
@@ -24,7 +24,7 @@ impl Parser {
                     keys,
                     last_val,
                 ) {
-                    map.insert(key.to_string(), Arc::clone(&rm));
+                    map.insert(key.into(), Arc::clone(&rm));
                     return Some(rm);
                 }
             }

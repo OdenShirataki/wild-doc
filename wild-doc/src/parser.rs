@@ -33,7 +33,7 @@ use wild_doc_script_deno::Deno;
 #[cfg(feature = "py")]
 use wild_doc_script_python::WdPy;
 
-type AttributeMap = HashMap<Vec<u8>, Option<Arc<WildDocValue>>>;
+type AttributeMap = HashMap<String, Option<Arc<WildDocValue>>>;
 
 struct SessionState {
     session: Session,
@@ -87,7 +87,7 @@ impl Parser {
                 return Ok(self
                     .parse_attibutes(attributes)
                     .await
-                    .get(b"value".as_ref())
+                    .get("value")
                     .and_then(|v| v.as_ref())
                     .map(|v| match v.as_ref() {
                         WildDocValue::String(s) => s.to_owned().into_bytes(),
@@ -97,10 +97,9 @@ impl Parser {
             }
             b"global" => {
                 let attributes = self.parse_attibutes(attributes).await;
-                if let (Some(Some(var)), Some(Some(value))) = (
-                    attributes.get(b"var".as_ref()),
-                    attributes.get(b"value".as_ref()),
-                ) {
+                if let (Some(Some(var)), Some(Some(value))) =
+                    (attributes.get("var"), attributes.get("value"))
+                {
                     self.register_global(&var.to_str(), value);
                 }
             }
@@ -108,7 +107,7 @@ impl Parser {
                 return Ok(self
                     .parse_attibutes(attributes)
                     .await
-                    .get(b"value".as_ref())
+                    .get("value")
                     .and_then(|v| v.as_ref())
                     .map(|v| xml_util::escape_html(&v.to_str()).into_bytes()));
             }
@@ -385,9 +384,9 @@ impl Parser {
         let mut name = "".to_string();
         for (key, value) in attributes {
             if let Some(value) = value {
-                if key.starts_with(b"wd-tag:name") {
+                if key.starts_with("wd-tag:name") {
                     name = value.to_string();
-                } else if key.starts_with(b"wd-attr:replace") {
+                } else if key.starts_with("wd-attr:replace") {
                     let attr = xml_util::quot_unescape(value.to_str().as_bytes());
                     if attr.len() > 0 {
                         html_attr.push(b' ');
@@ -395,7 +394,7 @@ impl Parser {
                     }
                 } else {
                     html_attr.push(b' ');
-                    html_attr.extend(key);
+                    html_attr.extend(key.as_bytes());
                     html_attr.extend(b"=\"");
                     html_attr.extend(
                         value

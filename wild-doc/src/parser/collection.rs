@@ -10,11 +10,11 @@ impl Parser {
     pub(super) fn collections(&self, attributes: AttributeMap) {
         let mut vars = HashMap::new();
 
-        if let Some(Some(var)) = attributes.get(b"var".as_ref()) {
+        if let Some(Some(var)) = attributes.get("var") {
             let var = var.to_str();
             if var != "" {
                 vars.insert(
-                    var.to_string().into_bytes(),
+                    var.to_string(),
                     Arc::new(WildDocValue::Array(
                         self.database
                             .read()
@@ -30,7 +30,7 @@ impl Parser {
     }
 
     pub(super) async fn delete_collection(&self, attributes: AttributeMap) {
-        if let Some(Some(collection)) = attributes.get(b"collection".as_ref()) {
+        if let Some(Some(collection)) = attributes.get("collection") {
             self.database
                 .write()
                 .delete_collection(collection.to_str().as_ref())

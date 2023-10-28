@@ -16,7 +16,7 @@ impl Parser {
         &mut self,
         attributes: AttributeMap,
     ) -> Result<Vec<u8>> {
-        if let Some(Some(src)) = attributes.get(b"src".as_ref()) {
+        if let Some(Some(src)) = attributes.get("src") {
             let src = src.to_str();
             let (xml, filename) = self
                 .state
@@ -26,7 +26,7 @@ impl Parser {
                 .map_or_else(
                     || {
                         let mut r = (None, Cow::Borrowed(""));
-                        if let Some(Some(substitute)) = attributes.get(b"substitute".as_ref()) {
+                        if let Some(Some(substitute)) = attributes.get("substitute") {
                             let substitute = substitute.to_str();
                             if let Some(xml) = self
                                 .state
@@ -43,7 +43,7 @@ impl Parser {
                 );
             if let Some(xml) = xml {
                 if xml.len() > 0 {
-                    self.include_stack.push(filename.to_string());
+                    self.include_stack.push(filename.into());
                     let r = self.parse(xml.as_slice()).await?;
                     self.include_stack.pop();
                     return Ok(r);
@@ -54,10 +54,7 @@ impl Parser {
     }
 
     pub(super) async fn case(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
-        let cmp_src = attributes
-            .get(b"value".as_ref())
-            .and_then(|v| v.as_ref())
-            .map(|v| v);
+        let cmp_src = attributes.get("value").and_then(|v| v.as_ref()).map(|v| v);
         let mut xml = xml;
         let mut scanner = Scanner::new();
         while let Some(state) = scanner.scan(&xml) {
@@ -72,10 +69,8 @@ impl Parser {
                         b"wd:when" => {
                             let (inner_xml, outer_end) = xml_util::inner(xml);
                             xml = &xml[outer_end..];
-                            if let Some(Some(right)) = self
-                                .parse_attibutes(token.attributes())
-                                .await
-                                .get(b"value".as_ref())
+                            if let Some(Some(right)) =
+                                self.parse_attibutes(token.attributes()).await.get("value")
                             {
                                 if let Some(cmp_src) = cmp_src {
                                     if cmp_src == right {
@@ -107,7 +102,7 @@ impl Parser {
     }
 
     pub(super) async fn r#if(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
-        if let Some(Some(value)) = attributes.get(b"value".as_ref()) {
+        if let Some(Some(value)) = attributes.get("value") {
             if value.as_bool().map_or(false, |v| *v) {
                 return self.parse(xml).await;
             }
@@ -117,21 +112,18 @@ impl Parser {
 
     pub(super) async fn r#for(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
         let mut r = Vec::new();
-        if let (Some(Some(var)), Some(Some(r#in))) = (
-            attributes.get(b"var".as_ref()),
-            attributes.get(b"in".as_ref()),
-        ) {
+        if let (Some(Some(var)), Some(Some(r#in))) = (attributes.get("var"), attributes.get("in")) {
             let var = var.to_str();
             if var != "" {
                 match r#in.as_ref() {
                     WildDocValue::Object(map) => {
-                        if let Some(Some(key_name)) = attributes.get(b"key".as_ref()) {
+                        if let Some(Some(key_name)) = attributes.get("key") {
                             for (key, value) in map {
                                 self.state.stack().lock().push(
                                     [
-                                        (var.to_string().into_bytes(), Arc::clone(value)),
+                                        (var.to_string(), Arc::clone(value)),
                                         (
-                                            key_name.to_string().into_bytes(),
+                                            key_name.to_string(),
                                             Arc::new(serde_json::json!(key).into()),
                                         ),
                                     ]
@@ -142,25 +134,26 @@ impl Parser {
                             }
                         } else {
                             for (_, value) in map {
-                                self.state.stack().lock().push(
-                                    [(var.to_string().into_bytes(), Arc::clone(value))].into(),
-                                );
+                                self.state
+                                    .stack()
+                                    .lock()
+                                    .push([(var.to_string(), Arc::clone(value))].into());
                                 r.extend(self.parse(xml).await?);
                                 self.state.stack().lock().pop();
                             }
                         }
                     }
                     WildDocValue::Array(vec) => {
-                        let key_name = attributes.get(b"key".as_ref());
+                        let key_name = attributes.get("key");
                         if let Some(Some(key_name)) = key_name {
                             let mut key = 0;
                             for value in vec {
                                 key += 1;
                                 self.state.stack().lock().push(
                                     [
-                                        (var.to_string().into_bytes(), Arc::clone(value)),
+                                        (var.to_string(), Arc::clone(value)),
                                         (
-                                            key_name.to_string().into_bytes(),
+                                            key_name.to_string(),
                                             Arc::new(serde_json::json!(key).into()),
                                         ),
                                     ]
@@ -171,9 +164,10 @@ impl Parser {
                             }
                         } else {
                             for value in vec {
-                                self.state.stack().lock().push(
-                                    [(var.to_string().into_bytes(), Arc::clone(value))].into(),
-                                );
+                                self.state
+                                    .stack()
+                                    .lock()
+                                    .push([(var.to_string(), Arc::clone(value))].into());
                                 r.extend(self.parse(xml).await?);
                                 self.state.stack().lock().pop();
                             }
@@ -196,7 +190,7 @@ impl Parser {
             if self
                 .parse_attibutes(attributes)
                 .await
-                .get(b"continue".as_ref())
+                .get("continue")
                 .and_then(|v| v.as_ref())
                 .and_then(|v| v.as_bool())
                 .map_or(false, |v| *v)

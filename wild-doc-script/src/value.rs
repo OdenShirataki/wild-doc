@@ -133,5 +133,5 @@ impl WildDocValue {
     }
 }
 
-pub type Vars = HashMap<Vec<u8>, Arc<WildDocValue>>;
+pub type Vars = HashMap<String, Arc<WildDocValue>>;
 pub type VarsStack = Vec<Vars>;
