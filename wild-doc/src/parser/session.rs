@@ -1,16 +1,15 @@
 use std::{borrow::Cow, sync::Arc};
 
-use hashbrown::HashMap;
 use serde_json::json;
 
-use wild_doc_script::WildDocValue;
+use wild_doc_script::{Vars, WildDocValue};
 
 use super::{AttributeMap, Parser, SessionState};
 
 impl Parser {
     #[inline(always)]
     pub(super) fn sessions(&self, attributes: AttributeMap) {
-        let mut json = HashMap::new();
+        let mut json = Vars::new();
 
         if let Some(Some(var)) = attributes.get("var") {
             let var = var.to_str();
@@ -89,7 +88,7 @@ impl Parser {
             str_current = Cow::Borrowed("session_sequence_current");
         }
 
-        let mut json = HashMap::new();
+        let mut json = Vars::new();
         if let Some(session_state) = self.sessions.last() {
             if let Some(cursor) = session_state.session.sequence_cursor() {
                 json.insert(

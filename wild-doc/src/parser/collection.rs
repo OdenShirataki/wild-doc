@@ -1,14 +1,12 @@
 use std::sync::Arc;
 
-use hashbrown::HashMap;
-
-use wild_doc_script::WildDocValue;
+use wild_doc_script::{Vars, WildDocValue};
 
 use super::{AttributeMap, Parser};
 
 impl Parser {
     pub(super) fn collections(&self, attributes: AttributeMap) {
-        let mut vars = HashMap::new();
+        let mut vars = Vars::new();
 
         if let Some(Some(var)) = attributes.get("var") {
             let var = var.to_str();

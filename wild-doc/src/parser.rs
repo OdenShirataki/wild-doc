@@ -8,7 +8,7 @@ mod session;
 mod update;
 mod var;
 
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use anyhow::Result;
 use async_recursion::async_recursion;
@@ -89,8 +89,8 @@ impl Parser {
                     .await
                     .get("value")
                     .and_then(|v| v.as_ref())
-                    .map(|v| match v.as_ref() {
-                        WildDocValue::String(s) => s.to_owned().into_bytes(),
+                    .map(|v| match v.deref() {
+                        WildDocValue::String(s) => s.to_owned().into(),
                         WildDocValue::Binary(v) => v.to_vec(),
                         _ => v.to_str().as_bytes().into(),
                     }));
@@ -109,7 +109,7 @@ impl Parser {
                     .await
                     .get("value")
                     .and_then(|v| v.as_ref())
-                    .map(|v| xml_util::escape_html(&v.to_str()).into_bytes()));
+                    .map(|v| xml_util::escape_html(&v.to_str()).into()));
             }
             b"include" => {
                 let attributes = self.parse_attibutes(attributes).await;

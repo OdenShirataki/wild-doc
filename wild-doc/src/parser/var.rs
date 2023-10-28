@@ -1,13 +1,13 @@
 use std::{collections::VecDeque, sync::Arc};
 
 use indexmap::IndexMap;
-use wild_doc_script::WildDocValue;
+use wild_doc_script::{Vars, WildDocValue};
 
 use super::{AttributeMap, Parser};
 
 impl Parser {
     fn route_map<'a>(
-        map: &mut IndexMap<String, Arc<WildDocValue>>,
+        map: &mut Vars,
         mut keys: VecDeque<&str>,
         last_val: &Arc<WildDocValue>,
     ) -> Option<Arc<WildDocValue>> {

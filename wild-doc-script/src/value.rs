@@ -1,8 +1,10 @@
 use std::{borrow::Cow, sync::Arc};
 
-use hashbrown::HashMap;
 use indexmap::IndexMap;
 use serde::Serialize;
+
+pub type Vars = IndexMap<String, Arc<WildDocValue>>;
+pub type VarsStack = Vec<Vars>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WildDocValue {
@@ -11,7 +13,7 @@ pub enum WildDocValue {
     Number(serde_json::Number),
     String(String),
     Array(Vec<Arc<WildDocValue>>),
-    Object(IndexMap<String, Arc<WildDocValue>>),
+    Object(Vars),
     Binary(Vec<u8>),
 }
 
@@ -132,6 +134,3 @@ impl WildDocValue {
         }
     }
 }
-
-pub type Vars = HashMap<String, Arc<WildDocValue>>;
-pub type VarsStack = Vec<Vars>;

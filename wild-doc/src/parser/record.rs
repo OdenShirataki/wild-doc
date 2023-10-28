@@ -3,16 +3,15 @@ use std::{
     sync::Arc,
 };
 
-use hashbrown::HashMap;
 use indexmap::IndexMap;
 use semilattice_database_session::{Activity, CollectionRow, Uuid};
-use wild_doc_script::WildDocValue;
+use wild_doc_script::{Vars, WildDocValue};
 
 use super::{AttributeMap, Parser};
 
 impl Parser {
     pub(super) fn record(&self, attributes: AttributeMap) {
-        let mut json = HashMap::new();
+        let mut json = Vars::new();
 
         if let (Some(Some(collection)), Some(Some(row)), Some(Some(var))) = (
             attributes.get("collection"),

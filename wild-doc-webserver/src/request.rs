@@ -80,13 +80,13 @@ pub(super) async fn request(
     let document_dir = std::path::PathBuf::from(document_dir);
     let mut response = Response::new(Body::empty());
 
-    let headers: HashMap<String, String> = req
+    let headers: HashMap<_, _> = req
         .headers()
         .into_iter()
         .map(|(k, v)| (k.to_string(), v.to_str().unwrap().to_owned()))
         .collect();
     if let Some(host) = headers.get("host") {
-        if let Some(host) = host.split(":").collect::<Vec<&str>>().get(0) {
+        if let Some(host) = host.split(":").collect::<Vec<_>>().get(0) {
             let host = host.to_string();
             let uri_path = req.uri().path().to_owned();
             if let Some(static_file) = get_static_filename(&document_dir, &host, &uri_path) {
@@ -127,7 +127,7 @@ pub(super) async fn request(
                         if content_type == "application/x-www-form-urlencoded" {
                             params_all.insert("post".to_owned(), parse_qs(body.as_ref()));
                         } else if content_type.starts_with("multipart/form-data;") {
-                            let boundary: Vec<&str> = content_type.split("boundary=").collect();
+                            let boundary: Vec<_> = content_type.split("boundary=").collect();
                             let boundary = boundary[1];
                             let mut multipart = Multipart::new(
                                 once(async move { Result::<Bytes, Infallible>::Ok(body) }),

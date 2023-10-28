@@ -8,9 +8,8 @@ use deno_runtime::{
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
 };
-use indexmap::IndexMap;
 
-use wild_doc_script::{async_trait, serde_json, WildDocScript, WildDocState, WildDocValue};
+use wild_doc_script::{async_trait, serde_json, Vars, WildDocScript, WildDocState, WildDocValue};
 
 use module_loader::WdModuleLoader;
 
@@ -18,13 +17,9 @@ pub struct Deno {
     worker: MainWorker,
 }
 
-fn wdmap2v8obj<'s>(
-    wdv: &IndexMap<String, Arc<WildDocValue>>,
-    scope: &'s mut HandleScope,
-) -> v8::Local<'s, v8::Object> {
+fn wdmap2v8obj<'s>(wdv: &Vars, scope: &'s mut HandleScope) -> v8::Local<'s, v8::Object> {
     let root = v8::Object::new(scope);
-    let mut obj_stack: Vec<(v8::Local<v8::Object>, &IndexMap<String, Arc<WildDocValue>>)> =
-        vec![(root, wdv)];
+    let mut obj_stack: Vec<(v8::Local<v8::Object>, &Vars)> = vec![(root, wdv)];
 
     loop {
         if let Some((current_obj, current_values)) = obj_stack.pop() {
@@ -74,8 +69,7 @@ fn wd2v8<'s>(wdv: &WildDocValue, scope: &'s mut HandleScope) -> Option<v8::Local
             }
         }
         WildDocValue::Object(map) => {
-            let obj = wdmap2v8obj(map, scope);
-            return Some(obj.into());
+            return Some(wdmap2v8obj(map, scope).into());
         }
         _ => {
             if let Ok(r) = serde_v8::to_v8(scope, wdv) {
@@ -158,8 +152,7 @@ impl WildDocScript for Deno {
                             .unwrap()
                             .to_rust_string_lossy(scope);
                         if key == "global" {
-                            let r = wdmap2v8obj(&state.global().lock().deref(), scope);
-                            retval.set(r.into());
+                            retval.set(wdmap2v8obj(&state.global().lock().deref(), scope).into());
                         } else {
                             for stack in state.stack().lock().iter().rev() {
                                 if let Some(v) = stack.get(&key) {
@@ -224,7 +217,7 @@ impl WildDocScript for Deno {
             .js_runtime
             .load_side_module(
                 &(ModuleSpecifier::parse(&("wd://script".to_owned() + file_name))?),
-                Some(String::from_utf8(src.to_vec())?.into()),
+                Some(String::from_utf8(src.into())?.into()),
             )
             .await?;
         self.worker.evaluate_module(mod_id).await?;
@@ -255,7 +248,7 @@ impl WildDocScript for Deno {
                                         b.byte_length(),
                                     )
                                 }
-                                .to_vec(),
+                                .into(),
                             )));
                         }
                     }

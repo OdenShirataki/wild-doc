@@ -85,7 +85,7 @@ impl Parser {
         if let Some(Some(term)) = attributes.get("term") {
             let term = term.to_str();
             if term != "all" {
-                let term: Vec<&str> = term.split('@').collect();
+                let term: Vec<_> = term.split('@').collect();
                 conditions.push(Condition::Term(if term.len() == 2 {
                     DateTime::parse_from_str(term[1], "%Y-%m-%d %H:%M:%S").map_or_else(
                         |_| search::Term::default(),
@@ -244,7 +244,7 @@ impl Parser {
                         }
                     }
                     "range" => {
-                        let s: Vec<&str> = value.split("..").collect();
+                        let s: Vec<_> = value.split("..").collect();
                         if s.len() == 2 {
                             if let (Ok(min), Ok(max)) = (s[0].parse::<u32>(), s[1].parse::<u32>()) {
                                 return Some(Condition::Row(search::Number::Range(
@@ -289,24 +289,19 @@ impl Parser {
             let value = value.to_str();
             (name != "" && method != "" && value != "")
                 .then(|| {
-                    let method_pair: Vec<&str> = method.split('!').collect();
+                    let method_pair: Vec<_> = method.split('!').collect();
                     let len = method_pair.len();
                     let i = len - 1;
                     match method_pair[i] {
-                        "match" => Some(search::Field::Match(value.to_string().into_bytes())),
-                        "min" => Some(search::Field::Min(value.to_string().into_bytes())),
-                        "max" => Some(search::Field::Max(value.to_string().into_bytes())),
+                        "match" => Some(search::Field::Match(value.to_string().into())),
+                        "min" => Some(search::Field::Min(value.to_string().into())),
+                        "max" => Some(search::Field::Max(value.to_string().into())),
                         "partial" => Some(search::Field::Partial(Arc::new(value.into()))),
                         "forward" => Some(search::Field::Forward(Arc::new(value.into()))),
                         "backward" => Some(search::Field::Backward(Arc::new(value.into()))),
                         "range" => {
-                            let s: Vec<&str> = value.split("..").collect();
-                            (s.len() == 2).then(|| {
-                                search::Field::Range(
-                                    s[0].as_bytes().to_vec(),
-                                    s[1].as_bytes().to_vec(),
-                                )
-                            })
+                            let s: Vec<_> = value.split("..").collect();
+                            (s.len() == 2).then(|| search::Field::Range(s[0].into(), s[1].into()))
                         }
                         "value_forward" => {
                             Some(search::Field::ValueForward(Arc::new(value.into())))

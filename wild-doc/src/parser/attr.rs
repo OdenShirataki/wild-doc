@@ -46,7 +46,7 @@ impl Parser {
     }
 
     fn script_name(name: &[u8]) -> Option<&str> {
-        let mut splited = name.split(|p| *p == b':').collect::<Vec<&[u8]>>();
+        let mut splited: Vec<_> = name.split(|p| *p == b':').collect();
         if splited.len() >= 2 {
             Some(unsafe { std::str::from_utf8_unchecked(splited.pop().unwrap()) })
         } else {

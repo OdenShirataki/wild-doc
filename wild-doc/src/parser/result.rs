@@ -4,6 +4,7 @@ use std::{borrow::Cow, ops::Deref, sync::Arc};
 
 use hashbrown::HashMap;
 use semilattice_database_session::{search::Search, Order, OrderKey};
+use wild_doc_script::Vars;
 
 use self::custom_sort::WdCustomSort;
 
@@ -15,7 +16,7 @@ impl Parser {
         attributes: AttributeMap,
         search_map: &mut HashMap<String, Search>,
     ) {
-        let mut vars = HashMap::new();
+        let mut vars = Vars::new();
         if let (Some(Some(search)), Some(Some(var))) =
             (attributes.get("search"), attributes.get("var"))
         {
@@ -114,19 +115,19 @@ fn make_order(search: &Search, sort: &str) -> Vec<Order> {
         for o in sort.trim().split(",") {
             let o = o.trim();
             let is_desc = o.ends_with(" DESC");
-            let o_split: Vec<&str> = o.split(" ").collect();
+            let o_split: Vec<_> = o.split(" ").collect();
             let field = o_split[0];
             if let Some(order_key) = if field.starts_with("field.") {
                 field
                     .strip_prefix("field.")
-                    .map(|v| OrderKey::Field(v.to_owned()))
+                    .map(|v| OrderKey::Field(v.into()))
             } else if field.starts_with("join.") {
                 field.strip_prefix("join.").map(|v| -> OrderKey {
-                    let s: Vec<&str> = v.split(".").collect();
+                    let s: Vec<_> = v.split(".").collect();
                     OrderKey::Custom(Box::new(WdCustomSort {
                         result: Arc::clone(search.get_result()),
-                        join_name: s[0].to_owned(),
-                        property: s[1].to_owned(),
+                        join_name: s[0].into(),
+                        property: s[1].into(),
                     }))
                 })
             } else {

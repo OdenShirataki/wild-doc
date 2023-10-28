@@ -6,11 +6,11 @@ use std::{
 use indexmap::IndexMap;
 use parking_lot::Mutex;
 
-use crate::{IncludeAdaptor, VarsStack, WildDocValue};
+use crate::{IncludeAdaptor, Vars, VarsStack};
 
 pub struct WildDocState {
     stack: Mutex<VarsStack>,
-    global: Mutex<IndexMap<String, Arc<WildDocValue>>>,
+    global: Mutex<Vars>,
     cache_dir: PathBuf,
     include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
 }
@@ -40,7 +40,7 @@ impl WildDocState {
     }
 
     #[inline(always)]
-    pub fn global(&self) -> &Mutex<IndexMap<String, Arc<WildDocValue>>> {
+    pub fn global(&self) -> &Mutex<Vars> {
         &self.global
     }
 

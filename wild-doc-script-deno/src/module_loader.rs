@@ -78,7 +78,6 @@ impl ModuleLoader for WdModuleLoader {
                         let resp = get_redirected_response(&client, url).await?;
                         match resp.bytes().await {
                             Ok(resp) => {
-                                let resp = resp.to_vec();
                                 if resp.len() > 0 {
                                     if let Some(dir) = module_cache_path.parent() {
                                         if let Ok(()) = std::fs::create_dir_all(dir) {
@@ -93,7 +92,7 @@ impl ModuleLoader for WdModuleLoader {
                                         }
                                     }
                                 }
-                                resp
+                                resp.into()
                             }
                             Err(e) => {
                                 println!("{:?}", e);
@@ -160,7 +159,7 @@ fn resolve_url_from_location(base_url: &Url, location: &str) -> Url {
         // assuming path-noscheme | path-empty
         let base_url_path_str = base_url.path().to_owned();
         // Pop last part or url (after last slash)
-        let segs: Vec<&str> = base_url_path_str.rsplitn(2, '/').collect();
+        let segs: Vec<_> = base_url_path_str.rsplitn(2, '/').collect();
         let new_path = format!("{}/{}", segs.last().unwrap_or(&""), location);
         base_url
             .join(&new_path)
@@ -248,7 +247,7 @@ pub fn checksum_gen(v: &[impl AsRef<[u8]>]) -> String {
         ctx.update(src.as_ref());
     }
     let digest = ctx.finish();
-    let out: Vec<String> = digest
+    let out: Vec<_> = digest
         .as_ref()
         .into_iter()
         .map(|byte| format!("{:02x}", byte))
