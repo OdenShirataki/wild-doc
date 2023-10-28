@@ -33,7 +33,7 @@ use wild_doc_script_deno::Deno;
 #[cfg(feature = "py")]
 use wild_doc_script_python::WdPy;
 
-type AttributeMap = HashMap<Vec<u8>, Option<WildDocValue>>;
+type AttributeMap = HashMap<Vec<u8>, Option<Arc<WildDocValue>>>;
 
 struct SessionState {
     session: Session,
@@ -89,7 +89,7 @@ impl Parser {
                     .await
                     .get(b"value".as_ref())
                     .and_then(|v| v.as_ref())
-                    .map(|v| match v {
+                    .map(|v| match v.as_ref() {
                         WildDocValue::String(s) => s.to_owned().into_bytes(),
                         WildDocValue::Binary(v) => v.to_vec(),
                         _ => v.to_string().into_bytes(),

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use hashbrown::HashMap;
 use maybe_xml::token::prop::Attributes;
 use wild_doc_script::WildDocValue;
@@ -72,7 +74,7 @@ impl Parser {
                         futs_noscript.push(async move {
                             (
                                 name.to_vec(),
-                                Some({
+                                Some(Arc::new({
                                     let value = xml_util::quot_unescape(value.as_bytes());
                                     if let Ok(json) =
                                         serde_json::from_str::<serde_json::Value>(value.as_str())
@@ -81,7 +83,7 @@ impl Parser {
                                     } else {
                                         WildDocValue::String(value)
                                     }
-                                }),
+                                })),
                             )
                         });
                     }
@@ -98,7 +100,7 @@ impl Parser {
                     let mut r = AttributeMap::new();
                     for (name, value) in v.into_iter() {
                         if let Ok(v) = script.eval(value.as_bytes()).await {
-                            r.insert(name.to_vec(), Some(v));
+                            r.insert(name.to_vec(), Some(Arc::new(v)));
                         }
                     }
                     r

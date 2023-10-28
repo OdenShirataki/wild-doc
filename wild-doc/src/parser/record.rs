@@ -94,7 +94,8 @@ impl Parser {
                                             if let Some(Some(field_mask)) =
                                                 attributes.get(b"fields".as_ref())
                                             {
-                                                if let WildDocValue::Array(field_mask) = field_mask
+                                                if let WildDocValue::Array(field_mask) =
+                                                    field_mask.as_ref()
                                                 {
                                                     let entities = entity.fields();
                                                     field_mask
@@ -243,7 +244,9 @@ impl Parser {
                                         if let Some(Some(field_mask)) =
                                             attributes.get(b"fields".as_ref())
                                         {
-                                            if let WildDocValue::Array(field_mask) = field_mask {
+                                            if let WildDocValue::Array(field_mask) =
+                                                field_mask.as_ref()
+                                            {
                                                 field_mask
                                                     .into_iter()
                                                     .map(|field_name| {

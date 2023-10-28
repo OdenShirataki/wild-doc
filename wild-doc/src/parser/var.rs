@@ -40,7 +40,7 @@ impl Parser {
         self.state.stack().lock().push(
             attributes
                 .into_iter()
-                .map(|(k, v)| (k, Arc::new(v.unwrap_or(WildDocValue::Null))))
+                .map(|(k, v)| (k, v.unwrap_or_else(|| Arc::new(WildDocValue::Null))))
                 .collect(),
         );
     }
