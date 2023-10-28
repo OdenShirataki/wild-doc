@@ -25,9 +25,7 @@ impl WildDocScript for Var {
     where
         Self: Sized,
     {
-        Ok(Self {
-            state: Arc::clone(&state),
-        })
+        Ok(Self { state })
     }
 
     async fn evaluate_module(&mut self, _: &str, _: &[u8]) -> Result<()> {
