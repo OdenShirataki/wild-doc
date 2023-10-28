@@ -92,7 +92,7 @@ impl Parser {
                     .map(|v| match v.as_ref() {
                         WildDocValue::String(s) => s.to_owned().into_bytes(),
                         WildDocValue::Binary(v) => v.to_vec(),
-                        _ => v.to_string().into_bytes(),
+                        _ => v.to_str().as_bytes().into(),
                     }));
             }
             b"global" => {
@@ -381,11 +381,11 @@ impl Parser {
     #[inline(always)]
     fn custom_tag(&self, attributes: AttributeMap) -> (String, Vec<u8>) {
         let mut html_attr = vec![];
-        let mut name = "".to_string();
-        for (key, value) in attributes {
+        let mut name = "".into();
+        for (key, value) in attributes.into_iter() {
             if let Some(value) = value {
                 if key.starts_with("wd-tag:name") {
-                    name = value.to_string();
+                    name = value.to_str().into();
                 } else if key.starts_with("wd-attr:replace") {
                     let attr = xml_util::quot_unescape(value.to_str().as_bytes());
                     if attr.len() > 0 {

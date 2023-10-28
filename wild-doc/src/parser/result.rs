@@ -1,6 +1,6 @@
 mod custom_sort;
 
-use std::{ops::Deref, sync::Arc};
+use std::{borrow::Cow, ops::Deref, sync::Arc};
 
 use hashbrown::HashMap;
 use semilattice_database_session::{search::Search, Order, OrderKey};
@@ -30,7 +30,7 @@ impl Parser {
                         &attributes
                             .get("sort")
                             .and_then(|v| v.as_ref())
-                            .map_or_else(|| "".to_owned(), |v| v.to_string()),
+                            .map_or_else(|| Cow::Borrowed(""), |v| v.to_str()),
                     );
 
                     let mut rows: Vec<_> = vec![];
@@ -48,7 +48,7 @@ impl Parser {
                                     .map(|row| {
                                         Arc::new(WildDocValue::Object(
                                             [(
-                                                "row".to_owned(),
+                                                "row".into(),
                                                 Arc::new(WildDocValue::Number(row.get().into())),
                                             )]
                                             .into(),
@@ -75,7 +75,7 @@ impl Parser {
                         .map(|row| {
                             Arc::new(WildDocValue::Object(
                                 [(
-                                    "row".to_owned(),
+                                    "row".into(),
                                     Arc::new(WildDocValue::Number(row.get().into())),
                                 )]
                                 .into(),
@@ -87,15 +87,15 @@ impl Parser {
                     let len = rows.len();
 
                     vars.insert(
-                        var.to_string(),
+                        var.into(),
                         Arc::new(WildDocValue::Object(
                             [
                                 (
-                                    "collection_id".to_owned(),
+                                    "collection_id".into(),
                                     Arc::new(WildDocValue::Number(collection_id.get().into())),
                                 ),
-                                ("rows".to_owned(), Arc::new(WildDocValue::Array(rows))),
-                                ("len".to_owned(), Arc::new(WildDocValue::Number(len.into()))),
+                                ("rows".into(), Arc::new(WildDocValue::Array(rows))),
+                                ("len".into(), Arc::new(WildDocValue::Number(len.into()))),
                             ]
                             .into(),
                         )),

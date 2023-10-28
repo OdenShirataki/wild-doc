@@ -80,7 +80,7 @@ impl Parser {
             key: attributes
                 .get("key")
                 .and_then(|v| v.as_ref())
-                .map(|v| v.to_string()),
+                .map(|v| v.to_str().into()),
         }
     }
 }

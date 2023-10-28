@@ -10,7 +10,7 @@ use super::{AttributeMap, Parser};
 
 impl Parser {
     pub(super) async fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes<'_>) {
-        for attr in attributes {
+        for attr in attributes.into_iter() {
             let name = attr.name();
             if let Some(value) = attr.value() {
                 let name = name.as_bytes();
@@ -32,7 +32,7 @@ impl Parser {
                         } else {
                             Self::output_attribute_value(
                                 r,
-                                xml_util::escape_html(value.to_str().as_ref()).as_bytes(),
+                                xml_util::escape_html(&value.to_str()).as_bytes(),
                             );
                         }
                     } else {

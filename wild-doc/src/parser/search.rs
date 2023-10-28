@@ -27,7 +27,7 @@ impl Parser {
     #[inline(always)]
     fn collection_id(&self, attributes: &AttributeMap) -> Option<NonZeroI32> {
         if let Some(Some(collection_name)) = attributes.get("collection") {
-            let collection_name = collection_name.to_string();
+            let collection_name = collection_name.to_str();
             if let Some(collection_id) = self.database.read().collection_id(&collection_name) {
                 return Some(collection_id);
             }
@@ -83,7 +83,7 @@ impl Parser {
             }));
         }
         if let Some(Some(term)) = attributes.get("term") {
-            let term = term.to_string();
+            let term = term.to_str();
             if term != "all" {
                 let term: Vec<&str> = term.split('@').collect();
                 conditions.push(Condition::Term(if term.len() == 2 {
@@ -195,8 +195,8 @@ impl Parser {
         if let (Some(Some(row)), Some(Some(collection_name))) =
             (attributes.get("row"), attributes.get("collection"))
         {
-            let row = row.to_string();
-            let collection_name = collection_name.to_string();
+            let row = row.to_str();
+            let collection_name = collection_name.to_str();
             if row != "" && collection_name != "" {
                 if let (Ok(row), Some(collection_id)) = (
                     row.parse::<NonZeroI64>(),
@@ -206,7 +206,7 @@ impl Parser {
                         attributes
                             .get("key")
                             .and_then(|v| v.as_ref())
-                            .map(|v| v.to_string()),
+                            .map(|v| v.to_str().into()),
                         if row.get() < 0 {
                             CollectionRow::new(-collection_id, (-row).try_into().unwrap())
                         } else {
@@ -263,7 +263,7 @@ impl Parser {
 
     async fn condition_uuid(attributes: AttributeMap) -> Option<Condition> {
         if let Some(Some(value)) = attributes.get("value") {
-            let value = value.to_string();
+            let value = value.to_str();
             (value != "")
                 .then(|| {
                     let v: Vec<_> = value

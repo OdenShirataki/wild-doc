@@ -23,11 +23,11 @@ impl Parser {
             if var != "" {
                 let mut inner = IndexMap::new();
                 if let (Some(collection_id), Ok(row)) = (
-                    self.database.read().collection_id(&collection.to_string()),
-                    row.to_string().parse::<NonZeroI64>(),
+                    self.database.read().collection_id(&collection.to_str()),
+                    row.to_str().parse::<NonZeroI64>(),
                 ) {
                     inner.insert(
-                        "row".to_owned(),
+                        "row".into(),
                         Arc::new(WildDocValue::Number(row.get().into())),
                     );
                     let mut find_session = false;
@@ -41,27 +41,27 @@ impl Parser {
                             if let Some(entity) = temporary_collection.get(&row) {
                                 inner.extend([
                                     (
-                                        "uuid".to_owned(),
+                                        "uuid".into(),
                                         Arc::new(WildDocValue::String(
                                             Uuid::from_u128(entity.uuid()).to_string(),
                                         )),
                                     ),
                                     (
-                                        "activity".to_owned(),
+                                        "activity".into(),
                                         Arc::new(WildDocValue::Bool(
                                             entity.activity() == Activity::Active,
                                         )),
                                     ),
                                     (
-                                        "term_begin".to_owned(),
+                                        "term_begin".into(),
                                         Arc::new(WildDocValue::Number(entity.term_begin().into())),
                                     ),
                                     (
-                                        "term_end".to_owned(),
+                                        "term_end".into(),
                                         Arc::new(WildDocValue::Number(entity.term_end().into())),
                                     ),
                                     (
-                                        "depends".to_owned(),
+                                        "depends".into(),
                                         Arc::new(WildDocValue::Object(
                                             entity
                                                 .depends()
@@ -72,7 +72,7 @@ impl Parser {
                                                         Arc::new(WildDocValue::Object(
                                                             [
                                                                 (
-                                                                    "collection_id".to_owned(),
+                                                                    "collection_id".into(),
                                                                     Arc::new(WildDocValue::Number(
                                                                         d.collection_id()
                                                                             .get()
@@ -80,7 +80,7 @@ impl Parser {
                                                                     )),
                                                                 ),
                                                                 (
-                                                                    "row".to_owned(),
+                                                                    "row".into(),
                                                                     Arc::new(WildDocValue::Number(
                                                                         d.row().get().into(),
                                                                     )),
@@ -94,7 +94,7 @@ impl Parser {
                                         )),
                                     ),
                                     (
-                                        "field".to_owned(),
+                                        "field".into(),
                                         Arc::new(WildDocValue::Object(
                                             if let Some(Some(field_mask)) = attributes.get("fields")
                                             {
@@ -118,7 +118,7 @@ impl Parser {
                                                                             )
                                                                         {
                                                                             WildDocValue::String(
-                                                                                str.to_owned(),
+                                                                                str.into(),
                                                                             )
                                                                         } else {
                                                                             WildDocValue::Binary(
@@ -142,14 +142,12 @@ impl Parser {
                                                     .into_iter()
                                                     .map(|(field_name, value)| {
                                                         (
-                                                            field_name.as_str().to_owned(),
+                                                            field_name.into(),
                                                             Arc::new(
                                                                 if let Ok(str) =
                                                                     std::str::from_utf8(value)
                                                                 {
-                                                                    WildDocValue::String(
-                                                                        str.to_owned(),
-                                                                    )
+                                                                    WildDocValue::String(str.into())
                                                                 } else {
                                                                     WildDocValue::Binary(
                                                                         value.to_owned(),
@@ -173,38 +171,35 @@ impl Parser {
                             let row = unsafe { NonZeroU32::new_unchecked(row.get() as u32) };
 
                             if let Some(uuid) = collection.uuid_string(row) {
-                                inner.insert(
-                                    "uuid".to_owned(),
-                                    Arc::new(WildDocValue::String(uuid)),
-                                );
+                                inner.insert("uuid".into(), Arc::new(WildDocValue::String(uuid)));
                             }
                             if let Some(activity) = collection.activity(row) {
                                 inner.insert(
-                                    "activity".to_owned(),
+                                    "activity".into(),
                                     Arc::new(WildDocValue::Bool(activity == Activity::Active)),
                                 );
                             };
                             if let Some(term_begin) = collection.term_begin(row) {
                                 inner.insert(
-                                    "term_begin".to_owned(),
+                                    "term_begin".into(),
                                     Arc::new(WildDocValue::Number(term_begin.into())),
                                 );
                             }
                             if let Some(term_end) = collection.term_end(row) {
                                 inner.insert(
-                                    "term_end".to_owned(),
+                                    "term_end".into(),
                                     Arc::new(WildDocValue::Number(term_end.into())),
                                 );
                             }
                             if let Some(last_updated) = collection.last_updated(row) {
                                 inner.insert(
-                                    "last_updated".to_owned(),
+                                    "last_updated".into(),
                                     Arc::new(WildDocValue::Number(last_updated.into())),
                                 );
                             }
                             inner.extend([
                                 (
-                                    "depends".to_owned(),
+                                    "depends".into(),
                                     Arc::new(WildDocValue::Object(
                                         self.database
                                             .read()
@@ -220,7 +215,7 @@ impl Parser {
                                                             Arc::new(WildDocValue::Object(
                                                                 [
                                                                     (
-                                                                        "collection_id".to_owned(),
+                                                                        "collection_id".into(),
                                                                         Arc::new(
                                                                             WildDocValue::Number(
                                                                                 collection_id
@@ -230,18 +225,17 @@ impl Parser {
                                                                         ),
                                                                     ),
                                                                     (
-                                                                        "collection_name"
-                                                                            .to_owned(),
+                                                                        "collection_name".into(),
                                                                         Arc::new(
                                                                             WildDocValue::String(
                                                                                 collection
                                                                                     .name()
-                                                                                    .to_owned(),
+                                                                                    .into(),
                                                                             ),
                                                                         ),
                                                                     ),
                                                                     (
-                                                                        "row".to_owned(),
+                                                                        "row".into(),
                                                                         Arc::new(
                                                                             WildDocValue::Number(
                                                                                 d.row()
@@ -280,12 +274,10 @@ impl Parser {
                                                                 if let Ok(str) =
                                                                     std::str::from_utf8(bytes)
                                                                 {
-                                                                    WildDocValue::String(
-                                                                        str.to_owned(),
-                                                                    )
+                                                                    WildDocValue::String(str.into())
                                                                 } else {
                                                                     WildDocValue::Binary(
-                                                                        bytes.to_owned(),
+                                                                        bytes.into(),
                                                                     )
                                                                 },
                                                             ),
@@ -308,11 +300,9 @@ impl Parser {
                                                             if let Ok(str) =
                                                                 std::str::from_utf8(bytes)
                                                             {
-                                                                WildDocValue::String(str.to_owned())
+                                                                WildDocValue::String(str.into())
                                                             } else {
-                                                                WildDocValue::Binary(
-                                                                    bytes.to_owned(),
-                                                                )
+                                                                WildDocValue::Binary(bytes.into())
                                                             },
                                                         ),
                                                     )

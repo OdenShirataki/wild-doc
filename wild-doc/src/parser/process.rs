@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::Path, sync::Arc};
+use std::{borrow::Cow, ops::Deref, path::Path, sync::Arc};
 
 use anyhow::Result;
 
@@ -115,15 +115,15 @@ impl Parser {
         if let (Some(Some(var)), Some(Some(r#in))) = (attributes.get("var"), attributes.get("in")) {
             let var = var.to_str();
             if var != "" {
-                match r#in.as_ref() {
+                match r#in.deref() {
                     WildDocValue::Object(map) => {
                         if let Some(Some(key_name)) = attributes.get("key") {
-                            for (key, value) in map {
+                            for (key, value) in map.into_iter() {
                                 self.state.stack().lock().push(
                                     [
                                         (var.to_string(), Arc::clone(value)),
                                         (
-                                            key_name.to_string(),
+                                            key_name.to_str().into(),
                                             Arc::new(serde_json::json!(key).into()),
                                         ),
                                     ]
@@ -133,7 +133,7 @@ impl Parser {
                                 self.state.stack().lock().pop();
                             }
                         } else {
-                            for (_, value) in map {
+                            for (_, value) in map.into_iter() {
                                 self.state
                                     .stack()
                                     .lock()
@@ -147,13 +147,13 @@ impl Parser {
                         let key_name = attributes.get("key");
                         if let Some(Some(key_name)) = key_name {
                             let mut key = 0;
-                            for value in vec {
+                            for value in vec.into_iter() {
                                 key += 1;
                                 self.state.stack().lock().push(
                                     [
                                         (var.to_string(), Arc::clone(value)),
                                         (
-                                            key_name.to_string(),
+                                            key_name.to_str().into(),
                                             Arc::new(serde_json::json!(key).into()),
                                         ),
                                     ]
@@ -163,7 +163,7 @@ impl Parser {
                                 self.state.stack().lock().pop();
                             }
                         } else {
-                            for value in vec {
+                            for value in vec.into_iter() {
                                 self.state
                                     .stack()
                                     .lock()

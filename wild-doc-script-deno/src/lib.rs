@@ -28,7 +28,7 @@ fn wdmap2v8obj<'s>(
 
     loop {
         if let Some((current_obj, current_values)) = obj_stack.pop() {
-            for (key, value) in current_values {
+            for (key, value) in current_values.into_iter() {
                 if let Some(v8_key) = v8::String::new(scope, key) {
                     match value.as_ref() {
                         WildDocValue::Binary(v) => {

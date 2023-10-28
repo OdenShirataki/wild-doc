@@ -50,7 +50,7 @@ impl Parser {
                     .map_or(false, |v| *v)
             {
                 let mut commit_rows = vec![];
-                for record in updates {
+                for record in updates.into_iter() {
                     match record {
                         SessionRecord::New {
                             collection_id,
@@ -87,7 +87,7 @@ impl Parser {
                 }
                 if let Some(Some(name)) = attributes.get("rows_set_global") {
                     self.register_global(
-                        name.to_str().as_ref(),
+                        &name.to_str(),
                         &Arc::new(WildDocValue::Object(
                             [
                                 (
@@ -151,7 +151,7 @@ impl Parser {
                     }
                     if let Some(Some(name)) = attributes.get("rows_set_global") {
                         self.register_global(
-                            name.to_str().as_ref(),
+                            &name.to_str(),
                             &Arc::new(WildDocValue::Object(
                                 [
                                     (
@@ -234,9 +234,9 @@ impl Parser {
     #[async_recursion(?Send)]
     async fn update_pends(&self, depend: CollectionRow, pends: Vec<Pend>) -> Vec<CollectionRow> {
         let mut rows = vec![];
-        for pend in pends {
+        for pend in pends.into_iter() {
             let pend_key = pend.key;
-            for record in pend.records {
+            for record in pend.records.into_iter() {
                 match record {
                     SessionRecord::New {
                         collection_id,
@@ -313,7 +313,7 @@ impl Parser {
                 };
             if let Some(collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
-                    for (depend_key, depend_row) in depends {
+                    for (depend_key, depend_row) in depends.into_iter() {
                         self.database
                             .write()
                             .register_relation(depend_key, depend_row, collection_row)
@@ -351,7 +351,7 @@ impl Parser {
                         .relation_mut()
                         .delete_pends_by_collection_row(&collection_row)
                         .await;
-                    for d in depends {
+                    for d in depends.into_iter() {
                         self.database
                             .write()
                             .register_relation(&d.0, &d.1, collection_row)
@@ -398,7 +398,7 @@ impl Parser {
                     }
                 }
                 depends.push((
-                    key.to_string(),
+                    key.to_str().into(),
                     if in_session {
                         CollectionRow::new(-collection_id, (-row).try_into().unwrap())
                     } else {
@@ -475,7 +475,8 @@ impl Parser {
                                                                     .unwrap();
                                                         }
                                                     }
-                                                    fields.insert(field_name.to_string(), value);
+                                                    fields
+                                                        .insert(field_name.to_str().into(), value);
                                                 }
                                             }
                                             b"pends" => {
@@ -486,7 +487,7 @@ impl Parser {
 
                                                 if let Some(Some(key)) = attributes.get("key") {
                                                     pends.push(Pend {
-                                                        key: key.to_string(),
+                                                        key: key.to_str().into(),
                                                         records: pends_tmp,
                                                     });
                                                 }

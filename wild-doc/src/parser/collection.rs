@@ -14,13 +14,13 @@ impl Parser {
             let var = var.to_str();
             if var != "" {
                 vars.insert(
-                    var.to_string(),
+                    var.into(),
                     Arc::new(WildDocValue::Array(
                         self.database
                             .read()
                             .collections()
                             .into_iter()
-                            .map(|v| Arc::new(WildDocValue::String(v.to_owned())))
+                            .map(|v| Arc::new(WildDocValue::String(v)))
                             .collect(),
                     )),
                 );
@@ -33,7 +33,7 @@ impl Parser {
         if let Some(Some(collection)) = attributes.get("collection") {
             self.database
                 .write()
-                .delete_collection(collection.to_str().as_ref())
+                .delete_collection(&collection.to_str())
                 .await;
         }
     }
