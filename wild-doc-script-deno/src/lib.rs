@@ -1,6 +1,6 @@
 pub mod module_loader;
 
-use std::{ffi::c_void, ops::Deref, path::Path, sync::Arc};
+use std::{ffi::c_void, path::Path, sync::Arc};
 
 use deno_runtime::{
     deno_core::{self, anyhow::Result, serde_v8, ModuleSpecifier},
@@ -151,16 +151,12 @@ impl WildDocScript for Deno {
                             .to_string(scope)
                             .unwrap()
                             .to_rust_string_lossy(scope);
-                        if key == "global" {
-                            retval.set(wdmap2v8obj(&state.global().lock().deref(), scope).into());
-                        } else {
-                            for stack in state.stack().lock().iter().rev() {
-                                if let Some(v) = stack.get(&key) {
-                                    if let Some(v) = wd2v8(v, scope) {
-                                        retval.set(v);
-                                    }
-                                    break;
+                        for stack in state.stack().lock().iter().rev() {
+                            if let Some(v) = stack.get(&key) {
+                                if let Some(v) = wd2v8(v, scope) {
+                                    retval.set(v);
                                 }
+                                break;
                             }
                         }
                     }

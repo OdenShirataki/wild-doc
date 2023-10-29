@@ -3,7 +3,7 @@ use std::{collections::VecDeque, sync::Arc};
 use indexmap::IndexMap;
 use wild_doc_script::{Vars, WildDocValue};
 
-use super::{AttributeMap, Parser};
+use super::Parser;
 
 impl Parser {
     fn route_map<'a>(
@@ -45,15 +45,5 @@ impl Parser {
                     .insert(last.to_owned(), Arc::clone(value));
             }
         }
-    }
-
-    #[inline(always)]
-    pub(super) fn local(&self, attributes: AttributeMap) {
-        self.state.stack().lock().push(
-            attributes
-                .into_iter()
-                .map(|(k, v)| (k, v.unwrap_or_else(|| Arc::new(WildDocValue::Null))))
-                .collect(),
-        );
     }
 }

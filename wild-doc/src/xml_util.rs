@@ -33,10 +33,8 @@ pub(crate) fn inner(xml: &[u8]) -> (&[u8], usize) {
 }
 
 #[inline(always)]
-pub(crate) fn quot_unescape(value: &[u8]) -> String {
-    unsafe { std::str::from_utf8_unchecked(value) }
-        .replace("&#039;", "'")
-        .replace("&quot;", "\"")
+pub(crate) fn quot_unescape(value: &str) -> String {
+    value.replace("&#039;", "'").replace("&quot;", "\"")
 }
 
 #[inline(always)]

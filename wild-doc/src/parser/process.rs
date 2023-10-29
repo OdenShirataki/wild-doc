@@ -6,6 +6,7 @@ use maybe_xml::{
     scanner::{Scanner, State},
     token::{self, prop::Attributes},
 };
+use wild_doc_script::Vars;
 
 use crate::xml_util;
 
@@ -53,8 +54,8 @@ impl Parser {
         Ok(b"".to_vec())
     }
 
-    pub(super) async fn case(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
-        let cmp_src = attributes.get("value").and_then(|v| v.as_ref()).map(|v| v);
+    pub(super) async fn case(&mut self, vars: Vars, xml: &[u8]) -> Result<Vec<u8>> {
+        let cmp_src = vars.get("value");
         let mut xml = xml;
         let mut scanner = Scanner::new();
         while let Some(state) = scanner.scan(&xml) {
@@ -101,8 +102,8 @@ impl Parser {
         Ok(vec![])
     }
 
-    pub(super) async fn r#if(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
-        if let Some(Some(value)) = attributes.get("value") {
+    pub(super) async fn r#if(&mut self, vars: Vars, xml: &[u8]) -> Result<Vec<u8>> {
+        if let Some(value) = vars.get("vars") {
             if value.as_bool().map_or(false, |v| *v) {
                 return self.parse(xml).await;
             }
@@ -110,14 +111,14 @@ impl Parser {
         Ok(vec![])
     }
 
-    pub(super) async fn r#for(&mut self, attributes: AttributeMap, xml: &[u8]) -> Result<Vec<u8>> {
+    pub(super) async fn r#for(&mut self, vars: Vars, xml: &[u8]) -> Result<Vec<u8>> {
         let mut r = Vec::new();
-        if let (Some(Some(var)), Some(Some(r#in))) = (attributes.get("var"), attributes.get("in")) {
+        if let (Some(var), Some(r#in)) = (vars.get("var"), vars.get("in")) {
             let var = var.to_str();
             if var != "" {
                 match r#in.deref() {
                     WildDocValue::Object(map) => {
-                        if let Some(Some(key_name)) = attributes.get("key") {
+                        if let Some(key_name) = vars.get("key") {
                             for (key, value) in map.into_iter() {
                                 self.state.stack().lock().push(
                                     [
@@ -144,8 +145,8 @@ impl Parser {
                         }
                     }
                     WildDocValue::Array(vec) => {
-                        let key_name = attributes.get("key");
-                        if let Some(Some(key_name)) = key_name {
+                        let key_name = vars.get("key");
+                        if let Some(key_name) = key_name {
                             let mut key = 0;
                             for value in vec.into_iter() {
                                 key += 1;

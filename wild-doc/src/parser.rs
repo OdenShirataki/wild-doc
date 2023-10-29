@@ -6,7 +6,7 @@ mod result;
 mod search;
 mod session;
 mod update;
-mod var;
+mod global;
 
 use std::{ops::Deref, sync::Arc};
 
@@ -167,6 +167,7 @@ impl Parser {
                     xml = &xml[pos..];
                 }
                 State::ScannedStartTag(pos) => {
+                    let xml_before_start = xml;
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
                     let token = token::StartTag::from(token_bytes);
@@ -215,6 +216,11 @@ impl Parser {
                                     self.update(inner_xml, attr).await?;
                                     xml = &xml[outer_end..];
                                 }
+                                b"on" => {
+                                    let (_, outer_end) = xml_util::inner(xml);
+                                    r.extend(&xml_before_start[..(pos+outer_end)]);
+                                    xml = &xml[outer_end..];
+                                }
                                 b"search" => {
                                     let attr = self.parse_attibutes(token.attributes()).await;
                                     xml = self.search(xml, attr, &mut search_map).await;
@@ -233,20 +239,20 @@ impl Parser {
                                 }
                                 b"case" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let attr = self.parse_attibutes(token.attributes()).await;
-                                    r.extend(self.case(attr, inner_xml).await?);
+                                    let vars = self.vars_from_attibutes(token.attributes()).await;
+                                    r.extend(self.case(vars, inner_xml).await?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"if" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let attr = self.parse_attibutes(token.attributes()).await;
-                                    r.extend(self.r#if(attr, inner_xml).await?);
+                                    let vars = self.vars_from_attibutes(token.attributes()).await;
+                                    r.extend(self.r#if(vars, inner_xml).await?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"for" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let attr = self.parse_attibutes(token.attributes()).await;
-                                    r.extend(self.r#for(attr, inner_xml).await?);
+                                    let vars = self.vars_from_attibutes(token.attributes()).await;
+                                    r.extend(self.r#for(vars, inner_xml).await?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"while" => {
@@ -264,8 +270,8 @@ impl Parser {
                                     r.push(b'>');
                                 }
                                 b"local" => {
-                                    let attr = self.parse_attibutes(token.attributes()).await;
-                                    self.local(attr);
+                                    let vars = self.vars_from_attibutes(token.attributes()).await;
+                                    self.state.stack().lock().push(vars);
                                 }
                                 _ => {}
                             }
@@ -387,7 +393,7 @@ impl Parser {
                 if key.starts_with("wd-tag:name") {
                     name = value.to_str().into();
                 } else if key.starts_with("wd-attr:replace") {
-                    let attr = xml_util::quot_unescape(value.to_str().as_bytes());
+                    let attr = xml_util::quot_unescape(&value.to_str());
                     if attr.len() > 0 {
                         html_attr.push(b' ');
                         html_attr.extend(attr.as_bytes());

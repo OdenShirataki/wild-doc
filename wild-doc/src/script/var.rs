@@ -35,58 +35,34 @@ impl WildDocScript for Var {
     async fn eval(&mut self, code: &[u8]) -> Result<Arc<WildDocValue>> {
         let mut splited = code.split(|c| *c == b'.');
         if let Some(root) = splited.next() {
-            if let Some(root) = if root == b"global" {
-                if let Some(global_root) = splited.next() {
-                    self.state
-                        .global()
-                        .lock()
-                        .get(unsafe { std::str::from_utf8_unchecked(global_root) })
-                        .cloned()
-                } else {
-                    None
-                }
-            } else {
-                self.search_stack(unsafe { std::str::from_utf8_unchecked(root) })
-            } {
-                if let Some(next) = splited.next() {
-                    if let Some(mut next_value) = match root.as_ref() {
-                        WildDocValue::Object(map) => {
-                            map.get(unsafe { std::str::from_utf8_unchecked(next) })
-                        }
-                        WildDocValue::Array(map) => unsafe { std::str::from_utf8_unchecked(next) }
-                            .parse::<usize>()
-                            .map_or(None, |v| map.get(v)),
-                        _ => None,
-                    } {
-                        loop {
-                            if let Some(next) = splited.next() {
-                                match next_value.as_ref() {
-                                    WildDocValue::Object(map) => {
-                                        if let Some(v) =
-                                            map.get(unsafe { std::str::from_utf8_unchecked(next) })
-                                        {
-                                            next_value = v;
-                                        }
-                                    }
-                                    WildDocValue::Array(map) => {
-                                        if let Ok(v) =
-                                            unsafe { std::str::from_utf8_unchecked(next) }
-                                                .parse::<usize>()
-                                        {
-                                            if let Some(v) = map.get(v) {
-                                                next_value = v;
-                                            }
-                                        }
-                                    }
-                                    _ => break,
+            if let Some(mut next_value) = self
+                .search_stack(unsafe { std::str::from_utf8_unchecked(root) })
+                .as_ref()
+            {
+                loop {
+                    if let Some(next) = splited.next() {
+                        match next_value.as_ref() {
+                            WildDocValue::Object(map) => {
+                                if let Some(v) =
+                                    map.get(unsafe { std::str::from_utf8_unchecked(next) })
+                                {
+                                    next_value = v;
                                 }
-                            } else {
-                                return Ok(Arc::clone(next_value));
                             }
+                            WildDocValue::Array(map) => {
+                                if let Ok(v) =
+                                    unsafe { std::str::from_utf8_unchecked(next) }.parse::<usize>()
+                                {
+                                    if let Some(v) = map.get(v) {
+                                        next_value = v;
+                                    }
+                                }
+                            }
+                            _ => break,
                         }
+                    } else {
+                        return Ok(Arc::clone(next_value));
                     }
-                } else {
-                    return Ok(Arc::clone(&root));
                 }
             }
         }
