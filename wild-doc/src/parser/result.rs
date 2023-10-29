@@ -8,18 +8,12 @@ use wild_doc_script::Vars;
 
 use self::custom_sort::WdCustomSort;
 
-use super::{AttributeMap, Parser, WildDocValue};
+use super::{Parser, WildDocValue};
 
 impl Parser {
-    pub(super) async fn result(
-        &mut self,
-        attributes: AttributeMap,
-        search_map: &mut HashMap<String, Search>,
-    ) {
-        let mut vars = Vars::new();
-        if let (Some(Some(search)), Some(Some(var))) =
-            (attributes.get("search"), attributes.get("var"))
-        {
+    pub(super) async fn result(&mut self, vars: Vars, search_map: &mut HashMap<String, Search>) {
+        let mut r = Vars::new();
+        if let (Some(search), Some(var)) = (vars.get("search"), vars.get("var")) {
             let search = search.to_str();
             let var = var.to_str();
             if search != "" && var != "" {
@@ -28,9 +22,8 @@ impl Parser {
 
                     let orders = make_order(
                         search,
-                        &attributes
+                        &vars
                             .get("sort")
-                            .and_then(|v| v.as_ref())
                             .map_or_else(|| Cow::Borrowed(""), |v| v.to_str()),
                     );
 
@@ -87,7 +80,7 @@ impl Parser {
 
                     let len = rows.len();
 
-                    vars.insert(
+                    r.insert(
                         var.into(),
                         Arc::new(WildDocValue::Object(
                             [
@@ -104,7 +97,7 @@ impl Parser {
                 }
             }
         }
-        self.state.stack().lock().push(vars);
+        self.state.stack().lock().push(r);
     }
 }
 

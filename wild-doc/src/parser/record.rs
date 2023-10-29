@@ -7,17 +7,15 @@ use indexmap::IndexMap;
 use semilattice_database_session::{Activity, CollectionRow, Uuid};
 use wild_doc_script::{Vars, WildDocValue};
 
-use super::{AttributeMap, Parser};
+use super::Parser;
 
 impl Parser {
-    pub(super) fn record(&self, attributes: AttributeMap) {
+    pub(super) fn record(&self, vars: Vars) {
         let mut json = Vars::new();
 
-        if let (Some(Some(collection)), Some(Some(row)), Some(Some(var))) = (
-            attributes.get("collection"),
-            attributes.get("row"),
-            attributes.get("var"),
-        ) {
+        if let (Some(collection), Some(row), Some(var)) =
+            (vars.get("collection"), vars.get("row"), vars.get("var"))
+        {
             let var = var.to_str();
             if var != "" {
                 let mut inner = IndexMap::new();
@@ -95,8 +93,7 @@ impl Parser {
                                     (
                                         "field".into(),
                                         Arc::new(WildDocValue::Object(
-                                            if let Some(Some(field_mask)) = attributes.get("fields")
-                                            {
+                                            if let Some(field_mask) = vars.get("fields") {
                                                 if let WildDocValue::Array(field_mask) =
                                                     field_mask.as_ref()
                                                 {
@@ -257,7 +254,7 @@ impl Parser {
                                 (
                                     "field".to_owned(),
                                     Arc::new(WildDocValue::Object(
-                                        if let Some(Some(field_mask)) = attributes.get("fields") {
+                                        if let Some(field_mask) = vars.get("fields") {
                                             if let WildDocValue::Array(field_mask) =
                                                 field_mask.as_ref()
                                             {

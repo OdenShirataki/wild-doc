@@ -10,14 +10,11 @@ use wild_doc_script::Vars;
 
 use crate::xml_util;
 
-use super::{AttributeMap, Parser, WildDocValue};
+use super::{Parser, WildDocValue};
 
 impl Parser {
-    pub(super) async fn get_include_content(
-        &mut self,
-        attributes: AttributeMap,
-    ) -> Result<Vec<u8>> {
-        if let Some(Some(src)) = attributes.get("src") {
+    pub(super) async fn get_include_content(&mut self, vars: Vars) -> Result<Vec<u8>> {
+        if let Some(src) = vars.get("src") {
             let src = src.to_str();
             let (xml, filename) = self
                 .state
@@ -27,7 +24,7 @@ impl Parser {
                 .map_or_else(
                     || {
                         let mut r = (None, Cow::Borrowed(""));
-                        if let Some(Some(substitute)) = attributes.get("substitute") {
+                        if let Some(substitute) = vars.get("substitute") {
                             let substitute = substitute.to_str();
                             if let Some(xml) = self
                                 .state
@@ -70,8 +67,10 @@ impl Parser {
                         b"wd:when" => {
                             let (inner_xml, outer_end) = xml_util::inner(xml);
                             xml = &xml[outer_end..];
-                            if let Some(Some(right)) =
-                                self.parse_attibutes(token.attributes()).await.get("value")
+                            if let Some(right) = self
+                                .vars_from_attibutes(token.attributes())
+                                .await
+                                .get("value")
                             {
                                 if let Some(cmp_src) = cmp_src {
                                     if cmp_src == right {
@@ -189,10 +188,9 @@ impl Parser {
         let mut r = Vec::new();
         loop {
             if self
-                .parse_attibutes(attributes)
+                .vars_from_attibutes(attributes)
                 .await
                 .get("continue")
-                .and_then(|v| v.as_ref())
                 .and_then(|v| v.as_bool())
                 .map_or(false, |v| *v)
             {

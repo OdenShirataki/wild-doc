@@ -22,7 +22,7 @@ use wild_doc_script::{Vars, WildDocValue};
 
 use crate::xml_util;
 
-use super::{AttributeMap, Parser};
+use super::Parser;
 
 #[derive(Debug, Clone)]
 struct DependError;
@@ -60,7 +60,7 @@ fn rows2val(commit_rows: Vec<CollectionRow>) -> Arc<WildDocValue> {
     ))
 }
 impl Parser {
-    pub async fn update(&mut self, xml: &[u8], attributes: AttributeMap) -> Result<Vec<u8>> {
+    pub async fn update(&mut self, xml: &[u8], vars: Vars) -> Result<Vec<u8>> {
         let mut r = vec![];
         if let Ok(inner_xml) = self.parse(xml).await {
             let (updates, on) = self.make_update_struct(inner_xml.as_slice()).await?;
@@ -69,9 +69,8 @@ impl Parser {
             let mut session_rows = vec![];
 
             if !self.sessions.last().is_some()
-                || attributes
+                || vars
                     .get("without_session")
-                    .and_then(|v| v.as_ref())
                     .and_then(|v| v.as_bool())
                     .map_or(false, |v| *v)
             {
@@ -117,7 +116,7 @@ impl Parser {
                         .write()
                         .update(&mut session_state.session, updates)
                         .await;
-                    if let Some(Some(commit)) = attributes.get("commit") {
+                    if let Some(commit) = vars.get("commit") {
                         if commit.as_bool().map_or(false, |v| *v) {
                             commit_rows = self
                                 .database
@@ -291,14 +290,12 @@ impl Parser {
     #[inline(always)]
     fn depend(
         &mut self,
-        attributes: &AttributeMap,
+        vars: &Vars,
         depends: &mut Vec<(String, CollectionRow)>,
     ) -> Result<(), DependError> {
-        if let (Some(Some(key)), Some(Some(collection)), Some(Some(row))) = (
-            attributes.get("key"),
-            attributes.get("collection"),
-            attributes.get("row"),
-        ) {
+        if let (Some(key), Some(collection), Some(row)) =
+            (vars.get("key"), vars.get("collection"), vars.get("row"))
+        {
             if let (Ok(row), Some(collection_id)) = (
                 row.to_str().parse::<NonZeroI64>(),
                 self.database.read().collection_id(&collection.to_str()),
@@ -363,8 +360,8 @@ impl Parser {
                             ));
                         }
                         b"collection" => {
-                            let token_attributes = self.parse_attibutes(token.attributes()).await;
-                            if let Some(Some(collection_name)) = token_attributes.get("name") {
+                            let token_vars = self.vars_from_attibutes(token.attributes()).await;
+                            if let Some(collection_name) = token_vars.get("name") {
                                 let collection_id = self
                                     .database
                                     .write()
@@ -382,8 +379,8 @@ impl Parser {
                                             let token_bytes = &xml[..pos];
                                             xml = &xml[pos..];
                                             let token = token::StartTag::from(token_bytes);
-                                            let attributes =
-                                                self.parse_attibutes(token.attributes()).await;
+                                            let vars =
+                                                self.vars_from_attibutes(token.attributes()).await;
                                             let name = token.name();
                                             match name.as_bytes() {
                                                 b"field" => {
@@ -391,9 +388,7 @@ impl Parser {
                                                         xml_util::inner(xml);
                                                     xml = &xml[outer_end..];
 
-                                                    if let Some(Some(field_name)) =
-                                                        attributes.get("name")
-                                                    {
+                                                    if let Some(field_name) = vars.get("name") {
                                                         let mut value =
                                                             std::str::from_utf8(inner_xml)?
                                                                 .replace("&gt;", ">")
@@ -403,8 +398,8 @@ impl Parser {
                                                                 .replace("&amp;", "&")
                                                                 .into_bytes();
 
-                                                        if let Some(Some(base64_decode)) =
-                                                            attributes.get("base64")
+                                                        if let Some(base64_decode) =
+                                                            vars.get("base64")
                                                         {
                                                             if base64_decode
                                                                 .as_bool()
@@ -430,7 +425,7 @@ impl Parser {
                                                     let (pends_tmp, _on_xml) =
                                                         self.make_update_struct(inner_xml).await?;
 
-                                                    if let Some(Some(key)) = attributes.get("key") {
+                                                    if let Some(key) = vars.get("key") {
                                                         pends.push(Pend {
                                                             key: key.to_str().into(),
                                                             records: pends_tmp,
@@ -447,10 +442,10 @@ impl Parser {
                                             let name = token.name();
                                             match name.as_bytes() {
                                                 b"depend" => {
-                                                    let attributes = self
-                                                        .parse_attibutes(token.attributes())
+                                                    let vars = self
+                                                        .vars_from_attibutes(token.attributes())
                                                         .await;
-                                                    self.depend(&attributes, &mut depends)?;
+                                                    self.depend(&vars, &mut depends)?;
                                                 }
                                                 _ => {}
                                             }
@@ -481,9 +476,8 @@ impl Parser {
                                     }
                                 }
 
-                                let row: i64 = token_attributes
+                                let row: i64 = token_vars
                                     .get("row")
-                                    .and_then(|v| v.as_ref())
                                     .and_then(|v| v.to_str().parse::<i64>().ok())
                                     .unwrap_or(0);
 
@@ -492,9 +486,8 @@ impl Parser {
                                 } else {
                                     (collection_id, row as u32)
                                 };
-                                if token_attributes
+                                if token_vars
                                     .get("delete")
-                                    .and_then(|v| v.as_ref())
                                     .and_then(|v| v.as_bool())
                                     .map_or(false, |v| *v)
                                 {
@@ -506,14 +499,14 @@ impl Parser {
                                     }
                                 } else {
                                     let mut activity = Activity::Active;
-                                    if let Some(Some(str)) = token_attributes.get("activity") {
+                                    if let Some(str) = token_vars.get("activity") {
                                         let str = str.to_str();
                                         if str == "inactive" || str == "0" {
                                             activity = Activity::Inactive;
                                         }
                                     }
                                     let mut term_begin = Term::Default;
-                                    if let Some(Some(str)) = token_attributes.get("term_begin") {
+                                    if let Some(str) = token_vars.get("term_begin") {
                                         let str = str.to_str();
                                         if str != "" {
                                             if let Ok(t) =
@@ -525,7 +518,7 @@ impl Parser {
                                         }
                                     }
                                     let mut term_end = Term::Default;
-                                    if let Some(Some(str)) = token_attributes.get("term_end") {
+                                    if let Some(str) = token_vars.get("term_end") {
                                         let str = str.to_str();
                                         if str != "" {
                                             if let Ok(t) =
@@ -550,8 +543,8 @@ impl Parser {
                                             pends,
                                         }
                                     } else {
-                                        let inherit_depend_if_empty = if let Some(Some(str)) =
-                                            token_attributes.get("inherit_depend_if_empty")
+                                        let inherit_depend_if_empty = if let Some(str) =
+                                            token_vars.get("inherit_depend_if_empty")
                                         {
                                             str.as_bool().map_or(false, |v| *v)
                                         } else {

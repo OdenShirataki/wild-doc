@@ -6,7 +6,7 @@ use wild_doc_script::{Vars, WildDocValue};
 
 use crate::xml_util;
 
-use super::{AttributeMap, Parser};
+use super::Parser;
 
 impl Parser {
     pub(super) async fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes<'_>) {
@@ -51,80 +51,6 @@ impl Parser {
         } else {
             None
         }
-    }
-
-    pub(super) async fn parse_attibutes(
-        &mut self,
-        attributes: Option<Attributes<'_>>,
-    ) -> AttributeMap {
-        let mut r = AttributeMap::new();
-
-        let mut values_per_script = HashMap::new();
-        let mut futs_noscript = vec![];
-
-        if let Some(attributes) = attributes {
-            for attr in attributes.into_iter() {
-                if let Ok(name) = attr.name().to_str() {
-                    if let Some(value) = attr.value() {
-                        if let Some(script_name) = Self::script_name(name) {
-                            let new_name = unsafe {
-                                std::str::from_utf8_unchecked(
-                                    &name.as_bytes()[..name.len() - (script_name.len() + 1)],
-                                )
-                            };
-                            let v = values_per_script.entry(script_name).or_insert(vec![]);
-                            v.push((new_name, value));
-                        } else {
-                            if let Ok(value) = value.to_str() {
-                                futs_noscript.push(async move {
-                                    (
-                                        name.into(),
-                                        Some(Arc::new({
-                                            let value = xml_util::quot_unescape(value);
-                                            if let Ok(json) =
-                                                serde_json::from_str::<serde_json::Value>(
-                                                    value.as_str(),
-                                                )
-                                            {
-                                                json.into()
-                                            } else {
-                                                WildDocValue::String(value)
-                                            }
-                                        })),
-                                    )
-                                });
-                            }
-                        }
-                    } else {
-                        r.insert(name.into(), None);
-                    }
-                }
-            }
-        }
-
-        let mut futs = vec![];
-        for (script_name, script) in self.scripts.iter_mut() {
-            if let Some(v) = values_per_script.get(script_name.as_str()) {
-                futs.push(async move {
-                    let mut r = AttributeMap::new();
-                    for (name, value) in v.into_iter() {
-                        if let Ok(v) = script.eval(value.as_bytes()).await {
-                            r.insert(name.to_string(), Some(v));
-                        }
-                    }
-                    r
-                })
-            }
-        }
-
-        let (f1, f2) = futures::future::join(
-            futures::future::join_all(futs),
-            futures::future::join_all(futs_noscript),
-        )
-        .await;
-        r.extend(f1.into_iter().flatten());
-        r.extend(f2.into_iter());
-        r
     }
 
     pub(super) async fn vars_from_attibutes(&mut self, attributes: Option<Attributes<'_>>) -> Vars {

@@ -1,12 +1,12 @@
 mod attr;
 mod collection;
+mod global;
 mod process;
 mod record;
 mod result;
 mod search;
 mod session;
 mod update;
-mod global;
 
 use std::{ops::Deref, sync::Arc};
 
@@ -23,7 +23,7 @@ use maybe_xml::{
     },
 };
 use semilattice_database_session::{Session, SessionDatabase};
-use wild_doc_script::{WildDocScript, WildDocState, WildDocValue};
+use wild_doc_script::{Vars, WildDocScript, WildDocState, WildDocValue};
 
 use crate::{script::Var, xml_util};
 
@@ -32,8 +32,6 @@ use wild_doc_script_deno::Deno;
 
 #[cfg(feature = "py")]
 use wild_doc_script_python::WdPy;
-
-type AttributeMap = HashMap<String, Option<Arc<WildDocValue>>>;
 
 struct SessionState {
     session: Session,
@@ -84,44 +82,38 @@ impl Parser {
     ) -> Result<Option<Vec<u8>>> {
         match name {
             b"print" => {
-                return Ok(self
-                    .parse_attibutes(attributes)
-                    .await
-                    .get("value")
-                    .and_then(|v| v.as_ref())
-                    .map(|v| match v.deref() {
+                return Ok(self.vars_from_attibutes(attributes).await.get("value").map(
+                    |v| match v.deref() {
                         WildDocValue::String(s) => s.to_owned().into(),
                         WildDocValue::Binary(v) => v.to_vec(),
                         _ => v.to_str().as_bytes().into(),
-                    }));
+                    },
+                ));
             }
             b"global" => {
-                let attributes = self.parse_attibutes(attributes).await;
-                if let (Some(Some(var)), Some(Some(value))) =
-                    (attributes.get("var"), attributes.get("value"))
-                {
+                let vars = self.vars_from_attibutes(attributes).await;
+                if let (Some(var), Some(value)) = (vars.get("var"), vars.get("value")) {
                     self.register_global(&var.to_str(), value);
                 }
             }
             b"print_escape_html" => {
                 return Ok(self
-                    .parse_attibutes(attributes)
+                    .vars_from_attibutes(attributes)
                     .await
                     .get("value")
-                    .and_then(|v| v.as_ref())
                     .map(|v| xml_util::escape_html(&v.to_str()).into()));
             }
             b"include" => {
-                let attributes = self.parse_attibutes(attributes).await;
-                return Ok(Some(self.get_include_content(attributes).await?));
+                let vars = self.vars_from_attibutes(attributes).await;
+                return Ok(Some(self.get_include_content(vars).await?));
             }
             b"delete_collection" => {
-                let attributes = self.parse_attibutes(attributes).await;
-                self.delete_collection(attributes).await;
+                let vars = self.vars_from_attibutes(attributes).await;
+                self.delete_collection(vars).await;
             }
             b"session_gc" => {
-                let attributes = self.parse_attibutes(attributes).await;
-                self.session_gc(attributes);
+                let vars = self.vars_from_attibutes(attributes).await;
+                self.session_gc(vars);
             }
             _ => {}
         }
@@ -184,16 +176,16 @@ impl Parser {
                         } else {
                             match name.local().as_bytes() {
                                 b"session" => {
-                                    let attr = self.parse_attibutes(token.attributes()).await;
-                                    self.session(attr);
+                                    let vars = self.vars_from_attibutes(token.attributes()).await;
+                                    self.session(vars);
                                 }
                                 b"session_sequence_cursor" => {
-                                    let attr = self.parse_attibutes(token.attributes()).await;
-                                    self.session_sequence(attr);
+                                    let vars = self.vars_from_attibutes(token.attributes()).await;
+                                    self.session_sequence(vars);
                                 }
                                 b"sessions" => {
-                                    let attr = self.parse_attibutes(token.attributes()).await;
-                                    self.sessions(attr);
+                                    let vars = self.vars_from_attibutes(token.attributes()).await;
+                                    self.sessions(vars);
                                 }
                                 b"re" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
@@ -212,30 +204,30 @@ impl Parser {
                                 }
                                 b"update" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let attr = self.parse_attibutes(token.attributes()).await;
-                                    self.update(inner_xml, attr).await?;
+                                    let vars = self.vars_from_attibutes(token.attributes()).await;
+                                    self.update(inner_xml, vars).await?;
                                     xml = &xml[outer_end..];
                                 }
                                 b"on" => {
                                     let (_, outer_end) = xml_util::inner(xml);
-                                    r.extend(&xml_before_start[..(pos+outer_end)]);
+                                    r.extend(&xml_before_start[..(pos + outer_end)]);
                                     xml = &xml[outer_end..];
                                 }
                                 b"search" => {
-                                    let attr = self.parse_attibutes(token.attributes()).await;
-                                    xml = self.search(xml, attr, &mut search_map).await;
+                                    let vars = self.vars_from_attibutes(token.attributes()).await;
+                                    xml = self.search(xml, vars, &mut search_map).await;
                                 }
                                 b"result" => {
-                                    let attr = self.parse_attibutes(token.attributes()).await;
-                                    self.result(attr, &mut search_map).await;
+                                    let vars = self.vars_from_attibutes(token.attributes()).await;
+                                    self.result(vars, &mut search_map).await;
                                 }
                                 b"record" => {
-                                    let attr = self.parse_attibutes(token.attributes()).await;
-                                    self.record(attr);
+                                    let vars = self.vars_from_attibutes(token.attributes()).await;
+                                    self.record(vars);
                                 }
                                 b"collections" => {
-                                    let attr = self.parse_attibutes(token.attributes()).await;
-                                    self.collections(attr);
+                                    let vars = self.vars_from_attibutes(token.attributes()).await;
+                                    self.collections(vars);
                                 }
                                 b"case" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
@@ -261,8 +253,8 @@ impl Parser {
                                     xml = &xml[outer_end..];
                                 }
                                 b"tag" => {
-                                    let attr = self.parse_attibutes(token.attributes()).await;
-                                    let (name, attr) = self.custom_tag(attr);
+                                    let vars = self.vars_from_attibutes(token.attributes()).await;
+                                    let (name, attr) = self.custom_tag(vars);
                                     tag_stack.push(name.clone());
                                     r.push(b'<');
                                     r.extend(name.into_bytes());
@@ -291,8 +283,8 @@ impl Parser {
                     let token = token::EmptyElementTag::from(token_bytes);
                     let name = token.name();
                     if name.as_bytes() == b"wd:tag" {
-                        let attributes = self.parse_attibutes(token.attributes()).await;
-                        let (name, attr) = self.custom_tag(attributes);
+                        let vars = self.vars_from_attibutes(token.attributes()).await;
+                        let (name, attr) = self.custom_tag(vars);
                         r.push(b'<');
                         r.extend(name.into_bytes());
                         r.extend(attr);
@@ -385,33 +377,31 @@ impl Parser {
     }
 
     #[inline(always)]
-    fn custom_tag(&self, attributes: AttributeMap) -> (String, Vec<u8>) {
+    fn custom_tag(&self, vars: Vars) -> (String, Vec<u8>) {
         let mut html_attr = vec![];
         let mut name = "".into();
-        for (key, value) in attributes.into_iter() {
-            if let Some(value) = value {
-                if key.starts_with("wd-tag:name") {
-                    name = value.to_str().into();
-                } else if key.starts_with("wd-attr:replace") {
-                    let attr = xml_util::quot_unescape(&value.to_str());
-                    if attr.len() > 0 {
-                        html_attr.push(b' ');
-                        html_attr.extend(attr.as_bytes());
-                    }
-                } else {
+        for (key, value) in vars.into_iter() {
+            if key.starts_with("wd-tag:name") {
+                name = value.to_str().into();
+            } else if key.starts_with("wd-attr:replace") {
+                let attr = xml_util::quot_unescape(&value.to_str());
+                if attr.len() > 0 {
                     html_attr.push(b' ');
-                    html_attr.extend(key.as_bytes());
-                    html_attr.extend(b"=\"");
-                    html_attr.extend(
-                        value
-                            .to_str()
-                            .replace("&", "&amp;")
-                            .replace("<", "&lt;")
-                            .replace(">", "&gt;")
-                            .into_bytes(),
-                    );
-                    html_attr.push(b'"');
+                    html_attr.extend(attr.as_bytes());
                 }
+            } else {
+                html_attr.push(b' ');
+                html_attr.extend(key.as_bytes());
+                html_attr.extend(b"=\"");
+                html_attr.extend(
+                    value
+                        .to_str()
+                        .replace("&", "&amp;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
+                        .into_bytes(),
+                );
+                html_attr.push(b'"');
             }
         }
 
