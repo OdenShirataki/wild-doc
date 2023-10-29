@@ -1,4 +1,4 @@
-use std::{ffi::CString, ops::Deref, sync::Arc};
+use std::{ffi::CString, sync::Arc};
 
 use pyo3::{
     pyfunction,
@@ -61,41 +61,22 @@ fn wdv(_py: Python, key: String) -> PyResult<PyObject> {
         let state: &Arc<WildDocState> =
             unsafe { PyCapsule::import(py, CString::new("builtins.wdstate")?.as_ref())? };
 
-        if key == "global" {
-            let global = state.global();
-
-            return PyModule::from_code(
-                py,
-                r#"
-            import json
-
-            def v(data):
-            return json.loads(data)
-            "#,
-                "",
-                "",
-            )?
-            .getattr("v")?
-            .call1((WildDocValue::Object(global.lock().deref().clone()).to_string(),))?
-            .extract();
-        } else {
-            for stack in state.stack().lock().iter().rev() {
-                if let Some(v) = stack.get(&key) {
-                    return PyModule::from_code(
-                        py,
-                        r#"
+        for stack in state.stack().lock().iter().rev() {
+            if let Some(v) = stack.get(&key) {
+                return PyModule::from_code(
+                    py,
+                    r#"
 import json
 
 def v(data):
     return json.loads(data)
 "#,
-                        "",
-                        "",
-                    )?
-                    .getattr("v")?
-                    .call1((v.to_string(),))?
-                    .extract();
-                }
+                    "",
+                    "",
+                )?
+                .getattr("v")?
+                .call1((v.to_string(),))?
+                .extract();
             }
         }
 

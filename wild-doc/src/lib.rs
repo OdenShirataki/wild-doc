@@ -17,20 +17,20 @@ use parking_lot::{Mutex, RwLock};
 
 use semilattice_database_session::SessionDatabase;
 
-use wild_doc_script::{IncludeAdaptor, WildDocState, WildDocValue};
+use wild_doc_script::{IncludeAdaptor, Vars, WildDocState};
 
 use parser::Parser;
 
 pub struct WildDocResult {
     body: Vec<u8>,
-    options: Option<Arc<WildDocValue>>,
+    options: Vars,
 }
 impl WildDocResult {
     pub fn body(&self) -> &[u8] {
         &self.body
     }
 
-    pub fn options(&self) -> &Option<Arc<WildDocValue>> {
+    pub fn options(&self) -> &Vars {
         &self.options
     }
 }
@@ -97,12 +97,7 @@ impl WildDoc {
             .build()?
             .block_on(parser.parse(xml))?;
 
-        let options = parser
-            .state()
-            .global()
-            .lock()
-            .get("result_options")
-            .cloned();
+        let options = parser.result_options().clone();
 
         Ok(WildDocResult { body, options })
     }

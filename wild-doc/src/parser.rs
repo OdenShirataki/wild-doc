@@ -1,6 +1,5 @@
 mod attr;
 mod collection;
-mod global;
 mod process;
 mod record;
 mod result;
@@ -44,6 +43,7 @@ pub struct Parser {
     sessions: Vec<SessionState>,
     scripts: HashMap<String, Box<dyn WildDocScript>>,
     state: Arc<WildDocState>,
+    result_options: Vars,
     include_stack: Vec<String>,
 }
 
@@ -67,12 +67,13 @@ impl Parser {
             sessions: vec![],
             database,
             state,
+            result_options: Vars::new(),
             include_stack: vec![],
         })
     }
 
-    pub fn state(&self) -> &Arc<WildDocState> {
-        &self.state
+    pub fn result_options(&self) -> &Vars {
+        &self.result_options
     }
 
     async fn parse_wd_start_or_empty_tag(
@@ -90,10 +91,11 @@ impl Parser {
                     },
                 ));
             }
-            b"global" => {
+            b"result_option" => {
                 let vars = self.vars_from_attibutes(attributes).await;
                 if let (Some(var), Some(value)) = (vars.get("var"), vars.get("value")) {
-                    self.register_global(&var.to_str(), value);
+                    self.result_options
+                        .insert(var.to_str().into(), Arc::clone(value));
                 }
             }
             b"print_escape_html" => {

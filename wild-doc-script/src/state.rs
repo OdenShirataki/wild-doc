@@ -3,14 +3,12 @@ use std::{
     sync::Arc,
 };
 
-use indexmap::IndexMap;
 use parking_lot::Mutex;
 
-use crate::{IncludeAdaptor, Vars, VarsStack};
+use crate::{IncludeAdaptor, VarsStack};
 
 pub struct WildDocState {
     stack: Mutex<VarsStack>,
-    global: Mutex<Vars>,
     cache_dir: PathBuf,
     include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
 }
@@ -23,7 +21,6 @@ impl WildDocState {
     ) -> Self {
         Self {
             stack: Mutex::new(initial_stack),
-            global: Mutex::new(IndexMap::new()),
             cache_dir,
             include_adaptor,
         }
@@ -37,11 +34,6 @@ impl WildDocState {
     #[inline(always)]
     pub fn stack(&self) -> &Mutex<VarsStack> {
         &self.stack
-    }
-
-    #[inline(always)]
-    pub fn global(&self) -> &Mutex<Vars> {
-        &self.global
     }
 
     #[inline(always)]
