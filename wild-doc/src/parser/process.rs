@@ -102,7 +102,7 @@ impl Parser {
     }
 
     pub(super) async fn r#if(&mut self, vars: Vars, xml: &[u8]) -> Result<Vec<u8>> {
-        if let Some(value) = vars.get("vars") {
+        if let Some(value) = vars.get("value") {
             if value.as_bool().map_or(false, |v| *v) {
                 return self.parse(xml).await;
             }
