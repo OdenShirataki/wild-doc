@@ -83,20 +83,6 @@ fn wd2v8<'s>(wdv: &WildDocValue, scope: &'s mut HandleScope) -> Option<v8::Local
     None
 }
 
-fn get_state<'a, 'b>(scope: &'a mut v8::HandleScope) -> Option<&'b WildDocState>
-where
-    'b: 'a,
-{
-    if let Some(state) = v8::String::new(scope, "wd.state")
-        .and_then(|code| v8::Script::compile(scope, code, None))
-        .and_then(|v| v.run(scope))
-    {
-        Some(unsafe { &*(v8::Local::<v8::External>::cast(state).value() as *const WildDocState) })
-    } else {
-        None
-    }
-}
-
 fn set_stack(scope: &mut v8::HandleScope, stack: &VarsStack) {
     if let (Some(wd), Some(v8str_stack)) = (
         v8::String::new(scope, "wd")
@@ -139,7 +125,14 @@ impl WildDocScript for Deno {
                 |scope: &mut v8::HandleScope,
                  args: v8::FunctionCallbackArguments,
                  mut retval: v8::ReturnValue| {
-                    if let Some(state) = get_state(scope) {
+                    if let Some(state) = v8::String::new(scope, "wd.state")
+                        .and_then(|code| v8::Script::compile(scope, code, None))
+                        .and_then(|v| v.run(scope))
+                    {
+                        let state = unsafe {
+                            &*(v8::Local::<v8::External>::cast(state).value()
+                                as *const WildDocState)
+                        };
                         let filename = args
                             .get(0)
                             .to_string(scope)
