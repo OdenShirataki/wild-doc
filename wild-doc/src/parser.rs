@@ -22,7 +22,7 @@ use maybe_xml::{
     },
 };
 use semilattice_database_session::{Session, SessionDatabase};
-use wild_doc_script::{Vars, WildDocScript, WildDocState, WildDocValue};
+use wild_doc_script::{Vars, VarsStack, WildDocScript, WildDocState, WildDocValue};
 
 use crate::{script::Var, xml_util};
 
@@ -42,13 +42,18 @@ pub struct Parser {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<SessionState>,
     scripts: HashMap<String, Box<dyn WildDocScript>>,
+    stack: VarsStack,
     state: Arc<WildDocState>,
     result_options: Vars,
     include_stack: Vec<String>,
 }
 
 impl Parser {
-    pub fn new(database: Arc<RwLock<SessionDatabase>>, state: WildDocState) -> Result<Self> {
+    pub fn new(
+        database: Arc<RwLock<SessionDatabase>>,
+        stack: VarsStack,
+        state: WildDocState,
+    ) -> Result<Self> {
         let state = Arc::new(state);
 
         let mut scripts: hashbrown::HashMap<String, Box<dyn WildDocScript>> =
@@ -66,6 +71,7 @@ impl Parser {
             scripts,
             sessions: vec![],
             database,
+            stack,
             state,
             result_options: Vars::new(),
             include_stack: vec![],
@@ -148,7 +154,8 @@ impl Parser {
                             if let Err(e) = script
                                 .evaluate_module(
                                     self.include_stack.last().map_or("", |v| v),
-                                    i.as_bytes(),
+                                    i.to_str()?,
+                                    &self.stack,
                                 )
                                 .await
                             {
@@ -183,11 +190,12 @@ impl Parser {
                                 }
                                 b"session_sequence_cursor" => {
                                     let vars = self.vars_from_attibutes(token.attributes()).await;
-                                    self.session_sequence(vars);
+                                    let r = self.session_sequence(vars);
+                                    self.stack.push(r);
                                 }
                                 b"sessions" => {
                                     let vars = self.vars_from_attibutes(token.attributes()).await;
-                                    self.sessions(vars);
+                                    self.stack.push(self.sessions(vars));
                                 }
                                 b"re" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
@@ -221,15 +229,17 @@ impl Parser {
                                 }
                                 b"result" => {
                                     let vars = self.vars_from_attibutes(token.attributes()).await;
-                                    self.result(vars, &mut search_map).await;
+                                    let r = self.result(vars, &mut search_map).await;
+                                    self.stack.push(r);
                                 }
                                 b"record" => {
                                     let vars = self.vars_from_attibutes(token.attributes()).await;
-                                    self.record(vars);
+                                    let r = self.record(vars);
+                                    self.stack.push(r);
                                 }
                                 b"collections" => {
                                     let vars = self.vars_from_attibutes(token.attributes()).await;
-                                    self.collections(vars);
+                                    self.stack.push(self.collections(vars));
                                 }
                                 b"case" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
@@ -265,7 +275,7 @@ impl Parser {
                                 }
                                 b"local" => {
                                     let vars = self.vars_from_attibutes(token.attributes()).await;
-                                    self.state.stack().lock().push(vars);
+                                    self.stack.push(vars);
                                 }
                                 _ => {}
                             }
@@ -330,7 +340,7 @@ impl Parser {
                             | b"collections"
                             | b"sessions"
                             | b"session_sequence_cursor" => {
-                                self.state.stack().lock().pop();
+                                self.stack.pop();
                             }
                             b"session" => {
                                 if let Some(ref mut session_state) = self.sessions.pop() {

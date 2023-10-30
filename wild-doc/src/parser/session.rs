@@ -8,17 +8,18 @@ use super::{Parser, SessionState};
 
 impl Parser {
     #[inline(always)]
-    pub(super) fn sessions(&self, vars: Vars) {
-        let mut json = Vars::new();
+    #[must_use]
+    pub(super) fn sessions(&self, vars: Vars) -> Vars {
+        let mut r = Vars::new();
 
         if let Some(var) = vars.get("var") {
             let var = var.to_str();
             if var != "" {
                 let sessions = self.database.read().sessions();
-                json.insert(var.into(), Arc::new(json!(sessions).into()));
+                r.insert(var.into(), Arc::new(json!(sessions).into()));
             }
         }
-        self.state.stack().lock().push(json);
+        r
     }
 
     #[inline(always)]
@@ -66,7 +67,8 @@ impl Parser {
     }
 
     #[inline(always)]
-    pub(super) fn session_sequence(&self, vars: Vars) {
+    #[must_use]
+    pub(super) fn session_sequence(&self, vars: Vars) -> Vars {
         let mut str_max = vars.get("max").map_or(Cow::Borrowed(""), |v| v.to_str());
         if str_max == "" {
             str_max = Cow::Borrowed("session_sequence_max");
@@ -79,20 +81,20 @@ impl Parser {
             str_current = Cow::Borrowed("session_sequence_current");
         }
 
-        let mut json = Vars::new();
+        let mut r = Vars::new();
         if let Some(session_state) = self.sessions.last() {
             if let Some(cursor) = session_state.session.sequence_cursor() {
-                json.insert(
+                r.insert(
                     str_max.into(),
                     Arc::new(WildDocValue::Number(cursor.max.into())),
                 );
-                json.insert(
+                r.insert(
                     str_current.into(),
                     Arc::new(WildDocValue::Number(cursor.current.into())),
                 );
             }
         }
-        self.state.stack().lock().push(json);
+        r
     }
 
     #[inline(always)]

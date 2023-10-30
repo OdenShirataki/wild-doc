@@ -119,7 +119,7 @@ impl Parser {
                     WildDocValue::Object(map) => {
                         if let Some(key_name) = vars.get("key") {
                             for (key, value) in map.into_iter() {
-                                self.state.stack().lock().push(
+                                self.stack.push(
                                     [
                                         (var.to_string(), Arc::clone(value)),
                                         (
@@ -130,16 +130,14 @@ impl Parser {
                                     .into(),
                                 );
                                 r.extend(self.parse(xml).await?);
-                                self.state.stack().lock().pop();
+                                self.stack.pop();
                             }
                         } else {
                             for (_, value) in map.into_iter() {
-                                self.state
-                                    .stack()
-                                    .lock()
+                                self.stack
                                     .push([(var.to_string(), Arc::clone(value))].into());
                                 r.extend(self.parse(xml).await?);
-                                self.state.stack().lock().pop();
+                                self.stack.pop();
                             }
                         }
                     }
@@ -149,7 +147,7 @@ impl Parser {
                             let mut key = 0;
                             for value in vec.into_iter() {
                                 key += 1;
-                                self.state.stack().lock().push(
+                                self.stack.push(
                                     [
                                         (var.to_string(), Arc::clone(value)),
                                         (
@@ -160,16 +158,14 @@ impl Parser {
                                     .into(),
                                 );
                                 r.extend(self.parse(xml).await?);
-                                self.state.stack().lock().pop();
+                                self.stack.pop();
                             }
                         } else {
                             for value in vec.into_iter() {
-                                self.state
-                                    .stack()
-                                    .lock()
+                                self.stack
                                     .push([(var.to_string(), Arc::clone(value))].into());
                                 r.extend(self.parse(xml).await?);
-                                self.state.stack().lock().pop();
+                                self.stack.pop();
                             }
                         }
                     }

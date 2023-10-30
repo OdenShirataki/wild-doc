@@ -11,7 +11,12 @@ use self::custom_sort::WdCustomSort;
 use super::{Parser, WildDocValue};
 
 impl Parser {
-    pub(super) async fn result(&mut self, vars: Vars, search_map: &mut HashMap<String, Search>) {
+    #[must_use]
+    pub(super) async fn result(
+        &mut self,
+        vars: Vars,
+        search_map: &mut HashMap<String, Search>,
+    ) -> Vars {
         let mut r = Vars::new();
         if let (Some(search), Some(var)) = (vars.get("search"), vars.get("var")) {
             let search = search.to_str();
@@ -97,7 +102,7 @@ impl Parser {
                 }
             }
         }
-        self.state.stack().lock().push(r);
+        r
     }
 }
 

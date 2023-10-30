@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-script-deno"
-version = "0.13.0"
+version = "0.14.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -23,4 +23,4 @@ deno_runtime = "0.129"
 deno_ast = { version = "0.29.5", features = ["transpiling"] }
 futures = "0.3"
 
-wild-doc-script = { version = "0.20", path = "../wild-doc-script" }
+wild-doc-script = { version = "0.21", path = "../wild-doc-script" }

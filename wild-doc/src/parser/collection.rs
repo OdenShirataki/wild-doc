@@ -5,7 +5,8 @@ use wild_doc_script::{Vars, WildDocValue};
 use super::Parser;
 
 impl Parser {
-    pub(super) fn collections(&self, vars: Vars) {
+    #[must_use]
+    pub(super) fn collections(&self, vars: Vars) ->Vars{
         let mut r = Vars::new();
 
         if let Some(var) = vars.get("var") {
@@ -24,7 +25,7 @@ impl Parser {
                 );
             }
         }
-        self.state.stack().lock().push(r);
+        r
     }
 
     pub(super) async fn delete_collection(&self, vars: Vars) {

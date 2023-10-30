@@ -129,7 +129,7 @@ impl Parser {
             }
 
             if let Some((on_xml, vars)) = on {
-                self.state.stack().lock().push(
+                self.stack.push(
                     [(
                         if let Some(var) = vars.get("var") {
                             var.to_str().into()
@@ -147,7 +147,7 @@ impl Parser {
                     .into(),
                 );
                 r = self.parse(on_xml).await?;
-                self.state.stack().lock().pop();
+                self.stack.pop();
             }
         }
         Ok(r)

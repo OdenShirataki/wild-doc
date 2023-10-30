@@ -76,19 +76,16 @@ impl WildDoc {
     ) -> Result<WildDocResult> {
         let mut parser = Parser::new(
             Arc::clone(&self.database),
-            WildDocState::new(
-                vec![[(
-                    "input".into(),
-                    Arc::new(
-                        serde_json::from_slice(input_json)
-                            .unwrap_or(serde_json::json!({}))
-                            .into(),
-                    ),
-                )]
-                .into()],
-                self.cache_dir.clone(),
-                include_adaptor,
-            ),
+            vec![[(
+                "input".into(),
+                Arc::new(
+                    serde_json::from_slice(input_json)
+                        .unwrap_or(serde_json::json!({}))
+                        .into(),
+                ),
+            )]
+            .into()],
+            WildDocState::new(self.cache_dir.clone(), include_adaptor),
         )?;
 
         let body = tokio::runtime::Builder::new_current_thread()

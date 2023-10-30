@@ -53,6 +53,7 @@ impl Parser {
         }
     }
 
+    #[must_use]
     pub(super) async fn vars_from_attibutes(&mut self, attributes: Option<Attributes<'_>>) -> Vars {
         let mut r = Vars::new();
 
@@ -100,10 +101,11 @@ impl Parser {
         let mut futs = vec![];
         for (script_name, script) in self.scripts.iter_mut() {
             if let Some(v) = values_per_script.get(script_name.as_str()) {
+                let stack = &self.stack;
                 futs.push(async move {
                     let mut r = Vars::new();
                     for (name, value) in v.into_iter() {
-                        if let Ok(v) = script.eval(value.as_bytes()).await {
+                        if let Ok(v) = script.eval(value.to_str().unwrap(), stack).await {
                             r.insert(name.to_string(), v);
                         }
                     }
@@ -143,7 +145,7 @@ impl Parser {
                 },
                 if let Some(script) = self.scripts.get_mut(script_name) {
                     script
-                        .eval(xml_util::quot_unescape(value).as_bytes())
+                        .eval(&xml_util::quot_unescape(value), &self.stack)
                         .await
                         .ok()
                 } else {

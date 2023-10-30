@@ -5,7 +5,9 @@ use pyo3::{
     types::{PyCapsule, PyDict, PyModule},
     wrap_pyfunction, PyObject, PyResult, Python,
 };
-use wild_doc_script::{anyhow::Result, async_trait, WildDocScript, WildDocState, WildDocValue};
+use wild_doc_script::{
+    anyhow::Result, async_trait, VarsStack, WildDocScript, WildDocState, WildDocValue,
+};
 
 pub struct WdPy {}
 
@@ -32,21 +34,29 @@ impl WildDocScript for WdPy {
         Ok(WdPy {})
     }
 
-    async fn evaluate_module(&mut self, _: &str, code: &[u8]) -> Result<()> {
-        let code = std::str::from_utf8(code)?;
-        Python::with_gil(|py| -> PyResult<()> { py.run(code, None, None) })?;
+    async fn evaluate_module(&mut self, _: &str, code: &str, stack: &VarsStack) -> Result<()> {
+        Python::with_gil(|py| -> PyResult<()> {
+            let builtins = PyModule::import(py, "builtins")?;
+            builtins.set_item(
+                "wdstack",
+                PyCapsule::new(py, stack.clone(), Some(CString::new("builtins.wdstack")?))?,
+            )?;
+
+            py.run(code, None, None)
+        })?;
         Ok(())
     }
 
-    async fn eval(&mut self, code: &[u8]) -> Result<Arc<WildDocValue>> {
+    async fn eval(&mut self, code: &str, stack: &VarsStack) -> Result<Arc<WildDocValue>> {
         Ok(Arc::new(WildDocValue::Binary(
             Python::with_gil(|py| -> PyResult<PyObject> {
-                py.eval(
-                    ("(".to_owned() + std::str::from_utf8(code)? + ")").as_str(),
-                    None,
-                    None,
-                )?
-                .extract()
+                let builtins = PyModule::import(py, "builtins")?;
+                builtins.set_item(
+                    "wdstack",
+                    PyCapsule::new(py, stack.clone(), Some(CString::new("builtins.wdstack")?))?,
+                )?;
+                py.eval(("(".to_owned() + code + ")").as_str(), None, None)?
+                    .extract()
             })?
             .to_string()
             .into_bytes(),
@@ -58,10 +68,10 @@ impl WildDocScript for WdPy {
 #[pyo3(name = "v")]
 fn wdv(_py: Python, key: String) -> PyResult<PyObject> {
     Python::with_gil(|py| -> PyResult<PyObject> {
-        let state: &Arc<WildDocState> =
-            unsafe { PyCapsule::import(py, CString::new("builtins.wdstate")?.as_ref())? };
+        let stack: &VarsStack =
+            unsafe { PyCapsule::import(py, CString::new("builtins.wdstack")?.as_ref())? };
 
-        for stack in state.stack().lock().iter().rev() {
+        for stack in stack.iter().rev() {
             if let Some(v) = stack.get(&key) {
                 return PyModule::from_code(
                     py,

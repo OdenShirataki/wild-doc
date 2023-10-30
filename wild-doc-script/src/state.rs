@@ -5,22 +5,19 @@ use std::{
 
 use parking_lot::Mutex;
 
-use crate::{IncludeAdaptor, VarsStack};
+use crate::IncludeAdaptor;
 
 pub struct WildDocState {
-    stack: Mutex<VarsStack>,
     cache_dir: PathBuf,
     include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
 }
 
 impl WildDocState {
     pub fn new(
-        initial_stack: VarsStack,
         cache_dir: PathBuf,
         include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
     ) -> Self {
         Self {
-            stack: Mutex::new(initial_stack),
             cache_dir,
             include_adaptor,
         }
@@ -29,11 +26,6 @@ impl WildDocState {
     #[inline(always)]
     pub fn cache_dir(&self) -> &Path {
         &self.cache_dir
-    }
-
-    #[inline(always)]
-    pub fn stack(&self) -> &Mutex<VarsStack> {
-        &self.stack
     }
 
     #[inline(always)]

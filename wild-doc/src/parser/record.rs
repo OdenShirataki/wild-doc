@@ -10,8 +10,8 @@ use wild_doc_script::{Vars, WildDocValue};
 use super::Parser;
 
 impl Parser {
-    pub(super) fn record(&self, vars: Vars) {
-        let mut json = Vars::new();
+    pub(super) fn record(&self, vars: Vars) -> Vars {
+        let mut r = Vars::new();
 
         if let (Some(collection), Some(row), Some(var)) =
             (vars.get("collection"), vars.get("row"), vars.get("var"))
@@ -166,6 +166,11 @@ impl Parser {
                         if let Some(collection) = self.database.read().collection(collection_id) {
                             let row = unsafe { NonZeroU32::new_unchecked(row.get() as u32) };
 
+                            inner.insert(
+                                "serial".into(),
+                                Arc::new(WildDocValue::Number(collection.serial(row).into())),
+                            );
+
                             if let Some(uuid) = collection.uuid_string(row) {
                                 inner.insert("uuid".into(), Arc::new(WildDocValue::String(uuid)));
                             }
@@ -311,9 +316,9 @@ impl Parser {
                         }
                     }
                 }
-                json.insert(var.into(), Arc::new(WildDocValue::Object(inner)));
+                r.insert(var.into(), Arc::new(WildDocValue::Object(inner)));
             }
         }
-        self.state.stack().lock().push(json);
+        r
     }
 }
