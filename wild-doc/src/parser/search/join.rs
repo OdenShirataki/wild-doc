@@ -4,7 +4,7 @@ use maybe_xml::{
     token,
 };
 use semilattice_database_session::search::{Join, JoinCondition};
-use wild_doc_script::Vars;
+use wild_doc_script::{Vars, VarsStack};
 
 use crate::parser::Parser;
 
@@ -14,12 +14,13 @@ impl Parser {
         xml: &'a [u8],
         vars: &Vars,
         search_map: &mut HashMap<String, Join>,
+        stack: &VarsStack,
     ) -> &'a [u8] {
         if let Some(name) = vars.get("name") {
             let name = name.to_str();
             if name != "" {
                 if let Some(collection_id) = self.collection_id(vars) {
-                    let (last_xml, condition) = self.join_condition_loop(xml).await;
+                    let (last_xml, condition) = self.join_condition_loop(xml, stack).await;
                     search_map.insert(name.into(), Join::new(collection_id, condition));
                     return last_xml;
                 }
@@ -28,7 +29,11 @@ impl Parser {
         return xml;
     }
 
-    async fn join_condition_loop<'a>(&mut self, xml: &'a [u8]) -> (&'a [u8], Vec<JoinCondition>) {
+    async fn join_condition_loop<'a>(
+        &mut self,
+        xml: &'a [u8],
+        stack: &VarsStack,
+    ) -> (&'a [u8], Vec<JoinCondition>) {
         let mut xml = xml;
         let mut scanner = Scanner::new();
         let mut futs = vec![];
@@ -43,7 +48,7 @@ impl Parser {
                     match name.local().as_bytes() {
                         b"pends" => {
                             futs.push(Self::join_condition_pends(
-                                self.vars_from_attibutes(token.attributes()).await,
+                                self.vars_from_attibutes(token.attributes(), stack).await,
                             ));
                         }
                         _ => {}

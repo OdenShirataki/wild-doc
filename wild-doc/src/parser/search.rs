@@ -18,7 +18,7 @@ use semilattice_database_session::{
     search::{self, Join, Search},
     Activity, CollectionRow, Condition, Uuid,
 };
-use wild_doc_script::Vars;
+use wild_doc_script::{Vars, VarsStack};
 
 use crate::xml_util;
 
@@ -52,12 +52,13 @@ impl Parser {
         xml: &'a [u8],
         vars: Vars,
         search_map: &mut HashMap<String, Search>,
+        stack: &mut VarsStack,
     ) -> &'a [u8] {
         if let Some(name) = vars.get("name") {
             let name = name.to_str();
             if name != "" {
                 if let Some(collection_id) = self.collection_id(&vars) {
-                    let (last_xml, condition, join) = self.make_conditions(&vars, xml).await;
+                    let (last_xml, condition, join) = self.make_conditions(&vars, xml, stack).await;
                     search_map.insert(
                         name.into_owned(),
                         Search::new(collection_id, condition, join),
@@ -73,8 +74,9 @@ impl Parser {
         &mut self,
         vars: &Vars,
         xml: &'a [u8],
+        stack: &mut VarsStack,
     ) -> (&'a [u8], Vec<Condition>, HashMap<String, Join>) {
-        let (last_xml, mut conditions, join) = self.condition_loop(xml).await;
+        let (last_xml, mut conditions, join) = self.condition_loop(xml, stack).await;
 
         if let Some(activity) = vars.get("activity") {
             conditions.push(Condition::Activity(if activity.to_str() == "inactive" {
@@ -109,6 +111,7 @@ impl Parser {
     async fn condition_loop<'a>(
         &mut self,
         xml: &'a [u8],
+        stack: &mut VarsStack,
     ) -> (&'a [u8], Vec<Condition>, HashMap<String, Join>) {
         let mut join = HashMap::new();
         let mut result_conditions = Vec::new();
@@ -129,22 +132,23 @@ impl Parser {
                             b"narrow" => {
                                 let (inner_xml, outer_end) = xml_util::inner(xml);
                                 xml = &xml[outer_end..];
-                                if let Ok(inner_xml) = self.parse(inner_xml).await.as_mut() {
-                                    let (_, cond, _) = self.condition_loop(&inner_xml).await;
+                                if let Ok(inner_xml) = self.parse(inner_xml, stack).await.as_mut() {
+                                    let (_, cond, _) = self.condition_loop(&inner_xml, stack).await;
                                     result_conditions.push(Condition::Narrow(cond));
                                 }
                             }
                             b"wide" => {
                                 let (inner_xml, outer_end) = xml_util::inner(xml);
                                 xml = &xml[outer_end..];
-                                if let Ok(inner_xml) = self.parse(inner_xml).await {
-                                    let (_, cond, _) = self.condition_loop(&inner_xml).await;
+                                if let Ok(inner_xml) = self.parse(inner_xml, stack).await {
+                                    let (_, cond, _) = self.condition_loop(&inner_xml, stack).await;
                                     result_conditions.push(Condition::Wide(cond));
                                 }
                             }
                             b"join" => {
-                                let vars = self.vars_from_attibutes(token.attributes()).await;
-                                xml = self.join(xml, &vars, &mut join).await;
+                                let vars =
+                                    self.vars_from_attibutes(token.attributes(), stack).await;
+                                xml = self.join(xml, &vars, &mut join, stack).await;
                             }
                             _ => {}
                         }
@@ -154,7 +158,7 @@ impl Parser {
                     let token_bytes = &xml[..pos];
                     xml = &xml[pos..];
                     let token = token::EmptyElementTag::from(token_bytes);
-                    let attributes = self.vars_from_attibutes(token.attributes()).await;
+                    let attributes = self.vars_from_attibutes(token.attributes(), stack).await;
                     let name = token.name();
                     match name.local().as_bytes() {
                         b"row" => futs.push(Self::condition_row(attributes).boxed_local()),

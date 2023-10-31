@@ -17,7 +17,7 @@ use parking_lot::{Mutex, RwLock};
 
 use semilattice_database_session::SessionDatabase;
 
-use wild_doc_script::{IncludeAdaptor, Vars, WildDocState};
+use wild_doc_script::{IncludeAdaptor, Vars, VarsStack, WildDocState};
 
 use parser::Parser;
 
@@ -76,23 +76,24 @@ impl WildDoc {
     ) -> Result<WildDocResult> {
         let mut parser = Parser::new(
             Arc::clone(&self.database),
-            vec![[(
-                "input".into(),
-                Arc::new(
-                    serde_json::from_slice(input_json)
-                        .unwrap_or(serde_json::json!({}))
-                        .into(),
-                ),
-            )]
-            .into()],
             WildDocState::new(self.cache_dir.clone(), include_adaptor),
         )?;
+
+        let mut stack: VarsStack = vec![[(
+            "input".into(),
+            Arc::new(
+                serde_json::from_slice(input_json)
+                    .unwrap_or(serde_json::json!({}))
+                    .into(),
+            ),
+        )]
+        .into()];
 
         let body = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .max_blocking_threads(32)
             .build()?
-            .block_on(parser.parse(xml))?;
+            .block_on(parser.parse(xml, &mut stack))?;
 
         let options = parser.result_options().clone();
 

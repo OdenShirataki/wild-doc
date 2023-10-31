@@ -2,18 +2,24 @@ use std::sync::Arc;
 
 use hashbrown::HashMap;
 use maybe_xml::token::prop::Attributes;
-use wild_doc_script::{Vars, WildDocValue};
+use wild_doc_script::{Vars, VarsStack, WildDocValue};
 
 use crate::xml_util;
 
 use super::Parser;
 
 impl Parser {
-    pub(super) async fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes<'_>) {
+    pub(super) async fn output_attributes(
+        &mut self,
+        r: &mut Vec<u8>,
+        attributes: Attributes<'_>,
+        stack: &VarsStack,
+    ) {
         for attr in attributes.into_iter() {
             if let (Ok(name), Some(value)) = (attr.name().to_str(), attr.value()) {
                 if let Ok(value) = value.to_str() {
-                    let (new_name, new_value) = self.attibute_var_or_script(name, value).await;
+                    let (new_name, new_value) =
+                        self.attibute_var_or_script(name, value, stack).await;
                     if new_name == "wd-attr:replace" {
                         if let Some(value) = new_value {
                             if !value.is_null() {
@@ -54,7 +60,11 @@ impl Parser {
     }
 
     #[must_use]
-    pub(super) async fn vars_from_attibutes(&mut self, attributes: Option<Attributes<'_>>) -> Vars {
+    pub(super) async fn vars_from_attibutes(
+        &mut self,
+        attributes: Option<Attributes<'_>>,
+        stack: &VarsStack,
+    ) -> Vars {
         let mut r = Vars::new();
 
         let mut values_per_script = HashMap::new();
@@ -101,8 +111,7 @@ impl Parser {
         let mut futs = vec![];
         for (script_name, script) in self.scripts.iter_mut() {
             if let Some(v) = values_per_script.get(script_name.as_str()) {
-                let stack = &self.stack;
-                futs.push(async move {
+                futs.push(async {
                     let mut r = Vars::new();
                     for (name, value) in v.into_iter() {
                         if let Ok(v) = script.eval(value.to_str().unwrap(), stack).await {
@@ -135,6 +144,7 @@ impl Parser {
         &mut self,
         name: &'a str,
         value: &str,
+        stack: &VarsStack,
     ) -> (&'a str, Option<Arc<WildDocValue>>) {
         if let Some(script_name) = Self::script_name(name) {
             (
@@ -145,7 +155,7 @@ impl Parser {
                 },
                 if let Some(script) = self.scripts.get_mut(script_name) {
                     script
-                        .eval(&xml_util::quot_unescape(value), &self.stack)
+                        .eval(&xml_util::quot_unescape(value), stack)
                         .await
                         .ok()
                 } else {

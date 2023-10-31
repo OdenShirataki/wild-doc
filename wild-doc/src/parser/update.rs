@@ -18,7 +18,7 @@ use semilattice_database_session::{
     Activity, CollectionRow, Depends, Pend, Record, SessionRecord, Term,
 };
 
-use wild_doc_script::{Vars, WildDocValue};
+use wild_doc_script::{Vars, VarsStack, WildDocValue};
 
 use crate::xml_util;
 
@@ -60,10 +60,15 @@ fn rows2val(commit_rows: Vec<CollectionRow>) -> Arc<WildDocValue> {
     ))
 }
 impl Parser {
-    pub async fn update(&mut self, xml: &[u8], vars: Vars) -> Result<Vec<u8>> {
+    pub async fn update(
+        &mut self,
+        xml: &[u8],
+        vars: Vars,
+        stack: &mut VarsStack,
+    ) -> Result<Vec<u8>> {
         let mut r = vec![];
-        if let Ok(inner_xml) = self.parse(xml).await {
-            let (updates, on) = self.make_update_struct(inner_xml.as_slice()).await?;
+        if let Ok(inner_xml) = self.parse(xml, stack).await {
+            let (updates, on) = self.make_update_struct(inner_xml.as_slice(), stack).await?;
 
             let mut commit_rows = vec![];
             let mut session_rows = vec![];
@@ -129,7 +134,7 @@ impl Parser {
             }
 
             if let Some((on_xml, vars)) = on {
-                self.stack.push(
+                stack.push(
                     [(
                         if let Some(var) = vars.get("var") {
                             var.to_str().into()
@@ -146,8 +151,8 @@ impl Parser {
                     )]
                     .into(),
                 );
-                r = self.parse(on_xml).await?;
-                self.stack.pop();
+                r = self.parse(on_xml, stack).await?;
+                stack.pop();
             }
         }
         Ok(r)
@@ -335,6 +340,7 @@ impl Parser {
     async fn make_update_struct<'a, 'b>(
         &mut self,
         xml: &'a [u8],
+        stack: &VarsStack,
     ) -> Result<(Vec<SessionRecord>, Option<(&'b [u8], Vars)>)>
     where
         'a: 'b,
@@ -356,11 +362,12 @@ impl Parser {
                             xml = &xml[outer_end..];
                             on = Some((
                                 inner_xml,
-                                self.vars_from_attibutes(token.attributes()).await,
+                                self.vars_from_attibutes(token.attributes(), stack).await,
                             ));
                         }
                         b"collection" => {
-                            let token_vars = self.vars_from_attibutes(token.attributes()).await;
+                            let token_vars =
+                                self.vars_from_attibutes(token.attributes(), stack).await;
                             if let Some(collection_name) = token_vars.get("name") {
                                 let collection_id = self
                                     .database
@@ -379,8 +386,9 @@ impl Parser {
                                             let token_bytes = &xml[..pos];
                                             xml = &xml[pos..];
                                             let token = token::StartTag::from(token_bytes);
-                                            let vars =
-                                                self.vars_from_attibutes(token.attributes()).await;
+                                            let vars = self
+                                                .vars_from_attibutes(token.attributes(), stack)
+                                                .await;
                                             let name = token.name();
                                             match name.as_bytes() {
                                                 b"field" => {
@@ -422,8 +430,9 @@ impl Parser {
                                                         xml_util::inner(xml);
                                                     xml = &xml[outer_end..];
                                                     //TODO: proc for _on_xml?
-                                                    let (pends_tmp, _on_xml) =
-                                                        self.make_update_struct(inner_xml).await?;
+                                                    let (pends_tmp, _on_xml) = self
+                                                        .make_update_struct(inner_xml, stack)
+                                                        .await?;
 
                                                     if let Some(key) = vars.get("key") {
                                                         pends.push(Pend {
@@ -443,7 +452,10 @@ impl Parser {
                                             match name.as_bytes() {
                                                 b"depend" => {
                                                     let vars = self
-                                                        .vars_from_attibutes(token.attributes())
+                                                        .vars_from_attibutes(
+                                                            token.attributes(),
+                                                            stack,
+                                                        )
                                                         .await;
                                                     self.depend(&vars, &mut depends)?;
                                                 }
