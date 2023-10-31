@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use hashbrown::HashMap;
 use maybe_xml::token::prop::Attributes;
-use wild_doc_script::{Vars, VarsStack, WildDocValue};
+use wild_doc_script::{Vars, WildDocValue};
 
 use crate::xml_util;
 
@@ -13,7 +13,7 @@ impl Parser {
         &mut self,
         r: &mut Vec<u8>,
         attributes: Attributes<'_>,
-        stack: &VarsStack,
+        stack: &Vars,
     ) {
         for attr in attributes.into_iter() {
             if let (Ok(name), Some(value)) = (attr.name().to_str(), attr.value()) {
@@ -63,7 +63,7 @@ impl Parser {
     pub(super) async fn vars_from_attibutes(
         &mut self,
         attributes: Option<Attributes<'_>>,
-        stack: &VarsStack,
+        stack: &Vars,
     ) -> Vars {
         let mut r = Vars::new();
 
@@ -144,7 +144,7 @@ impl Parser {
         &mut self,
         name: &'a str,
         value: &str,
-        stack: &VarsStack,
+        stack: &Vars,
     ) -> (&'a str, Option<Arc<WildDocValue>>) {
         if let Some(script_name) = Self::script_name(name) {
             (

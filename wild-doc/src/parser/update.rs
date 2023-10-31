@@ -18,7 +18,7 @@ use semilattice_database_session::{
     Activity, CollectionRow, Depends, Pend, Record, SessionRecord, Term,
 };
 
-use wild_doc_script::{Vars, VarsStack, WildDocValue};
+use wild_doc_script::{Vars, WildDocValue};
 
 use crate::xml_util;
 
@@ -60,15 +60,12 @@ fn rows2val(commit_rows: Vec<CollectionRow>) -> Arc<WildDocValue> {
     ))
 }
 impl Parser {
-    pub async fn update(
-        &mut self,
-        xml: &[u8],
-        vars: Vars,
-        stack: &mut VarsStack,
-    ) -> Result<Vec<u8>> {
+    pub async fn update(&mut self, xml: &[u8], vars: Vars, stack: &Vars) -> Result<Vec<u8>> {
         let mut r = vec![];
-        if let Ok(inner_xml) = self.parse(xml, stack).await {
-            let (updates, on) = self.make_update_struct(inner_xml.as_slice(), stack).await?;
+        if let Ok(inner_xml) = self.parse(xml, stack.clone()).await {
+            let (updates, on) = self
+                .make_update_struct(inner_xml.as_slice(), &stack)
+                .await?;
 
             let mut commit_rows = vec![];
             let mut session_rows = vec![];
@@ -134,25 +131,22 @@ impl Parser {
             }
 
             if let Some((on_xml, vars)) = on {
-                stack.push(
-                    [(
-                        if let Some(var) = vars.get("var") {
-                            var.to_str().into()
-                        } else {
-                            "update".to_owned()
-                        },
-                        Arc::new(WildDocValue::Object(
-                            [
-                                ("commit_rows".to_owned(), rows2val(commit_rows)),
-                                ("session_rows".to_owned(), rows2val(session_rows)),
-                            ]
-                            .into(),
-                        )),
-                    )]
-                    .into(),
+                let mut stack = stack.clone();
+                stack.insert(
+                    if let Some(var) = vars.get("var") {
+                        var.to_str().into()
+                    } else {
+                        "update".to_owned()
+                    },
+                    Arc::new(WildDocValue::Object(
+                        [
+                            ("commit_rows".to_owned(), rows2val(commit_rows)),
+                            ("session_rows".to_owned(), rows2val(session_rows)),
+                        ]
+                        .into(),
+                    )),
                 );
                 r = self.parse(on_xml, stack).await?;
-                stack.pop();
             }
         }
         Ok(r)
@@ -340,7 +334,7 @@ impl Parser {
     async fn make_update_struct<'a, 'b>(
         &mut self,
         xml: &'a [u8],
-        stack: &VarsStack,
+        stack: &Vars,
     ) -> Result<(Vec<SessionRecord>, Option<(&'b [u8], Vars)>)>
     where
         'a: 'b,

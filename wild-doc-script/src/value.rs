@@ -4,7 +4,6 @@ use indexmap::IndexMap;
 use serde::Serialize;
 
 pub type Vars = IndexMap<String, Arc<WildDocValue>>;
-pub type VarsStack = Vec<Vars>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WildDocValue {

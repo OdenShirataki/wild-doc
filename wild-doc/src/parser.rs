@@ -22,7 +22,7 @@ use maybe_xml::{
     },
 };
 use semilattice_database_session::{Session, SessionDatabase};
-use wild_doc_script::{Vars, VarsStack, WildDocScript, WildDocState, WildDocValue};
+use wild_doc_script::{Vars, WildDocScript, WildDocState, WildDocValue};
 
 use crate::{script::Var, xml_util};
 
@@ -80,7 +80,7 @@ impl Parser {
         &mut self,
         name: &[u8],
         attributes: Option<Attributes<'_>>,
-        stack: &mut VarsStack,
+        stack: &Vars,
     ) -> Result<Option<Vec<u8>>> {
         match name {
             b"print" => {
@@ -132,11 +132,14 @@ impl Parser {
     }
 
     #[async_recursion(?Send)]
-    pub async fn parse<'a>(&'a mut self, xml: &'a [u8], stack: &mut VarsStack) -> Result<Vec<u8>> {
+    pub async fn parse<'a>(&'a mut self, xml: &'a [u8], vars: Vars) -> Result<Vec<u8>> {
         let mut r: Vec<u8> = Vec::new();
         let mut tag_stack = vec![];
         let mut search_map = HashMap::new();
         let mut xml: &[u8] = xml;
+
+        let mut vars_stack = vec![];
+        let mut current_vars = vars;
 
         let mut scanner = Scanner::new();
 
@@ -152,7 +155,7 @@ impl Parser {
                                 .evaluate_module(
                                     self.include_stack.last().map_or("", |v| v),
                                     i.to_str()?,
-                                    stack,
+                                    &current_vars,
                                 )
                                 .await
                             {
@@ -175,7 +178,7 @@ impl Parser {
                             .parse_wd_start_or_empty_tag(
                                 name.local().as_bytes(),
                                 token.attributes(),
-                                stack,
+                                &current_vars,
                             )
                             .await?
                         {
@@ -183,25 +186,35 @@ impl Parser {
                         } else {
                             match name.local().as_bytes() {
                                 b"session" => {
-                                    let vars =
-                                        self.vars_from_attibutes(token.attributes(), stack).await;
+                                    let vars = self
+                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .await;
                                     self.session(vars);
                                 }
                                 b"session_sequence_cursor" => {
-                                    let vars =
-                                        self.vars_from_attibutes(token.attributes(), stack).await;
-                                    stack.push(self.session_sequence(vars));
+                                    let vars = self
+                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .await;
+                                    let mut new_stack = current_vars.clone();
+                                    vars_stack.push(current_vars);
+                                    new_stack.extend(self.session_sequence(vars));
+                                    current_vars = new_stack;
                                 }
                                 b"sessions" => {
-                                    let vars =
-                                        self.vars_from_attibutes(token.attributes(), stack).await;
-                                    stack.push(self.sessions(vars));
+                                    let vars = self
+                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .await;
+                                    let mut new_stack = current_vars.clone();
+                                    vars_stack.push(current_vars);
+                                    new_stack.extend(self.sessions(vars));
+                                    current_vars = new_stack;
                                 }
                                 b"re" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let parsed = self.parse(inner_xml, stack).await?;
+                                    let parsed =
+                                        self.parse(inner_xml, current_vars.clone()).await?;
                                     xml = &xml[outer_end..];
-                                    r.extend(self.parse(&parsed, stack).await?);
+                                    r.extend(self.parse(&parsed, current_vars.clone()).await?);
                                 }
                                 b"comment" => {
                                     let (_, outer_end) = xml_util::inner(xml);
@@ -214,9 +227,10 @@ impl Parser {
                                 }
                                 b"update" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let vars =
-                                        self.vars_from_attibutes(token.attributes(), stack).await;
-                                    self.update(inner_xml, vars, stack).await?;
+                                    let vars = self
+                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .await;
+                                    self.update(inner_xml, vars, &current_vars).await?;
                                     xml = &xml[outer_end..];
                                 }
                                 b"on" => {
@@ -225,58 +239,78 @@ impl Parser {
                                     xml = &xml[outer_end..];
                                 }
                                 b"search" => {
-                                    let vars =
-                                        self.vars_from_attibutes(token.attributes(), stack).await;
-                                    xml = self.search(xml, vars, &mut search_map, stack).await;
+                                    let vars = self
+                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .await;
+                                    xml = self
+                                        .search(xml, vars, &mut search_map, &current_vars)
+                                        .await;
                                 }
                                 b"result" => {
-                                    let vars =
-                                        self.vars_from_attibutes(token.attributes(), stack).await;
+                                    let vars = self
+                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .await;
                                     let r = self.result(vars, &mut search_map).await;
-                                    stack.push(r);
+                                    let mut new_stack = current_vars.clone();
+                                    vars_stack.push(current_vars);
+                                    new_stack.extend(r);
+                                    current_vars = new_stack;
                                 }
                                 b"record" => {
-                                    let vars =
-                                        self.vars_from_attibutes(token.attributes(), stack).await;
+                                    let vars = self
+                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .await;
                                     let r = self.record(vars);
-                                    stack.push(r);
+                                    let mut new_stack = current_vars.clone();
+                                    vars_stack.push(current_vars);
+                                    new_stack.extend(r);
+                                    current_vars = new_stack;
                                 }
                                 b"collections" => {
-                                    let vars =
-                                        self.vars_from_attibutes(token.attributes(), stack).await;
-                                    stack.push(self.collections(vars));
+                                    let vars = self
+                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .await;
+                                    let mut new_stack = current_vars.clone();
+                                    vars_stack.push(current_vars);
+                                    new_stack.extend(self.collections(vars));
+                                    current_vars = new_stack;
                                 }
                                 b"case" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let vars =
-                                        self.vars_from_attibutes(token.attributes(), stack).await;
-                                    r.extend(self.case(vars, inner_xml, stack).await?);
+                                    let vars = self
+                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .await;
+                                    r.extend(self.case(vars, inner_xml, &current_vars).await?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"if" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let vars =
-                                        self.vars_from_attibutes(token.attributes(), stack).await;
-                                    r.extend(self.r#if(vars, inner_xml, stack).await?);
+                                    let vars = self
+                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .await;
+                                    r.extend(self.r#if(vars, inner_xml, &current_vars).await?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"for" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let vars =
-                                        self.vars_from_attibutes(token.attributes(), stack).await;
-                                    r.extend(self.r#for(vars, inner_xml, stack).await?);
+                                    let vars = self
+                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .await;
+                                    r.extend(self.r#for(vars, inner_xml, &current_vars).await?);
                                     xml = &xml[outer_end..];
                                 }
                                 b"while" => {
                                     let (inner_xml, outer_end) = xml_util::inner(xml);
                                     r.extend(
-                                        self.r#while(token.attributes(), inner_xml, stack).await?,
+                                        self.r#while(token.attributes(), inner_xml, &current_vars)
+                                            .await?,
                                     );
                                     xml = &xml[outer_end..];
                                 }
                                 b"tag" => {
-                                    let vars =
-                                        self.vars_from_attibutes(token.attributes(), stack).await;
+                                    let vars = self
+                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .await;
                                     let (name, attr) = self.custom_tag(vars);
                                     tag_stack.push(name.clone());
                                     r.push(b'<');
@@ -285,9 +319,13 @@ impl Parser {
                                     r.push(b'>');
                                 }
                                 b"local" => {
-                                    let vars =
-                                        self.vars_from_attibutes(token.attributes(), stack).await;
-                                    stack.push(vars);
+                                    let vars = self
+                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .await;
+                                    let mut new_stack = current_vars.clone();
+                                    vars_stack.push(current_vars);
+                                    new_stack.extend(vars);
+                                    current_vars = new_stack;
                                 }
                                 _ => {}
                             }
@@ -296,7 +334,8 @@ impl Parser {
                         r.push(b'<');
                         r.extend(name.as_bytes());
                         if let Some(attributes) = token.attributes() {
-                            self.output_attributes(&mut r, attributes, stack).await;
+                            self.output_attributes(&mut r, attributes, &current_vars)
+                                .await;
                         }
                         r.push(b'>');
                     }
@@ -307,7 +346,9 @@ impl Parser {
                     let token = token::EmptyElementTag::from(token_bytes);
                     let name = token.name();
                     if name.as_bytes() == b"wd:tag" {
-                        let vars = self.vars_from_attibutes(token.attributes(), stack).await;
+                        let vars = self
+                            .vars_from_attibutes(token.attributes(), &current_vars)
+                            .await;
                         let (name, attr) = self.custom_tag(vars);
                         r.push(b'<');
                         r.extend(name.into_bytes());
@@ -319,7 +360,7 @@ impl Parser {
                                 .parse_wd_start_or_empty_tag(
                                     name.local().as_bytes(),
                                     token.attributes(),
-                                    stack,
+                                    &current_vars,
                                 )
                                 .await?
                             {
@@ -329,7 +370,8 @@ impl Parser {
                             r.push(b'<');
                             r.extend(name.as_bytes());
                             if let Some(attributes) = token.attributes() {
-                                self.output_attributes(&mut r, attributes, stack).await;
+                                self.output_attributes(&mut r, attributes, &current_vars)
+                                    .await;
                             }
                             r.push(b' ');
                             r.push(b'/');
@@ -353,7 +395,9 @@ impl Parser {
                             | b"collections"
                             | b"sessions"
                             | b"session_sequence_cursor" => {
-                                stack.pop();
+                                if let Some(v) = vars_stack.pop() {
+                                    current_vars = v;
+                                }
                             }
                             b"session" => {
                                 if let Some(ref mut session_state) = self.sessions.pop() {

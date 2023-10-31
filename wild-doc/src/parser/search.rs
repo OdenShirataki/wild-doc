@@ -18,7 +18,7 @@ use semilattice_database_session::{
     search::{self, Join, Search},
     Activity, CollectionRow, Condition, Uuid,
 };
-use wild_doc_script::{Vars, VarsStack};
+use wild_doc_script::Vars;
 
 use crate::xml_util;
 
@@ -52,7 +52,7 @@ impl Parser {
         xml: &'a [u8],
         vars: Vars,
         search_map: &mut HashMap<String, Search>,
-        stack: &mut VarsStack,
+        stack: &Vars,
     ) -> &'a [u8] {
         if let Some(name) = vars.get("name") {
             let name = name.to_str();
@@ -74,7 +74,7 @@ impl Parser {
         &mut self,
         vars: &Vars,
         xml: &'a [u8],
-        stack: &mut VarsStack,
+        stack: &Vars,
     ) -> (&'a [u8], Vec<Condition>, HashMap<String, Join>) {
         let (last_xml, mut conditions, join) = self.condition_loop(xml, stack).await;
 
@@ -111,7 +111,7 @@ impl Parser {
     async fn condition_loop<'a>(
         &mut self,
         xml: &'a [u8],
-        stack: &mut VarsStack,
+        stack: &Vars,
     ) -> (&'a [u8], Vec<Condition>, HashMap<String, Join>) {
         let mut join = HashMap::new();
         let mut result_conditions = Vec::new();
@@ -132,7 +132,9 @@ impl Parser {
                             b"narrow" => {
                                 let (inner_xml, outer_end) = xml_util::inner(xml);
                                 xml = &xml[outer_end..];
-                                if let Ok(inner_xml) = self.parse(inner_xml, stack).await.as_mut() {
+                                if let Ok(inner_xml) =
+                                    self.parse(inner_xml, stack.clone()).await.as_mut()
+                                {
                                     let (_, cond, _) = self.condition_loop(&inner_xml, stack).await;
                                     result_conditions.push(Condition::Narrow(cond));
                                 }
@@ -140,7 +142,7 @@ impl Parser {
                             b"wide" => {
                                 let (inner_xml, outer_end) = xml_util::inner(xml);
                                 xml = &xml[outer_end..];
-                                if let Ok(inner_xml) = self.parse(inner_xml, stack).await {
+                                if let Ok(inner_xml) = self.parse(inner_xml, stack.clone()).await {
                                     let (_, cond, _) = self.condition_loop(&inner_xml, stack).await;
                                     result_conditions.push(Condition::Wide(cond));
                                 }

@@ -9,9 +9,7 @@ use deno_runtime::{
     worker::{MainWorker, WorkerOptions},
 };
 
-use wild_doc_script::{
-    async_trait, serde_json, Vars, VarsStack, WildDocScript, WildDocState, WildDocValue,
-};
+use wild_doc_script::{async_trait, serde_json, Vars, WildDocScript, WildDocState, WildDocValue};
 
 use module_loader::WdModuleLoader;
 
@@ -83,7 +81,7 @@ fn wd2v8<'s>(wdv: &WildDocValue, scope: &'s mut HandleScope) -> Option<v8::Local
     None
 }
 
-fn set_stack(scope: &mut v8::HandleScope, stack: &VarsStack) {
+fn set_stack(scope: &mut v8::HandleScope, stack: &Vars) {
     if let (Some(wd), Some(v8str_stack)) = (
         v8::String::new(scope, "wd")
             .and_then(|code| v8::Script::compile(scope, code, None))
@@ -91,8 +89,7 @@ fn set_stack(scope: &mut v8::HandleScope, stack: &VarsStack) {
             .and_then(|v| v8::Local::<v8::Object>::try_from(v).ok()),
         v8::String::new(scope, "stack"),
     ) {
-        let v8ext_stack =
-            v8::External::new(scope, stack.as_ref() as *const VarsStack as *mut c_void);
+        let v8ext_stack = v8::External::new(scope, stack as *const Vars as *mut c_void);
         wd.set(scope, v8str_stack.into(), v8ext_stack.into());
     }
 }
@@ -160,7 +157,7 @@ impl WildDocScript for Deno {
                         .and_then(|v| v.run(scope))
                     {
                         let stack = unsafe {
-                            &*(v8::Local::<v8::External>::cast(stack).value() as *const VarsStack)
+                            &*(v8::Local::<v8::External>::cast(stack).value() as *const Vars)
                         };
                         let key = args
                             .get(0)
@@ -168,12 +165,9 @@ impl WildDocScript for Deno {
                             .unwrap()
                             .to_rust_string_lossy(scope);
 
-                        for stack in stack.iter().rev() {
-                            if let Some(v) = stack.get(&key) {
-                                if let Some(v) = wd2v8(v, scope) {
-                                    retval.set(v);
-                                }
-                                break;
+                        if let Some(v) = stack.get(&key) {
+                            if let Some(v) = wd2v8(v, scope) {
+                                retval.set(v);
                             }
                         }
                     }
@@ -209,12 +203,7 @@ impl WildDocScript for Deno {
         Ok(Self { worker })
     }
 
-    async fn evaluate_module(
-        &mut self,
-        file_name: &str,
-        src: &str,
-        stack: &VarsStack,
-    ) -> Result<()> {
+    async fn evaluate_module(&mut self, file_name: &str, src: &str, stack: &Vars) -> Result<()> {
         set_stack(&mut self.worker.js_runtime.handle_scope(), stack);
 
         let mod_id = self
@@ -229,7 +218,7 @@ impl WildDocScript for Deno {
         Ok(())
     }
 
-    async fn eval(&mut self, code: &str, stack: &VarsStack) -> Result<Arc<WildDocValue>> {
+    async fn eval(&mut self, code: &str, stack: &Vars) -> Result<Arc<WildDocValue>> {
         let scope = &mut self.worker.js_runtime.handle_scope();
 
         set_stack(scope, stack);
