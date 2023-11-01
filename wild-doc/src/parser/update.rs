@@ -9,10 +9,7 @@ use async_recursion::async_recursion;
 use base64::{engine::general_purpose, Engine};
 use chrono::DateTime;
 use hashbrown::HashMap;
-use maybe_xml::{
-    scanner::{Scanner, State},
-    token,
-};
+use maybe_xml::{token::Ty, Lexer};
 
 use semilattice_database_session::{
     Activity, CollectionRow, Depends, Pend, Record, SessionRecord, Term,
@@ -342,26 +339,22 @@ impl Parser {
         let mut updates = Vec::new();
         let mut on = None;
 
-        let mut xml = xml;
-        let mut scanner = Scanner::new();
-        while let Some(state) = scanner.scan(&xml) {
-            match state {
-                State::ScannedStartTag(pos) => {
-                    let token_bytes = &xml[..pos];
-                    xml = &xml[pos..];
-                    let token: token::StartTag<'_> = token::StartTag::from(token_bytes);
-                    match token.name().as_bytes() {
+        let mut pos = 0;
+        let lexer = unsafe { Lexer::from_slice_unchecked(xml) };
+        while let Some(token) = lexer.tokenize(&mut pos) {
+            match token.ty() {
+                Ty::StartTag(st) => {
+                    match st.name().as_bytes() {
                         b"wd:on" => {
-                            let (inner_xml, outer_end) = xml_util::inner(xml);
-                            xml = &xml[outer_end..];
+                            let begin = pos;
+                            let (inner, _) = xml_util::to_end(&lexer, &mut pos);
                             on = Some((
-                                inner_xml,
-                                self.vars_from_attibutes(token.attributes(), stack).await,
+                                &xml[begin..inner],
+                                self.vars_from_attibutes(st.attributes(), stack).await,
                             ));
                         }
                         b"collection" => {
-                            let token_vars =
-                                self.vars_from_attibutes(token.attributes(), stack).await;
+                            let token_vars = self.vars_from_attibutes(st.attributes(), stack).await;
                             if let Some(collection_name) = token_vars.get("name") {
                                 let collection_id = self
                                     .database
@@ -372,33 +365,31 @@ impl Parser {
                                 let mut depends = Vec::new();
                                 let mut fields = HashMap::new();
                                 let mut deps = 1;
-                                while let Some(state) = scanner.scan(&xml) {
-                                    match state {
-                                        State::ScannedStartTag(pos) => {
+                                while let Some(token) = lexer.tokenize(&mut pos) {
+                                    match token.ty() {
+                                        Ty::StartTag(st) => {
                                             deps += 1;
 
-                                            let token_bytes = &xml[..pos];
-                                            xml = &xml[pos..];
-                                            let token = token::StartTag::from(token_bytes);
                                             let vars = self
-                                                .vars_from_attibutes(token.attributes(), stack)
+                                                .vars_from_attibutes(st.attributes(), stack)
                                                 .await;
-                                            let name = token.name();
+                                            let name = st.name();
                                             match name.as_bytes() {
                                                 b"field" => {
-                                                    let (inner_xml, outer_end) =
-                                                        xml_util::inner(xml);
-                                                    xml = &xml[outer_end..];
+                                                    let begin = pos;
+                                                    let (inner, _) =
+                                                        xml_util::to_end(&lexer, &mut pos);
 
                                                     if let Some(field_name) = vars.get("name") {
-                                                        let mut value =
-                                                            std::str::from_utf8(inner_xml)?
-                                                                .replace("&gt;", ">")
-                                                                .replace("&lt;", "<")
-                                                                .replace("&#039;", "'")
-                                                                .replace("&quot;", "\"")
-                                                                .replace("&amp;", "&")
-                                                                .into_bytes();
+                                                        let mut value = std::str::from_utf8(
+                                                            &xml[begin..inner],
+                                                        )?
+                                                        .replace("&gt;", ">")
+                                                        .replace("&lt;", "<")
+                                                        .replace("&#039;", "'")
+                                                        .replace("&quot;", "\"")
+                                                        .replace("&amp;", "&")
+                                                        .into_bytes();
 
                                                         if let Some(base64_decode) =
                                                             vars.get("base64")
@@ -420,12 +411,16 @@ impl Parser {
                                                     }
                                                 }
                                                 b"pends" => {
-                                                    let (inner_xml, outer_end) =
-                                                        xml_util::inner(xml);
-                                                    xml = &xml[outer_end..];
+                                                    let begin = pos;
+                                                    let (inner, _) =
+                                                        xml_util::to_end(&lexer, &mut pos);
+
                                                     //TODO: proc for _on_xml?
                                                     let (pends_tmp, _on_xml) = self
-                                                        .make_update_struct(inner_xml, stack)
+                                                        .make_update_struct(
+                                                            &xml[begin..inner],
+                                                            stack,
+                                                        )
                                                         .await?;
 
                                                     if let Some(key) = vars.get("key") {
@@ -438,16 +433,13 @@ impl Parser {
                                                 _ => {}
                                             }
                                         }
-                                        State::ScannedEmptyElementTag(pos) => {
-                                            let token_bytes = &xml[..pos];
-                                            xml = &xml[pos..];
-                                            let token = token::EmptyElementTag::from(token_bytes);
-                                            let name = token.name();
+                                        Ty::EmptyElementTag(eet) => {
+                                            let name = eet.name();
                                             match name.as_bytes() {
                                                 b"depend" => {
                                                     let vars = self
                                                         .vars_from_attibutes(
-                                                            token.attributes(),
+                                                            eet.attributes(),
                                                             stack,
                                                         )
                                                         .await;
@@ -456,12 +448,8 @@ impl Parser {
                                                 _ => {}
                                             }
                                         }
-                                        State::ScannedEndTag(pos) => {
-                                            let token_bytes = &xml[..pos];
-                                            xml = &xml[pos..];
-                                            if token::EndTag::from(token_bytes).name().as_bytes()
-                                                == b"collection"
-                                            {
+                                        Ty::EndTag(et) => {
+                                            if et.name().as_bytes() == b"collection" {
                                                 break;
                                             }
                                             deps -= 1;
@@ -469,16 +457,11 @@ impl Parser {
                                                 return Err(anyhow!("invalid XML"));
                                             }
                                         }
-                                        State::ScannedCharacters(pos)
-                                        | State::ScannedCdata(pos)
-                                        | State::ScannedComment(pos)
-                                        | State::ScannedDeclaration(pos)
-                                        | State::ScannedProcessingInstruction(pos) => {
-                                            xml = &xml[pos..];
-                                        }
-                                        _ => {
-                                            return Err(anyhow!("invalid XML"));
-                                        }
+                                        Ty::Characters(_)
+                                        | Ty::Cdata(_)
+                                        | Ty::Comment(_)
+                                        | Ty::Declaration(_)
+                                        | Ty::ProcessingInstruction(_) => {}
                                     }
                                 }
 
@@ -576,16 +559,14 @@ impl Parser {
                         _ => {}
                     }
                 }
-                State::ScannedEndTag(_) => {
+                Ty::EndTag(_) => {
                     break;
                 }
-                State::ScannedCharacters(pos)
-                | State::ScannedCdata(pos)
-                | State::ScannedComment(pos)
-                | State::ScannedDeclaration(pos)
-                | State::ScannedProcessingInstruction(pos) => {
-                    xml = &xml[pos..];
-                }
+                Ty::Characters(_)
+                | Ty::Cdata(_)
+                | Ty::Comment(_)
+                | Ty::Declaration(_)
+                | Ty::ProcessingInstruction(_) => {}
                 _ => {
                     break;
                 }

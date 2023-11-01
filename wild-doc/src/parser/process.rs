@@ -3,8 +3,8 @@ use std::{borrow::Cow, ops::Deref, path::Path, sync::Arc};
 use anyhow::Result;
 
 use maybe_xml::{
-    scanner::{Scanner, State},
-    token::{self, prop::Attributes},
+    token::{prop::Attributes, Ty},
+    Lexer,
 };
 use wild_doc_script::Vars;
 
@@ -57,58 +57,47 @@ impl Parser {
 
     pub(super) async fn case(&mut self, vars: Vars, xml: &[u8], stack: &Vars) -> Result<Vec<u8>> {
         let cmp_src = vars.get("value");
-        let mut xml = xml;
-        let mut scanner = Scanner::new();
-        while let Some(state) = scanner.scan(&xml) {
-            match state {
-                State::ScannedStartTag(pos) => {
-                    let token_bytes = &xml[..pos];
-                    xml = &xml[pos..];
-                    let token = token::StartTag::from(token_bytes);
-                    let name = token.name();
-
+        let mut pos = 0;
+        let mut lexer = unsafe { Lexer::from_slice_unchecked(xml) };
+        while let Some(token) = lexer.tokenize(&mut pos) {
+            match token.ty() {
+                Ty::StartTag(st) => {
+                    let name = st.name();
                     match name.as_bytes() {
                         b"wd:when" => {
-                            let (inner_xml, outer_end) = xml_util::inner(xml);
-                            xml = &xml[outer_end..];
+                            let begin = pos;
+                            let (inner, _) = xml_util::to_end(&mut lexer, &mut pos);
                             if let Some(right) = self
-                                .vars_from_attibutes(token.attributes(), stack)
+                                .vars_from_attibutes(st.attributes(), stack)
                                 .await
                                 .get("value")
                             {
                                 if let Some(cmp_src) = cmp_src {
                                     if cmp_src == right {
-                                        return Ok(self.parse(inner_xml, stack.clone()).await?);
+                                        return Ok(self
+                                            .parse(&xml[begin..inner], stack.clone())
+                                            .await?);
                                     }
                                 }
                             }
                         }
                         b"wd:else" => {
-                            return Ok(self.parse(xml_util::inner(xml).0, stack.clone()).await?);
+                            let begin = pos;
+                            let (inner, _) = xml_util::to_end(&mut lexer, &mut pos);
+                            return Ok(self.parse(&xml[begin..inner], stack.clone()).await?);
                         }
                         _ => {}
                     }
                 }
-                State::ScannedEmptyElementTag(pos)
-                | State::ScannedEndTag(pos)
-                | State::ScannedCharacters(pos)
-                | State::ScannedCdata(pos)
-                | State::ScannedComment(pos)
-                | State::ScannedDeclaration(pos) => {
-                    xml = &xml[pos..];
-                }
+                Ty::EmptyElementTag(_)
+                | Ty::EndTag(_)
+                | Ty::Characters(_)
+                | Ty::Cdata(_)
+                | Ty::Comment(_)
+                | Ty::Declaration(_) => {}
                 _ => {
                     break;
                 }
-            }
-        }
-        Ok(vec![])
-    }
-
-    pub(super) async fn r#if(&mut self, vars: Vars, xml: &[u8], stack: &Vars) -> Result<Vec<u8>> {
-        if let Some(value) = vars.get("value") {
-            if value.as_bool().map_or(false, |v| *v) {
-                return self.parse(xml, stack.clone()).await;
             }
         }
         Ok(vec![])

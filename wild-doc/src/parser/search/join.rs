@@ -1,85 +1,65 @@
 use hashbrown::HashMap;
-use maybe_xml::{
-    scanner::{Scanner, State},
-    token,
-};
+use maybe_xml::{token::Ty, Lexer};
 use semilattice_database_session::search::{Join, JoinCondition};
 use wild_doc_script::Vars;
 
 use crate::parser::Parser;
 
 impl Parser {
-    pub async fn join<'a>(
+    pub async fn join(
         &mut self,
-        xml: &'a [u8],
+        lexer: &Lexer<'_>,
+        pos: &mut usize,
         vars: &Vars,
         search_map: &mut HashMap<String, Join>,
         stack: &Vars,
-    ) -> &'a [u8] {
+    ) {
         if let Some(name) = vars.get("name") {
             let name = name.to_str();
             if name != "" {
                 if let Some(collection_id) = self.collection_id(vars) {
-                    let (last_xml, condition) = self.join_condition_loop(xml, stack).await;
+                    let condition = self.join_condition_loop(lexer, pos, stack).await;
                     search_map.insert(name.into(), Join::new(collection_id, condition));
-                    return last_xml;
                 }
             }
         }
-        return xml;
     }
 
-    async fn join_condition_loop<'a>(
+    async fn join_condition_loop(
         &mut self,
-        xml: &'a [u8],
+        lexer: &Lexer<'_>,
+        pos: &mut usize,
         stack: &Vars,
-    ) -> (&'a [u8], Vec<JoinCondition>) {
-        let mut xml = xml;
-        let mut scanner = Scanner::new();
+    ) -> Vec<JoinCondition> {
         let mut futs = vec![];
 
-        while let Some(state) = scanner.scan(xml) {
-            match state {
-                State::ScannedEmptyElementTag(pos) => {
-                    let token_bytes = &xml[..pos];
-                    xml = &xml[pos..];
-                    let token = token::EmptyElementTag::from(token_bytes);
-                    match token.name().local().as_bytes() {
-                        b"pends" => {
-                            let vars = self.vars_from_attibutes(token.attributes(), stack).await;
-                            futs.push(async move {
-                                JoinCondition::Pends {
-                                    key: vars.get("key").map(|v| v.to_str().into()),
-                                }
-                            });
-                        }
-                        _ => {}
+        while let Some(token) = lexer.tokenize(pos) {
+            match token.ty() {
+                Ty::EmptyElementTag(eet) => match eet.name().local().as_bytes() {
+                    b"pends" => {
+                        let vars = self.vars_from_attibutes(eet.attributes(), stack).await;
+                        futs.push(async move {
+                            JoinCondition::Pends {
+                                key: vars.get("key").map(|v| v.to_str().into()),
+                            }
+                        });
                     }
-                }
-                State::ScannedEndTag(pos) => {
-                    let token = token::EndTag::from(&xml[..pos]);
-                    xml = &xml[pos..];
-                    match token.name().as_bytes() {
-                        b"join" => {
-                            break;
-                        }
-                        _ => {}
+                    _ => {}
+                },
+                Ty::EndTag(et) => match et.name().as_bytes() {
+                    b"join" => {
+                        break;
                     }
-                }
-                State::ScannedStartTag(pos)
-                | State::ScannedCharacters(pos)
-                | State::ScannedCdata(pos)
-                | State::ScannedComment(pos)
-                | State::ScannedDeclaration(pos)
-                | State::ScannedProcessingInstruction(pos) => {
-                    xml = &xml[pos..];
-                }
-                _ => {}
+                    _ => {}
+                },
+                Ty::StartTag(_)
+                | Ty::Characters(_)
+                | Ty::Cdata(_)
+                | Ty::Comment(_)
+                | Ty::Declaration(_)
+                | Ty::ProcessingInstruction(_) => {}
             }
         }
-        (
-            xml,
-            futures::future::join_all(futs).await.into_iter().collect(),
-        )
+        futures::future::join_all(futs).await.into_iter().collect()
     }
 }

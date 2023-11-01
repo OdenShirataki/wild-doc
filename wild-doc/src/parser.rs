@@ -15,11 +15,11 @@ use hashbrown::HashMap;
 use parking_lot::RwLock;
 
 use maybe_xml::{
-    scanner::{Scanner, State},
     token::{
-        self,
         prop::{Attributes, TagName},
+        Ty,
     },
+    Lexer,
 };
 use semilattice_database_session::{Session, SessionDatabase};
 use wild_doc_script::{Vars, WildDocScript, WildDocState, WildDocValue};
@@ -136,21 +136,22 @@ impl Parser {
         let mut r: Vec<u8> = Vec::new();
         let mut tag_stack = vec![];
         let mut search_map = HashMap::new();
-        let mut xml: &[u8] = xml;
 
         let mut vars_stack = vec![];
         let mut current_vars = vars;
 
-        let mut scanner = Scanner::new();
+        let mut pos_before = 0;
+        let mut pos = 0;
+        let lexer = unsafe { Lexer::from_slice_unchecked(xml) };
 
-        while let Some(state) = scanner.scan(&xml) {
-            match state {
-                State::ScannedProcessingInstruction(pos) => {
-                    let token_bytes = &xml[..pos];
-                    let token = token::ProcessingInstruction::from(token_bytes);
-                    let target = token.target();
-                    if let Some(script) = self.scripts.get_mut(target.to_str()?) {
-                        if let Some(i) = token.instructions() {
+        while let Some(token) = lexer.tokenize(&mut pos) {
+            match token.ty() {
+                Ty::ProcessingInstruction(pi) => {
+                    if let Some(i) = pi.instructions() {
+                        let target = pi.target();
+                        if let Some(script) =
+                            self.scripts.get_mut(unsafe { target.as_str_unchecked() })
+                        {
                             if let Err(e) = script
                                 .evaluate_module(
                                     self.include_stack.last().map_or("", |v| v),
@@ -161,23 +162,54 @@ impl Parser {
                             {
                                 return Err(e);
                             }
+                        } else {
+                            r.extend(i.as_bytes());
                         }
-                    } else {
-                        r.extend(token_bytes);
                     }
-                    xml = &xml[pos..];
                 }
-                State::ScannedStartTag(pos) => {
-                    let xml_before_start = xml;
-                    let token_bytes = &xml[..pos];
-                    xml = &xml[pos..];
-                    let token = token::StartTag::from(token_bytes);
-                    let name = token.name();
+                Ty::EmptyElementTag(eet) => {
+                    let name = eet.name();
+                    if name.as_bytes() == b"wd:tag" {
+                        let vars = self
+                            .vars_from_attibutes(eet.attributes(), &current_vars)
+                            .await;
+                        let (name, attr) = self.custom_tag(vars);
+                        r.push(b'<');
+                        r.extend(name.into_bytes());
+                        r.extend(attr);
+                        r.extend(b" />");
+                    } else {
+                        if Self::is_wd_tag(&name) {
+                            if let Some(parsed) = self
+                                .parse_wd_start_or_empty_tag(
+                                    name.local().as_bytes(),
+                                    eet.attributes(),
+                                    &current_vars,
+                                )
+                                .await?
+                            {
+                                r.extend(parsed);
+                            }
+                        } else {
+                            r.push(b'<');
+                            r.extend(name.as_bytes());
+                            if let Some(attributes) = eet.attributes() {
+                                self.output_attributes(&mut r, attributes, &current_vars)
+                                    .await;
+                            }
+                            r.push(b' ');
+                            r.push(b'/');
+                            r.push(b'>');
+                        }
+                    }
+                }
+                Ty::StartTag(st) => {
+                    let name = st.name();
                     if Self::is_wd_tag(&name) {
                         if let Some(parsed) = self
                             .parse_wd_start_or_empty_tag(
                                 name.local().as_bytes(),
-                                token.attributes(),
+                                st.attributes(),
                                 &current_vars,
                             )
                             .await?
@@ -187,13 +219,13 @@ impl Parser {
                             match name.local().as_bytes() {
                                 b"session" => {
                                     let vars = self
-                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .vars_from_attibutes(st.attributes(), &current_vars)
                                         .await;
                                     self.session(vars);
                                 }
                                 b"session_sequence_cursor" => {
                                     let vars = self
-                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .vars_from_attibutes(st.attributes(), &current_vars)
                                         .await;
                                     let mut new_stack = current_vars.clone();
                                     vars_stack.push(current_vars);
@@ -202,7 +234,7 @@ impl Parser {
                                 }
                                 b"sessions" => {
                                     let vars = self
-                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .vars_from_attibutes(st.attributes(), &current_vars)
                                         .await;
                                     let mut new_stack = current_vars.clone();
                                     vars_stack.push(current_vars);
@@ -210,45 +242,50 @@ impl Parser {
                                     current_vars = new_stack;
                                 }
                                 b"re" => {
-                                    let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let parsed =
-                                        self.parse(inner_xml, current_vars.clone()).await?;
-                                    xml = &xml[outer_end..];
+                                    let begin = pos;
+                                    let (inner, _) = xml_util::to_end(&lexer, &mut pos);
+                                    let parsed = self
+                                        .parse(&xml[begin..inner], current_vars.clone())
+                                        .await?;
                                     r.extend(self.parse(&parsed, current_vars.clone()).await?);
                                 }
                                 b"comment" => {
-                                    let (_, outer_end) = xml_util::inner(xml);
-                                    xml = &xml[outer_end..];
+                                    xml_util::to_end(&lexer, &mut pos);
                                 }
                                 b"letitgo" => {
-                                    let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    r.extend(inner_xml);
-                                    xml = &xml[outer_end..];
+                                    let begin = pos;
+                                    let (inner, _) = xml_util::to_end(&lexer, &mut pos);
+                                    r.extend(&xml[begin..inner]);
                                 }
                                 b"update" => {
-                                    let (inner_xml, outer_end) = xml_util::inner(xml);
+                                    let begin = pos;
+                                    let (inner, _) = xml_util::to_end(&lexer, &mut pos);
                                     let vars = self
-                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .vars_from_attibutes(st.attributes(), &current_vars)
                                         .await;
-                                    self.update(inner_xml, vars, &current_vars).await?;
-                                    xml = &xml[outer_end..];
+                                    self.update(&xml[begin..inner], vars, &current_vars).await?;
                                 }
                                 b"on" => {
-                                    let (_, outer_end) = xml_util::inner(xml);
-                                    r.extend(&xml_before_start[..(pos + outer_end)]);
-                                    xml = &xml[outer_end..];
+                                    let (_, outer) = xml_util::to_end(&lexer, &mut pos);
+                                    r.extend(&xml[pos_before..outer]);
                                 }
                                 b"search" => {
                                     let vars = self
-                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .vars_from_attibutes(st.attributes(), &current_vars)
                                         .await;
-                                    xml = self
-                                        .search(xml, vars, &mut search_map, &current_vars)
-                                        .await;
+                                    self.search(
+                                        xml,
+                                        &lexer,
+                                        &mut pos,
+                                        vars,
+                                        &mut search_map,
+                                        &current_vars,
+                                    )
+                                    .await;
                                 }
                                 b"result" => {
                                     let vars = self
-                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .vars_from_attibutes(st.attributes(), &current_vars)
                                         .await;
                                     let r = self.result(vars, &mut search_map).await;
                                     let mut new_stack = current_vars.clone();
@@ -258,7 +295,7 @@ impl Parser {
                                 }
                                 b"record" => {
                                     let vars = self
-                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .vars_from_attibutes(st.attributes(), &current_vars)
                                         .await;
                                     let r = self.record(vars);
                                     let mut new_stack = current_vars.clone();
@@ -268,7 +305,7 @@ impl Parser {
                                 }
                                 b"collections" => {
                                     let vars = self
-                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .vars_from_attibutes(st.attributes(), &current_vars)
                                         .await;
                                     let mut new_stack = current_vars.clone();
                                     vars_stack.push(current_vars);
@@ -276,40 +313,59 @@ impl Parser {
                                     current_vars = new_stack;
                                 }
                                 b"case" => {
-                                    let (inner_xml, outer_end) = xml_util::inner(xml);
+                                    let begin = pos;
+                                    let (inner, _) = xml_util::to_end(&lexer, &mut pos);
                                     let vars = self
-                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .vars_from_attibutes(st.attributes(), &current_vars)
                                         .await;
-                                    r.extend(self.case(vars, inner_xml, &current_vars).await?);
-                                    xml = &xml[outer_end..];
+                                    r.extend(
+                                        self.case(vars, &xml[begin..inner], &current_vars).await?,
+                                    );
                                 }
                                 b"if" => {
-                                    let (inner_xml, outer_end) = xml_util::inner(xml);
-                                    let vars = self
-                                        .vars_from_attibutes(token.attributes(), &current_vars)
-                                        .await;
-                                    r.extend(self.r#if(vars, inner_xml, &current_vars).await?);
-                                    xml = &xml[outer_end..];
+                                    let begin = pos;
+                                    let (inner, _) = xml_util::to_end(&lexer, &mut pos);
+                                    if let Some(value) = self
+                                        .vars_from_attibutes(st.attributes(), &current_vars)
+                                        .await
+                                        .get("value")
+                                    {
+                                        if value.as_bool().map_or(false, |v| *v) {
+                                            r.extend(
+                                                self.parse(
+                                                    &xml[begin..inner],
+                                                    current_vars.clone(),
+                                                )
+                                                .await?,
+                                            );
+                                        }
+                                    }
                                 }
                                 b"for" => {
-                                    let (inner_xml, outer_end) = xml_util::inner(xml);
+                                    let begin = pos;
+                                    let (inner, _) = xml_util::to_end(&lexer, &mut pos);
                                     let vars = self
-                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .vars_from_attibutes(st.attributes(), &current_vars)
                                         .await;
-                                    r.extend(self.r#for(vars, inner_xml, &current_vars).await?);
-                                    xml = &xml[outer_end..];
+                                    r.extend(
+                                        self.r#for(vars, &xml[begin..inner], &current_vars).await?,
+                                    );
                                 }
                                 b"while" => {
-                                    let (inner_xml, outer_end) = xml_util::inner(xml);
+                                    let begin = pos;
+                                    let (inner, _) = xml_util::to_end(&lexer, &mut pos);
                                     r.extend(
-                                        self.r#while(token.attributes(), inner_xml, &current_vars)
-                                            .await?,
+                                        self.r#while(
+                                            st.attributes(),
+                                            &xml[begin..inner],
+                                            &current_vars,
+                                        )
+                                        .await?,
                                     );
-                                    xml = &xml[outer_end..];
                                 }
                                 b"tag" => {
                                     let vars = self
-                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .vars_from_attibutes(st.attributes(), &current_vars)
                                         .await;
                                     let (name, attr) = self.custom_tag(vars);
                                     tag_stack.push(name.clone());
@@ -320,7 +376,7 @@ impl Parser {
                                 }
                                 b"local" => {
                                     let vars = self
-                                        .vars_from_attibutes(token.attributes(), &current_vars)
+                                        .vars_from_attibutes(st.attributes(), &current_vars)
                                         .await;
                                     let mut new_stack = current_vars.clone();
                                     vars_stack.push(current_vars);
@@ -333,57 +389,15 @@ impl Parser {
                     } else {
                         r.push(b'<');
                         r.extend(name.as_bytes());
-                        if let Some(attributes) = token.attributes() {
+                        if let Some(attributes) = st.attributes() {
                             self.output_attributes(&mut r, attributes, &current_vars)
                                 .await;
                         }
                         r.push(b'>');
                     }
                 }
-                State::ScannedEmptyElementTag(pos) => {
-                    let token_bytes = &xml[..pos];
-                    xml = &xml[pos..];
-                    let token = token::EmptyElementTag::from(token_bytes);
-                    let name = token.name();
-                    if name.as_bytes() == b"wd:tag" {
-                        let vars = self
-                            .vars_from_attibutes(token.attributes(), &current_vars)
-                            .await;
-                        let (name, attr) = self.custom_tag(vars);
-                        r.push(b'<');
-                        r.extend(name.into_bytes());
-                        r.extend(attr);
-                        r.extend(b" />");
-                    } else {
-                        if Self::is_wd_tag(&name) {
-                            if let Some(parsed) = self
-                                .parse_wd_start_or_empty_tag(
-                                    name.local().as_bytes(),
-                                    token.attributes(),
-                                    &current_vars,
-                                )
-                                .await?
-                            {
-                                r.extend(parsed);
-                            }
-                        } else {
-                            r.push(b'<');
-                            r.extend(name.as_bytes());
-                            if let Some(attributes) = token.attributes() {
-                                self.output_attributes(&mut r, attributes, &current_vars)
-                                    .await;
-                            }
-                            r.push(b' ');
-                            r.push(b'/');
-                            r.push(b'>');
-                        }
-                    }
-                }
-                State::ScannedEndTag(pos) => {
-                    let token_bytes = &xml[..pos];
-                    xml = &xml[pos..];
-                    let token = token::EndTag::from(token_bytes);
-                    let name = token.name();
+                Ty::EndTag(et) => {
+                    let name = et.name();
                     if name
                         .namespace_prefix()
                         .map_or(false, |v| v.as_bytes() == b"wd")
@@ -424,22 +438,14 @@ impl Parser {
                             _ => {}
                         }
                     } else {
-                        r.extend(token_bytes);
+                        r.extend(token.as_bytes());
                     }
                 }
-                State::ScannedCharacters(pos)
-                | State::ScannedCdata(pos)
-                | State::ScannedComment(pos)
-                | State::ScannedDeclaration(pos) => {
-                    r.extend(&xml[..pos]);
-                    xml = &xml[pos..];
+                Ty::Characters(_) | Ty::Cdata(_) | Ty::Comment(_) | Ty::Declaration(_) => {
+                    r.extend(token.as_bytes());
                 }
-                State::ScanningCharacters => {
-                    r.extend(xml);
-                    break;
-                }
-                _ => {}
             }
+            pos_before = pos;
         }
 
         Ok(r)

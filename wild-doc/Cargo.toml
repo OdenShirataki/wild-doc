@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.100.2"
+version = "0.100.3"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -30,7 +30,7 @@ indexmap.workspace = true
 anyhow = "1.0"
 chrono = "0.4"
 base64 = "0.21"
-maybe_xml = "0.6"
+maybe_xml = "0.7"
 futures = "0.3"
 async-recursion = "1.0"
 tokio = "1.33"

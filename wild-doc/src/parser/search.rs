@@ -10,10 +10,7 @@ use async_recursion::async_recursion;
 use chrono::DateTime;
 use futures::FutureExt;
 use hashbrown::HashMap;
-use maybe_xml::{
-    scanner::{Scanner, State},
-    token,
-};
+use maybe_xml::{token::Ty, Lexer};
 use semilattice_database_session::{
     search::{self, Join, Search},
     Activity, CollectionRow, Condition, Uuid,
@@ -47,36 +44,39 @@ impl Parser {
         None
     }
 
-    pub(crate) async fn search<'a>(
+    pub(crate) async fn search(
         &mut self,
-        xml: &'a [u8],
+        xml: &[u8],
+        lexer: &Lexer<'_>,
+        pos: &mut usize,
         vars: Vars,
         search_map: &mut HashMap<String, Search>,
         stack: &Vars,
-    ) -> &'a [u8] {
+    ) {
         if let Some(name) = vars.get("name") {
             let name = name.to_str();
             if name != "" {
                 if let Some(collection_id) = self.collection_id(&vars) {
-                    let (last_xml, condition, join) = self.make_conditions(&vars, xml, stack).await;
+                    let (condition, join) =
+                        self.make_conditions(&vars, xml, lexer, pos, stack).await;
                     search_map.insert(
                         name.into_owned(),
                         Search::new(collection_id, condition, join),
                     );
-                    return last_xml;
                 }
             }
         }
-        return xml;
     }
 
-    async fn make_conditions<'a>(
+    async fn make_conditions(
         &mut self,
         vars: &Vars,
-        xml: &'a [u8],
+        xml: &[u8],
+        lexer: &Lexer<'_>,
+        pos: &mut usize,
         stack: &Vars,
-    ) -> (&'a [u8], Vec<Condition>, HashMap<String, Join>) {
-        let (last_xml, mut conditions, join) = self.condition_loop(xml, stack).await;
+    ) -> (Vec<Condition>, HashMap<String, Join>) {
+        let (mut conditions, join) = self.condition_loop(xml, lexer, pos, stack).await;
 
         if let Some(activity) = vars.get("activity") {
             conditions.push(Condition::Activity(if activity.to_str() == "inactive" {
@@ -104,64 +104,61 @@ impl Parser {
                 }));
             }
         }
-        (last_xml, conditions, join)
+        (conditions, join)
     }
 
     #[async_recursion(?Send)]
-    async fn condition_loop<'a>(
+    async fn condition_loop(
         &mut self,
-        xml: &'a [u8],
+        xml: &[u8],
+        lexer: &Lexer<'_>,
+        pos: &mut usize,
         stack: &Vars,
-    ) -> (&'a [u8], Vec<Condition>, HashMap<String, Join>) {
+    ) -> (Vec<Condition>, HashMap<String, Join>) {
         let mut join = HashMap::new();
         let mut result_conditions = Vec::new();
-        let mut xml = xml;
-        let mut scanner = Scanner::new();
 
         let mut futs = vec![];
 
-        while let Some(state) = scanner.scan(xml) {
-            match state {
-                State::ScannedStartTag(pos) => {
-                    let token_bytes = &xml[..pos];
-                    xml = &xml[pos..];
-                    let token = token::StartTag::from(token_bytes);
-                    let name = token.name();
+        while let Some(token) = lexer.tokenize(pos) {
+            match token.ty() {
+                Ty::StartTag(st) => {
+                    let name = st.name();
                     if let None = name.namespace_prefix() {
                         match name.local().as_bytes() {
                             b"narrow" => {
-                                let (inner_xml, outer_end) = xml_util::inner(xml);
-                                xml = &xml[outer_end..];
+                                let begin = *pos;
+                                let (inner, _) = xml_util::to_end(&lexer, pos);
                                 if let Ok(inner_xml) =
-                                    self.parse(inner_xml, stack.clone()).await.as_mut()
+                                    self.parse(&xml[begin..inner], stack.clone()).await.as_mut()
                                 {
-                                    let (_, cond, _) = self.condition_loop(&inner_xml, stack).await;
+                                    let (cond, _) =
+                                        self.condition_loop(&inner_xml, &lexer, pos, stack).await;
                                     result_conditions.push(Condition::Narrow(cond));
                                 }
                             }
                             b"wide" => {
-                                let (inner_xml, outer_end) = xml_util::inner(xml);
-                                xml = &xml[outer_end..];
-                                if let Ok(inner_xml) = self.parse(inner_xml, stack.clone()).await {
-                                    let (_, cond, _) = self.condition_loop(&inner_xml, stack).await;
+                                let begin = *pos;
+                                let (inner, _) = xml_util::to_end(&lexer, pos);
+                                if let Ok(inner_xml) =
+                                    self.parse(&xml[begin..inner], stack.clone()).await
+                                {
+                                    let (cond, _) =
+                                        self.condition_loop(&inner_xml, &lexer, pos, stack).await;
                                     result_conditions.push(Condition::Wide(cond));
                                 }
                             }
                             b"join" => {
-                                let vars =
-                                    self.vars_from_attibutes(token.attributes(), stack).await;
-                                xml = self.join(xml, &vars, &mut join, stack).await;
+                                let vars = self.vars_from_attibutes(st.attributes(), stack).await;
+                                self.join(&lexer, pos, &vars, &mut join, stack).await;
                             }
                             _ => {}
                         }
                     }
                 }
-                State::ScannedEmptyElementTag(pos) => {
-                    let token_bytes = &xml[..pos];
-                    xml = &xml[pos..];
-                    let token = token::EmptyElementTag::from(token_bytes);
-                    let attributes = self.vars_from_attibutes(token.attributes(), stack).await;
-                    let name = token.name();
+                Ty::EmptyElementTag(eet) => {
+                    let attributes = self.vars_from_attibutes(eet.attributes(), stack).await;
+                    let name = eet.name();
                     match name.local().as_bytes() {
                         b"row" => futs.push(Self::condition_row(attributes).boxed_local()),
                         b"field" => futs.push(Self::condition_field(attributes).boxed_local()),
@@ -174,28 +171,21 @@ impl Parser {
                         _ => {}
                     }
                 }
-                State::ScannedEndTag(pos) => {
-                    let token = token::EndTag::from(&xml[..pos]);
-                    xml = &xml[pos..];
-                    match token.name().as_bytes() {
-                        b"wd:search" | b"narrow" | b"wide" => {
-                            break;
-                        }
-                        _ => {}
+                Ty::EndTag(et) => match et.name().as_bytes() {
+                    b"wd:search" | b"narrow" | b"wide" => {
+                        break;
                     }
-                }
-                State::ScannedCharacters(pos)
-                | State::ScannedCdata(pos)
-                | State::ScannedComment(pos)
-                | State::ScannedDeclaration(pos)
-                | State::ScannedProcessingInstruction(pos) => {
-                    xml = &xml[pos..];
-                }
-                _ => {}
+                    _ => {}
+                },
+                Ty::Characters(_)
+                | Ty::Cdata(_)
+                | Ty::Comment(_)
+                | Ty::Declaration(_)
+                | Ty::ProcessingInstruction(_) => {}
             }
         }
         result_conditions.extend(futures::future::join_all(futs).await.into_iter().flatten());
-        (xml, result_conditions, join)
+        (result_conditions, join)
     }
 
     async fn condition_depend(&self, vars: Vars) -> Option<Condition> {

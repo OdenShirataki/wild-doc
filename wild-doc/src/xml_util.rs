@@ -1,35 +1,30 @@
-use maybe_xml::scanner::{Scanner, State};
+use maybe_xml::{token::Ty, Lexer};
 
 #[inline(always)]
-pub(crate) fn inner(xml: &[u8]) -> (&[u8], usize) {
-    let mut pos = 0;
+pub(crate) fn to_end(lexer: &Lexer, pos: &mut usize) -> (usize, usize) {
+    let mut pos_before = *pos;
     let mut deps = 0;
-    let mut scanner = Scanner::new();
-    while let Some(state) = scanner.scan(&xml[pos..]) {
-        match state {
-            State::ScannedStartTag(end) => {
+    while let Some(token) = lexer.tokenize(pos) {
+        match token.ty() {
+            Ty::StartTag(_) => {
                 deps += 1;
-                pos += end;
             }
-            State::ScannedEndTag(end) => {
+            Ty::EndTag(_) => {
                 deps -= 1;
                 if deps < 0 {
-                    return (&xml[..pos], pos + end);
+                    return (pos_before, *pos);
                 }
-                pos += end;
             }
-            State::ScannedProcessingInstruction(end)
-            | State::ScannedCharacters(end)
-            | State::ScannedCdata(end)
-            | State::ScannedComment(end)
-            | State::ScannedDeclaration(end)
-            | State::ScannedEmptyElementTag(end) => pos += end,
-            _ => {
-                break;
-            }
+            Ty::ProcessingInstruction(_)
+            | Ty::Characters(_)
+            | Ty::Cdata(_)
+            | Ty::Comment(_)
+            | Ty::Declaration(_)
+            | Ty::EmptyElementTag(_) => {}
         }
+        pos_before = *pos;
     }
-    (&xml[..0], 0)
+    (0, 0)
 }
 
 #[inline(always)]
