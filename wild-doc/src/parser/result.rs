@@ -13,7 +13,7 @@ use super::{Parser, WildDocValue};
 impl Parser {
     #[must_use]
     pub(super) async fn result(
-        &mut self,
+        &self,
         vars: Vars,
         search_map: &mut HashMap<String, Search>,
     ) -> Vars {
@@ -35,8 +35,8 @@ impl Parser {
                     let mut rows: Vec<_> = vec![];
 
                     let mut found_session = false;
-                    for i in (0..self.sessions.len()).rev() {
-                        if let Some(state) = self.sessions.get_mut(i) {
+                    for i in (0..self.sessions.read().len()).rev() {
+                        if let Some(state) = self.sessions.write().get_mut(i) {
                             if state.session.temporary_collection(collection_id).is_some() {
                                 found_session = true;
                                 rows = state
@@ -106,7 +106,6 @@ impl Parser {
     }
 }
 
-#[inline(always)]
 fn make_order(search: &Search, sort: &str) -> Vec<Order> {
     let mut orders = vec![];
     if sort.len() > 0 {

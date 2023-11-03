@@ -7,7 +7,6 @@ use wild_doc_script::{Vars, WildDocValue};
 use super::{Parser, SessionState};
 
 impl Parser {
-    #[inline(always)]
     #[must_use]
     pub(super) fn sessions(&self, vars: Vars) -> Vars {
         let mut r = Vars::new();
@@ -22,8 +21,7 @@ impl Parser {
         r
     }
 
-    #[inline(always)]
-    pub(super) fn session(&mut self, vars: Vars) {
+    pub(super) fn session(&self, vars: Vars) {
         if let Some(session_name) = vars.get("name") {
             let session_name = session_name.to_str();
             if session_name != "" {
@@ -57,7 +55,7 @@ impl Parser {
                         self.database.read().session_restart(&mut session, expire);
                     }
                 }
-                self.sessions.push(SessionState {
+                self.sessions.write().push(SessionState {
                     session,
                     commit_on_close,
                     clear_on_close,
@@ -66,7 +64,6 @@ impl Parser {
         }
     }
 
-    #[inline(always)]
     #[must_use]
     pub(super) fn session_sequence(&self, vars: Vars) -> Vars {
         let mut str_max = vars.get("max").map_or(Cow::Borrowed(""), |v| v.to_str());
@@ -82,7 +79,7 @@ impl Parser {
         }
 
         let mut r = Vars::new();
-        if let Some(session_state) = self.sessions.last() {
+        if let Some(session_state) = self.sessions.read().last() {
             if let Some(cursor) = session_state.session.sequence_cursor() {
                 r.insert(
                     str_max.into(),
@@ -97,7 +94,6 @@ impl Parser {
         r
     }
 
-    #[inline(always)]
     pub(super) fn session_gc(&self, vars: Vars) {
         self.database.write().session_gc(
             vars.get("expire")

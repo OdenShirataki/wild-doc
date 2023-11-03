@@ -22,7 +22,6 @@ use crate::xml_util;
 use super::Parser;
 
 impl Parser {
-    #[inline(always)]
     fn collection_id(&self, vars: &Vars) -> Option<NonZeroI32> {
         if let Some(collection_name) = vars.get("collection") {
             let collection_name = collection_name.to_str();
@@ -45,7 +44,7 @@ impl Parser {
     }
 
     pub(crate) async fn search(
-        &mut self,
+        &self,
         xml: &[u8],
         lexer: &Lexer<'_>,
         pos: &mut usize,
@@ -69,7 +68,7 @@ impl Parser {
     }
 
     async fn make_conditions(
-        &mut self,
+        &self,
         vars: &Vars,
         xml: &[u8],
         lexer: &Lexer<'_>,
@@ -109,7 +108,7 @@ impl Parser {
 
     #[async_recursion(?Send)]
     async fn condition_loop(
-        &mut self,
+        &self,
         xml: &[u8],
         lexer: &Lexer<'_>,
         pos: &mut usize,
