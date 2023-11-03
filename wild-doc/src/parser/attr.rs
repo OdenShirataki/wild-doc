@@ -10,7 +10,7 @@ use super::Parser;
 
 impl Parser {
     pub(super) async fn output_attributes(
-        &mut self,
+        &self,
         r: &mut Vec<u8>,
         attributes: Attributes<'_>,
         stack: &Vars,
@@ -61,7 +61,7 @@ impl Parser {
 
     #[must_use]
     pub(super) async fn vars_from_attibutes(
-        &mut self,
+        &self,
         attributes: Option<Attributes<'_>>,
         stack: &Vars,
     ) -> Vars {
@@ -109,7 +109,7 @@ impl Parser {
         }
 
         let mut futs = vec![];
-        for (script_name, script) in self.scripts.iter_mut() {
+        for (script_name, script) in self.scripts.iter() {
             if let Some(v) = values_per_script.get(script_name.as_str()) {
                 futs.push(async {
                     let mut r = Vars::new();
@@ -141,7 +141,7 @@ impl Parser {
     }
 
     pub(crate) async fn attibute_var_or_script<'a>(
-        &mut self,
+        &self,
         name: &'a str,
         value: &str,
         stack: &Vars,
@@ -153,7 +153,7 @@ impl Parser {
                         &name.as_bytes()[..name.len() - (script_name.len() + 1)],
                     )
                 },
-                if let Some(script) = self.scripts.get_mut(script_name) {
+                if let Some(script) = self.scripts.get(script_name) {
                     script
                         .eval(&xml_util::quot_unescape(value), stack)
                         .await

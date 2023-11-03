@@ -1,19 +1,20 @@
-use std::{ffi::CString, sync::Arc};
+use std::{ffi::CString, path::PathBuf, sync::Arc};
 
+use parking_lot::Mutex;
 use pyo3::{
     pyfunction,
     types::{PyCapsule, PyDict, PyModule},
     wrap_pyfunction, PyObject, PyResult, Python,
 };
 use wild_doc_script::{
-    anyhow::Result, async_trait, Vars, WildDocScript, WildDocState, WildDocValue,
+    anyhow::Result, async_trait, IncludeAdaptor, Vars, WildDocScript, WildDocValue,
 };
 
 pub struct WdPy {}
 
 #[async_trait(?Send)]
 impl WildDocScript for WdPy {
-    fn new(state: Arc<WildDocState>) -> Result<Self> {
+    fn new(_: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>, _: PathBuf) -> Result<Self> {
         let _ = Python::with_gil(|py| -> PyResult<()> {
             let builtins = PyModule::import(py, "builtins")?;
 
@@ -24,17 +25,12 @@ impl WildDocScript for WdPy {
 
             builtins.add_submodule(wd)?;
 
-            builtins.add(
-                "wdstate",
-                PyCapsule::new(py, state, Some(CString::new("builtins.wdstate")?))?,
-            )?;
-
             Ok(())
         });
         Ok(WdPy {})
     }
 
-    async fn evaluate_module(&mut self, _: &str, code: &str, stack: &Vars) -> Result<()> {
+    async fn evaluate_module(&self, _: &str, code: &str, stack: &Vars) -> Result<()> {
         Python::with_gil(|py| -> PyResult<()> {
             let builtins = PyModule::import(py, "builtins")?;
             builtins.set_item(
@@ -47,7 +43,7 @@ impl WildDocScript for WdPy {
         Ok(())
     }
 
-    async fn eval(&mut self, code: &str, stack: &Vars) -> Result<Arc<WildDocValue>> {
+    async fn eval(&self, code: &str, stack: &Vars) -> Result<Arc<WildDocValue>> {
         Ok(Arc::new(WildDocValue::Binary(
             Python::with_gil(|py| -> PyResult<PyObject> {
                 let builtins = PyModule::import(py, "builtins")?;

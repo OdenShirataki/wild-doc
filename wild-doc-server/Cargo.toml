@@ -20,5 +20,5 @@ anyhow.workspace = true
 toml.workspace = true
 serde.workspace = true
 
-wild-doc = { version = "0.100" , path = "../wild-doc" ,features=[ "js","py" ] }
-wild-doc-script = { version = "0.22", path = "../wild-doc-script" }
+wild-doc = { version = "0.101" , path = "../wild-doc" ,features=[ "js","py" ] }
+wild-doc-script = { version = "0.23", path = "../wild-doc-script" }

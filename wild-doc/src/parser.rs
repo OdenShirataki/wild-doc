@@ -7,12 +7,12 @@ mod search;
 mod session;
 mod update;
 
-use std::{ops::Deref, sync::Arc};
+use std::{ops::Deref, path::Path, sync::Arc};
 
 use anyhow::Result;
 use async_recursion::async_recursion;
 use hashbrown::HashMap;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 
 use maybe_xml::{
     token::{
@@ -22,7 +22,7 @@ use maybe_xml::{
     Lexer,
 };
 use semilattice_database_session::{Session, SessionDatabase};
-use wild_doc_script::{Vars, WildDocScript, WildDocState, WildDocValue};
+use wild_doc_script::{IncludeAdaptor, Vars, WildDocScript, WildDocValue};
 
 use crate::{script::Var, xml_util};
 
@@ -40,44 +40,64 @@ struct SessionState {
 
 pub struct Parser {
     database: Arc<RwLock<SessionDatabase>>,
-    sessions: Vec<SessionState>,
+    sessions: RwLock<Vec<SessionState>>,
     scripts: HashMap<String, Box<dyn WildDocScript>>,
-    state: Arc<WildDocState>,
-    result_options: Vars,
-    include_stack: Vec<String>,
+    include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
+    result_options: Mutex<Vars>,
+    include_stack: Mutex<Vec<String>>,
 }
 
 impl Parser {
-    pub fn new(database: Arc<RwLock<SessionDatabase>>, state: WildDocState) -> Result<Self> {
-        let state = Arc::new(state);
-
+    pub fn new(
+        database: Arc<RwLock<SessionDatabase>>,
+        include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
+        cache_dir: &Path,
+    ) -> Result<Self> {
         let mut scripts: hashbrown::HashMap<String, Box<dyn WildDocScript>> =
             hashbrown::HashMap::new();
 
-        scripts.insert("var".to_owned(), Box::new(Var::new(Arc::clone(&state))?));
+        scripts.insert(
+            "var".to_owned(),
+            Box::new(Var::new(
+                Arc::clone(&include_adaptor),
+                cache_dir.to_owned(),
+            )?),
+        );
 
         #[cfg(feature = "js")]
-        scripts.insert("js".to_owned(), Box::new(Deno::new(Arc::clone(&state))?));
+        scripts.insert(
+            "js".to_owned(),
+            Box::new(Deno::new(
+                Arc::clone(&include_adaptor),
+                cache_dir.to_owned(),
+            )?),
+        );
 
         #[cfg(feature = "py")]
-        scripts.insert("py".to_owned(), Box::new(WdPy::new(Arc::clone(&state))?));
+        scripts.insert(
+            "py".to_owned(),
+            Box::new(WdPy::new(
+                Arc::clone(&include_adaptor),
+                cache_dir.to_owned(),
+            )?),
+        );
 
         Ok(Self {
             scripts,
-            sessions: vec![],
+            sessions: RwLock::new(vec![]),
             database,
-            state,
-            result_options: Vars::new(),
-            include_stack: vec![],
+            include_adaptor,
+            result_options: Mutex::new(Vars::new()),
+            include_stack: Mutex::new(vec![]),
         })
     }
 
-    pub fn result_options(&self) -> &Vars {
+    pub fn result_options(&self) -> &Mutex<Vars> {
         &self.result_options
     }
 
     async fn parse_wd_start_or_empty_tag(
-        &mut self,
+        &self,
         name: &[u8],
         attributes: Option<Attributes<'_>>,
         stack: &Vars,
@@ -98,6 +118,7 @@ impl Parser {
                 let vars = self.vars_from_attibutes(attributes, stack).await;
                 if let (Some(var), Some(value)) = (vars.get("var"), vars.get("value")) {
                     self.result_options
+                        .lock()
                         .insert(var.to_str().into(), Arc::clone(value));
                 }
             }
@@ -125,14 +146,13 @@ impl Parser {
         Ok(None)
     }
 
-    #[inline(always)]
     fn is_wd_tag(name: &TagName) -> bool {
         name.namespace_prefix()
             .map_or(false, |v| v.as_bytes() == b"wd")
     }
 
     #[async_recursion(?Send)]
-    pub async fn parse<'a>(&'a mut self, xml: &'a [u8], vars: Vars) -> Result<Vec<u8>> {
+    pub async fn parse(&self, xml: &[u8], vars: Vars) -> Result<Vec<u8>> {
         let mut r: Vec<u8> = Vec::new();
         let mut tag_stack = vec![];
         let mut search_map = HashMap::new();
@@ -149,12 +169,11 @@ impl Parser {
                 Ty::ProcessingInstruction(pi) => {
                     if let Some(i) = pi.instructions() {
                         let target = pi.target();
-                        if let Some(script) =
-                            self.scripts.get_mut(unsafe { target.as_str_unchecked() })
+                        if let Some(script) = self.scripts.get(unsafe { target.as_str_unchecked() })
                         {
                             if let Err(e) = script
                                 .evaluate_module(
-                                    self.include_stack.last().map_or("", |v| v),
+                                    self.include_stack.lock().last().map_or("", |v| v),
                                     i.to_str()?,
                                     &current_vars,
                                 )
@@ -414,7 +433,7 @@ impl Parser {
                                 }
                             }
                             b"session" => {
-                                if let Some(ref mut session_state) = self.sessions.pop() {
+                                if let Some(ref mut session_state) = self.sessions.write().pop() {
                                     if session_state.commit_on_close {
                                         self.database
                                             .write()
@@ -451,7 +470,6 @@ impl Parser {
         Ok(r)
     }
 
-    #[inline(always)]
     fn custom_tag(&self, vars: Vars) -> (String, Vec<u8>) {
         let mut html_attr = vec![];
         let mut name = "".into();

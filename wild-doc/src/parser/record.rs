@@ -28,9 +28,10 @@ impl Parser {
                         Arc::new(WildDocValue::Number(row.get().into())),
                     );
                     let mut find_session = false;
-                    for i in (0..self.sessions.len()).rev() {
+                    for i in (0..self.sessions.read().len()).rev() {
                         if let Some(temporary_collection) = self
                             .sessions
+                            .read()
                             .get(i)
                             .and_then(|v| v.session.temporary_collection(collection_id))
                         {

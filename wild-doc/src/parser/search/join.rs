@@ -7,7 +7,7 @@ use crate::parser::Parser;
 
 impl Parser {
     pub async fn join(
-        &mut self,
+        &self,
         lexer: &Lexer<'_>,
         pos: &mut usize,
         vars: &Vars,
@@ -26,7 +26,7 @@ impl Parser {
     }
 
     async fn join_condition_loop(
-        &mut self,
+        &self,
         lexer: &Lexer<'_>,
         pos: &mut usize,
         stack: &Vars,

@@ -1,6 +1,10 @@
 pub mod module_loader;
 
-use std::{ffi::c_void, path::Path, sync::Arc};
+use std::{
+    ffi::c_void,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use deno_runtime::{
     deno_core::{self, anyhow::Result, serde_v8, ModuleSpecifier},
@@ -9,12 +13,13 @@ use deno_runtime::{
     worker::{MainWorker, WorkerOptions},
 };
 
-use wild_doc_script::{async_trait, serde_json, Vars, WildDocScript, WildDocState, WildDocValue};
+use parking_lot::Mutex;
+use wild_doc_script::{async_trait, serde_json, IncludeAdaptor, Vars, WildDocScript, WildDocValue};
 
 use module_loader::WdModuleLoader;
 
 pub struct Deno {
-    worker: MainWorker,
+    worker: Arc<Mutex<MainWorker>>,
 }
 
 fn wdmap2v8obj<'s>(wdv: &Vars, scope: &'s mut HandleScope) -> v8::Local<'s, v8::Object> {
@@ -96,12 +101,15 @@ fn set_stack(scope: &mut v8::HandleScope, stack: &Vars) {
 
 #[async_trait(?Send)]
 impl WildDocScript for Deno {
-    fn new(state: Arc<WildDocState>) -> Result<Self> {
+    fn new(
+        include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
+        cache_dir: PathBuf,
+    ) -> Result<Self> {
         let mut worker = MainWorker::bootstrap_from_options(
             deno_core::resolve_url("wd://main").unwrap(),
             PermissionsContainer::allow_all(),
             WorkerOptions {
-                module_loader: WdModuleLoader::new(state.cache_dir().to_owned()),
+                module_loader: WdModuleLoader::new(cache_dir),
                 ..Default::default()
             },
         );
@@ -126,16 +134,15 @@ impl WildDocScript for Deno {
                         .and_then(|code| v8::Script::compile(scope, code, None))
                         .and_then(|v| v.run(scope))
                     {
-                        let state = unsafe {
+                        let include_adaptor = unsafe {
                             &*(v8::Local::<v8::External>::cast(state).value()
-                                as *const WildDocState)
+                                as *const Mutex<Box<dyn IncludeAdaptor + Send>>)
                         };
                         let filename = args
                             .get(0)
                             .to_string(scope)
                             .unwrap()
                             .to_rust_string_lossy(scope);
-                        let include_adaptor = state.include_adaptor();
                         if let Some(contents) =
                             include_adaptor.lock().include(Path::new(filename.as_str()))
                         {
@@ -192,64 +199,72 @@ impl WildDocScript for Deno {
                 v8::String::new(scope, "v"),
                 func_v,
             ) {
-                let v8ext_state =
-                    v8::External::new(scope, state.as_ref() as *const WildDocState as *mut c_void);
+                let v8ext_state = v8::External::new(
+                    scope,
+                    include_adaptor.as_ref() as *const Mutex<Box<dyn IncludeAdaptor + Send>>
+                        as *mut c_void,
+                );
                 wd.set(scope, v8str_state.into(), v8ext_state.into());
 
                 wd.set(scope, v8str_get_contents.into(), v8func_get_contents.into());
                 wd.set(scope, v8str_v.into(), v8func_v.into());
             }
         }
-        Ok(Self { worker })
+        Ok(Self {
+            worker: Arc::new(Mutex::new(worker)),
+        })
     }
 
-    async fn evaluate_module(&mut self, file_name: &str, src: &str, stack: &Vars) -> Result<()> {
-        set_stack(&mut self.worker.js_runtime.handle_scope(), stack);
+    async fn evaluate_module(&self, file_name: &str, src: &str, stack: &Vars) -> Result<()> {
+        let mut worker = self.worker.lock();
 
-        let mod_id = self
-            .worker
+        set_stack(&mut worker.js_runtime.handle_scope(), stack);
+
+        let mod_id = worker
             .js_runtime
             .load_side_module(
                 &(ModuleSpecifier::parse(&("wd://script".to_owned() + file_name))?),
                 Some(String::from_utf8(src.into())?.into()),
             )
             .await?;
-        self.worker.evaluate_module(mod_id).await?;
+        worker.evaluate_module(mod_id).await?;
         Ok(())
     }
 
-    async fn eval(&mut self, code: &str, stack: &Vars) -> Result<Arc<WildDocValue>> {
-        let scope = &mut self.worker.js_runtime.handle_scope();
+    async fn eval(&self, code: &str, stack: &Vars) -> Result<Arc<WildDocValue>> {
+        let mut worker = self.worker.lock();
+        let scope = &mut worker.js_runtime.handle_scope();
 
         set_stack(scope, stack);
 
-        if let Some(v) = v8::String::new_from_one_byte(
+        if let Some(code) = v8::String::new_from_one_byte(
             scope,
             ("(".to_owned() + code + ")").as_bytes(),
             NewStringType::Normal,
-        )
-        .and_then(|code| v8::Script::compile(scope, code, None))
-        .and_then(|v| v.run(scope))
-        {
-            if v.is_array_buffer_view() {
-                if let Ok(a) = v8::Local::<v8::ArrayBufferView>::try_from(v) {
-                    if let Some(b) = a.buffer(scope) {
-                        if let Some(d) = b.data() {
-                            return Ok(Arc::new(WildDocValue::Binary(
-                                unsafe {
-                                    std::slice::from_raw_parts::<u8>(
-                                        d.as_ptr() as *const u8,
-                                        b.byte_length(),
-                                    )
+        ) {
+            if let Some(v) = v8::Script::compile(scope, code, None) {
+                if let Some(v) = v.run(scope) {
+                    if v.is_array_buffer_view() {
+                        if let Ok(a) = v8::Local::<v8::ArrayBufferView>::try_from(v) {
+                            if let Some(b) = a.buffer(scope) {
+                                if let Some(d) = b.data() {
+                                    return Ok(Arc::new(WildDocValue::Binary(
+                                        unsafe {
+                                            std::slice::from_raw_parts::<u8>(
+                                                d.as_ptr() as *const u8,
+                                                b.byte_length(),
+                                            )
+                                        }
+                                        .into(),
+                                    )));
                                 }
-                                .into(),
-                            )));
+                            }
+                        }
+                    } else {
+                        if let Ok(serv) = serde_v8::from_v8::<serde_json::Value>(scope, v) {
+                            return Ok(Arc::new(serv.into()));
                         }
                     }
-                }
-            } else {
-                if let Ok(serv) = serde_v8::from_v8::<serde_json::Value>(scope, v) {
-                    return Ok(Arc::new(serv.into()));
                 }
             }
         }

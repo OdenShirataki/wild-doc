@@ -13,16 +13,11 @@ use crate::xml_util;
 use super::{Parser, WildDocValue};
 
 impl Parser {
-    pub(super) async fn get_include_content(
-        &mut self,
-        vars: Vars,
-        stack: &Vars,
-    ) -> Result<Vec<u8>> {
+    pub(super) async fn get_include_content(&self, vars: Vars, stack: &Vars) -> Result<Vec<u8>> {
         if let Some(src) = vars.get("src") {
             let src = src.to_str();
             let (xml, filename) = self
-                .state
-                .include_adaptor()
+                .include_adaptor
                 .lock()
                 .include(Path::new(src.as_ref()))
                 .map_or_else(
@@ -31,8 +26,7 @@ impl Parser {
                         if let Some(substitute) = vars.get("substitute") {
                             let substitute = substitute.to_str();
                             if let Some(xml) = self
-                                .state
-                                .include_adaptor()
+                                .include_adaptor
                                 .lock()
                                 .include(Path::new(substitute.as_ref()))
                             {
@@ -45,9 +39,9 @@ impl Parser {
                 );
             if let Some(xml) = xml {
                 if xml.len() > 0 {
-                    self.include_stack.push(filename.into());
+                    self.include_stack.lock().push(filename.into());
                     let r = self.parse(xml.as_slice(), stack.clone()).await?;
-                    self.include_stack.pop();
+                    self.include_stack.lock().pop();
                     return Ok(r);
                 }
             }
@@ -55,7 +49,7 @@ impl Parser {
         Ok(b"".to_vec())
     }
 
-    pub(super) async fn case(&mut self, vars: Vars, xml: &[u8], stack: &Vars) -> Result<Vec<u8>> {
+    pub(super) async fn case(&self, vars: Vars, xml: &[u8], stack: &Vars) -> Result<Vec<u8>> {
         let cmp_src = vars.get("value");
         let mut pos = 0;
         let mut lexer = unsafe { Lexer::from_slice_unchecked(xml) };
@@ -103,7 +97,7 @@ impl Parser {
         Ok(vec![])
     }
 
-    pub(super) async fn r#for(&mut self, vars: Vars, xml: &[u8], stack: &Vars) -> Result<Vec<u8>> {
+    pub(super) async fn r#for(&self, vars: Vars, xml: &[u8], stack: &Vars) -> Result<Vec<u8>> {
         let mut r = Vec::new();
         if let (Some(var), Some(r#in)) = (vars.get("var"), vars.get("in")) {
             let var = var.to_str();
@@ -158,7 +152,7 @@ impl Parser {
     }
 
     pub(super) async fn r#while(
-        &mut self,
+        &self,
         attributes: Option<Attributes<'_>>,
         xml: &[u8],
         stack: &Vars,
