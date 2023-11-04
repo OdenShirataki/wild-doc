@@ -48,43 +48,43 @@ impl Parser {
         xml: &[u8],
         lexer: &Lexer<'_>,
         pos: &mut usize,
-        vars: Vars,
-        search_map: &mut HashMap<String, Search>,
-        stack: &Vars,
-    ) {
-        if let Some(name) = vars.get("name") {
+        attr: Vars,
+        vars: &Vars,
+    ) -> Option<(String, Search)> {
+        if let Some(name) = attr.get("name") {
             let name = name.to_str();
             if name != "" {
-                if let Some(collection_id) = self.collection_id(&vars) {
+                if let Some(collection_id) = self.collection_id(&attr) {
                     let (condition, join) =
-                        self.make_conditions(&vars, xml, lexer, pos, stack).await;
-                    search_map.insert(
+                        self.make_conditions(&attr, xml, lexer, pos, vars).await;
+                    return Some((
                         name.into_owned(),
                         Search::new(collection_id, condition, join),
-                    );
+                    ));
                 }
             }
         }
+        None
     }
 
     async fn make_conditions(
         &self,
-        vars: &Vars,
+        attr: &Vars,
         xml: &[u8],
         lexer: &Lexer<'_>,
         pos: &mut usize,
-        stack: &Vars,
+        vars: &Vars,
     ) -> (Vec<Condition>, HashMap<String, Join>) {
-        let (mut conditions, join) = self.condition_loop(xml, lexer, pos, stack).await;
+        let (mut conditions, join) = self.condition_loop(xml, lexer, pos, vars).await;
 
-        if let Some(activity) = vars.get("activity") {
+        if let Some(activity) = attr.get("activity") {
             conditions.push(Condition::Activity(if activity.to_str() == "inactive" {
                 Activity::Inactive
             } else {
                 Activity::Active
             }));
         }
-        if let Some(term) = vars.get("term") {
+        if let Some(term) = attr.get("term") {
             let term = term.to_str();
             if term != "all" {
                 let term: Vec<_> = term.split('@').collect();
@@ -112,7 +112,7 @@ impl Parser {
         xml: &[u8],
         lexer: &Lexer<'_>,
         pos: &mut usize,
-        stack: &Vars,
+        vars: &Vars,
     ) -> (Vec<Condition>, HashMap<String, Join>) {
         let mut join = HashMap::new();
         let mut result_conditions = Vec::new();
@@ -129,10 +129,10 @@ impl Parser {
                                 let begin = *pos;
                                 let (inner, _) = xml_util::to_end(&lexer, pos);
                                 if let Ok(inner_xml) =
-                                    self.parse(&xml[begin..inner], stack.clone()).await.as_mut()
+                                    self.parse(&xml[begin..inner], vars.clone()).await.as_mut()
                                 {
                                     let (cond, _) =
-                                        self.condition_loop(&inner_xml, &lexer, pos, stack).await;
+                                        self.condition_loop(&inner_xml, &lexer, pos, vars).await;
                                     result_conditions.push(Condition::Narrow(cond));
                                 }
                             }
@@ -140,30 +140,30 @@ impl Parser {
                                 let begin = *pos;
                                 let (inner, _) = xml_util::to_end(&lexer, pos);
                                 if let Ok(inner_xml) =
-                                    self.parse(&xml[begin..inner], stack.clone()).await
+                                    self.parse(&xml[begin..inner], vars.clone()).await
                                 {
                                     let (cond, _) =
-                                        self.condition_loop(&inner_xml, &lexer, pos, stack).await;
+                                        self.condition_loop(&inner_xml, &lexer, pos, vars).await;
                                     result_conditions.push(Condition::Wide(cond));
                                 }
                             }
                             b"join" => {
-                                let vars = self.vars_from_attibutes(st.attributes(), stack).await;
-                                self.join(&lexer, pos, &vars, &mut join, stack).await;
+                                let attr = self.vars_from_attibutes(st.attributes(), vars).await;
+                                self.join(&lexer, pos, &attr, &mut join, vars).await;
                             }
                             _ => {}
                         }
                     }
                 }
                 Ty::EmptyElementTag(eet) => {
-                    let attributes = self.vars_from_attibutes(eet.attributes(), stack).await;
+                    let attr = self.vars_from_attibutes(eet.attributes(), vars).await;
                     let name = eet.name();
                     match name.local().as_bytes() {
-                        b"row" => futs.push(Self::condition_row(attributes).boxed_local()),
-                        b"field" => futs.push(Self::condition_field(attributes).boxed_local()),
-                        b"uuid" => futs.push(Self::condition_uuid(attributes).boxed_local()),
+                        b"row" => futs.push(Self::condition_row(attr).boxed_local()),
+                        b"field" => futs.push(Self::condition_field(attr).boxed_local()),
+                        b"uuid" => futs.push(Self::condition_uuid(attr).boxed_local()),
                         b"depend" => {
-                            if let Some(c) = self.condition_depend(attributes).await {
+                            if let Some(c) = self.condition_depend(attr).await {
                                 result_conditions.push(c);
                             }
                         }

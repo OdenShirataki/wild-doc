@@ -21,7 +21,8 @@ impl Parser {
         r
     }
 
-    pub(super) fn session(&self, vars: Vars) {
+    #[must_use]
+    pub(super) fn session(&self, vars: Vars) -> Option<SessionState> {
         if let Some(session_name) = vars.get("name") {
             let session_name = session_name.to_str();
             if session_name != "" {
@@ -55,13 +56,14 @@ impl Parser {
                         self.database.read().session_restart(&mut session, expire);
                     }
                 }
-                self.sessions.write().push(SessionState {
+                return Some(SessionState {
                     session,
                     commit_on_close,
                     clear_on_close,
                 });
             }
         }
+        None
     }
 
     #[must_use]

@@ -76,21 +76,24 @@ impl WildDoc {
     ) -> Result<WildDocResult> {
         let parser = Parser::new(Arc::clone(&self.database), include_adaptor, &self.cache_dir)?;
 
-        let stack: Vars = [(
-            "input".into(),
-            Arc::new(
-                serde_json::from_slice(input_json)
-                    .unwrap_or(serde_json::json!({}))
-                    .into(),
-            ),
-        )]
-        .into();
-
         let body = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .max_blocking_threads(32)
             .build()?
-            .block_on(parser.parse(xml, stack))?;
+            .block_on(
+                parser.parse(
+                    xml,
+                    [(
+                        "input".into(),
+                        Arc::new(
+                            serde_json::from_slice(input_json)
+                                .unwrap_or(serde_json::json!({}))
+                                .into(),
+                        ),
+                    )]
+                    .into(),
+                ),
+            )?;
 
         let options = parser.result_options().lock().clone();
 

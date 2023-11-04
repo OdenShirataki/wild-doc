@@ -20,10 +20,10 @@ impl WildDocScript for Var {
         Ok(())
     }
 
-    async fn eval(&self, code: &str, stack: &Vars) -> Result<Arc<WildDocValue>> {
+    async fn eval(&self, code: &str, vars: &Vars) -> Result<Arc<WildDocValue>> {
         let mut splited = code.split(".");
         if let Some(root) = splited.next() {
-            if let Some(mut next_value) = stack.get(root) {
+            if let Some(mut next_value) = vars.get(root) {
                 loop {
                     if let Some(next) = splited.next() {
                         match next_value.as_ref() {

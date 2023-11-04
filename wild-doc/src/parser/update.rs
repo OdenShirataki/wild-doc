@@ -57,18 +57,16 @@ fn rows2val(commit_rows: Vec<CollectionRow>) -> Arc<WildDocValue> {
     ))
 }
 impl Parser {
-    pub async fn update(&self, xml: &[u8], vars: Vars, stack: &Vars) -> Result<Vec<u8>> {
+    pub async fn update(&self, xml: &[u8], attr: Vars, vars: &Vars) -> Result<Vec<u8>> {
         let mut r = vec![];
-        if let Ok(inner_xml) = self.parse(xml, stack.clone()).await {
-            let (updates, on) = self
-                .make_update_struct(inner_xml.as_slice(), &stack)
-                .await?;
+        if let Ok(inner_xml) = self.parse(xml, vars.clone()).await {
+            let (updates, on) = self.make_update_struct(inner_xml.as_slice(), &vars).await?;
 
             let mut commit_rows = vec![];
             let mut session_rows = vec![];
 
             if !self.sessions.read().last().is_some()
-                || vars
+                || attr
                     .get("without_session")
                     .and_then(|v| v.as_bool())
                     .map_or(false, |v| *v)
@@ -115,7 +113,7 @@ impl Parser {
                         .write()
                         .update(&mut session_state.session, updates)
                         .await;
-                    if let Some(commit) = vars.get("commit") {
+                    if let Some(commit) = attr.get("commit") {
                         if commit.as_bool().map_or(false, |v| *v) {
                             commit_rows = self
                                 .database
@@ -128,8 +126,8 @@ impl Parser {
             }
 
             if let Some((on_xml, vars)) = on {
-                let mut stack = stack.clone();
-                stack.insert(
+                let mut vars = vars.clone();
+                vars.insert(
                     if let Some(var) = vars.get("var") {
                         var.to_str().into()
                     } else {
@@ -143,7 +141,7 @@ impl Parser {
                         .into(),
                     )),
                 );
-                r = self.parse(on_xml, stack).await?;
+                r = self.parse(on_xml, vars).await?;
             }
         }
         Ok(r)
@@ -330,7 +328,7 @@ impl Parser {
     async fn make_update_struct<'a, 'b>(
         &self,
         xml: &'a [u8],
-        stack: &Vars,
+        vars: &Vars,
     ) -> Result<(Vec<SessionRecord>, Option<(&'b [u8], Vars)>)>
     where
         'a: 'b,
@@ -349,12 +347,12 @@ impl Parser {
                             let (inner, _) = xml_util::to_end(&lexer, &mut pos);
                             on = Some((
                                 &xml[begin..inner],
-                                self.vars_from_attibutes(st.attributes(), stack).await,
+                                self.vars_from_attibutes(st.attributes(), vars).await,
                             ));
                         }
                         b"collection" => {
-                            let token_vars = self.vars_from_attibutes(st.attributes(), stack).await;
-                            if let Some(collection_name) = token_vars.get("name") {
+                            let attr = self.vars_from_attibutes(st.attributes(), vars).await;
+                            if let Some(collection_name) = attr.get("name") {
                                 let collection_id = self
                                     .database
                                     .write()
@@ -369,17 +367,16 @@ impl Parser {
                                         Ty::StartTag(st) => {
                                             deps += 1;
 
-                                            let vars = self
-                                                .vars_from_attibutes(st.attributes(), stack)
+                                            let attr = self
+                                                .vars_from_attibutes(st.attributes(), vars)
                                                 .await;
-                                            let name = st.name();
-                                            match name.as_bytes() {
+                                            match st.name().as_bytes() {
                                                 b"field" => {
                                                     let begin = pos;
                                                     let (inner, _) =
                                                         xml_util::to_end(&lexer, &mut pos);
 
-                                                    if let Some(field_name) = vars.get("name") {
+                                                    if let Some(field_name) = attr.get("name") {
                                                         let mut value = std::str::from_utf8(
                                                             &xml[begin..inner],
                                                         )?
@@ -391,7 +388,7 @@ impl Parser {
                                                         .into_bytes();
 
                                                         if let Some(base64_decode) =
-                                                            vars.get("base64")
+                                                            attr.get("base64")
                                                         {
                                                             if base64_decode
                                                                 .as_bool()
@@ -418,11 +415,11 @@ impl Parser {
                                                     let (pends_tmp, _on_xml) = self
                                                         .make_update_struct(
                                                             &xml[begin..inner],
-                                                            stack,
+                                                            vars,
                                                         )
                                                         .await?;
 
-                                                    if let Some(key) = vars.get("key") {
+                                                    if let Some(key) = attr.get("key") {
                                                         pends.push(Pend {
                                                             key: key.to_str().into(),
                                                             records: pends_tmp,
@@ -436,13 +433,15 @@ impl Parser {
                                             let name = eet.name();
                                             match name.as_bytes() {
                                                 b"depend" => {
-                                                    let vars = self
-                                                        .vars_from_attibutes(
-                                                            eet.attributes(),
-                                                            stack,
-                                                        )
-                                                        .await;
-                                                    self.depend(&vars, &mut depends)?;
+                                                    self.depend(
+                                                        &self
+                                                            .vars_from_attibutes(
+                                                                eet.attributes(),
+                                                                vars,
+                                                            )
+                                                            .await,
+                                                        &mut depends,
+                                                    )?;
                                                 }
                                                 _ => {}
                                             }
@@ -464,7 +463,7 @@ impl Parser {
                                     }
                                 }
 
-                                let row: i64 = token_vars
+                                let row: i64 = attr
                                     .get("row")
                                     .and_then(|v| v.to_str().parse::<i64>().ok())
                                     .unwrap_or(0);
@@ -474,7 +473,7 @@ impl Parser {
                                 } else {
                                     (collection_id, row as u32)
                                 };
-                                if token_vars
+                                if attr
                                     .get("delete")
                                     .and_then(|v| v.as_bool())
                                     .map_or(false, |v| *v)
@@ -487,14 +486,14 @@ impl Parser {
                                     }
                                 } else {
                                     let mut activity = Activity::Active;
-                                    if let Some(str) = token_vars.get("activity") {
+                                    if let Some(str) = attr.get("activity") {
                                         let str = str.to_str();
                                         if str == "inactive" || str == "0" {
                                             activity = Activity::Inactive;
                                         }
                                     }
                                     let mut term_begin = Term::Default;
-                                    if let Some(str) = token_vars.get("term_begin") {
+                                    if let Some(str) = attr.get("term_begin") {
                                         let str = str.to_str();
                                         if str != "" {
                                             if let Ok(t) =
@@ -506,7 +505,7 @@ impl Parser {
                                         }
                                     }
                                     let mut term_end = Term::Default;
-                                    if let Some(str) = token_vars.get("term_end") {
+                                    if let Some(str) = attr.get("term_end") {
                                         let str = str.to_str();
                                         if str != "" {
                                             if let Ok(t) =
@@ -532,7 +531,7 @@ impl Parser {
                                         }
                                     } else {
                                         let inherit_depend_if_empty = if let Some(str) =
-                                            token_vars.get("inherit_depend_if_empty")
+                                            attr.get("inherit_depend_if_empty")
                                         {
                                             str.as_bool().map_or(false, |v| *v)
                                         } else {

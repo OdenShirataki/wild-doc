@@ -10,15 +10,15 @@ impl Parser {
         &self,
         lexer: &Lexer<'_>,
         pos: &mut usize,
-        vars: &Vars,
+        attr: &Vars,
         search_map: &mut HashMap<String, Join>,
-        stack: &Vars,
+        vars: &Vars,
     ) {
-        if let Some(name) = vars.get("name") {
+        if let Some(name) = attr.get("name") {
             let name = name.to_str();
             if name != "" {
-                if let Some(collection_id) = self.collection_id(vars) {
-                    let condition = self.join_condition_loop(lexer, pos, stack).await;
+                if let Some(collection_id) = self.collection_id(attr) {
+                    let condition = self.join_condition_loop(lexer, pos, vars).await;
                     search_map.insert(name.into(), Join::new(collection_id, condition));
                 }
             }
@@ -29,7 +29,7 @@ impl Parser {
         &self,
         lexer: &Lexer<'_>,
         pos: &mut usize,
-        stack: &Vars,
+        vars: &Vars,
     ) -> Vec<JoinCondition> {
         let mut futs = vec![];
 
@@ -37,7 +37,7 @@ impl Parser {
             match token.ty() {
                 Ty::EmptyElementTag(eet) => match eet.name().local().as_bytes() {
                     b"pends" => {
-                        let vars = self.vars_from_attibutes(eet.attributes(), stack).await;
+                        let vars = self.vars_from_attibutes(eet.attributes(), vars).await;
                         futs.push(async move {
                             JoinCondition::Pends {
                                 key: vars.get("key").map(|v| v.to_str().into()),

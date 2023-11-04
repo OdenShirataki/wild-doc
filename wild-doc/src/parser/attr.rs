@@ -13,13 +13,13 @@ impl Parser {
         &self,
         r: &mut Vec<u8>,
         attributes: Attributes<'_>,
-        stack: &Vars,
+        vars: &Vars,
     ) {
         for attr in attributes.into_iter() {
             if let (Ok(name), Some(value)) = (attr.name().to_str(), attr.value()) {
                 if let Ok(value) = value.to_str() {
                     let (new_name, new_value) =
-                        self.attibute_var_or_script(name, value, stack).await;
+                        self.attibute_var_or_script(name, value, vars).await;
                     if new_name == "wd-attr:replace" {
                         if let Some(value) = new_value {
                             if !value.is_null() {
@@ -63,7 +63,7 @@ impl Parser {
     pub(super) async fn vars_from_attibutes(
         &self,
         attributes: Option<Attributes<'_>>,
-        stack: &Vars,
+        vars: &Vars,
     ) -> Vars {
         let mut r = Vars::new();
 
@@ -114,7 +114,7 @@ impl Parser {
                 futs.push(async {
                     let mut r = Vars::new();
                     for (name, value) in v.into_iter() {
-                        if let Ok(v) = script.eval(value.to_str().unwrap(), stack).await {
+                        if let Ok(v) = script.eval(value.to_str().unwrap(), vars).await {
                             r.insert(name.to_string(), v);
                         }
                     }
@@ -144,7 +144,7 @@ impl Parser {
         &self,
         name: &'a str,
         value: &str,
-        stack: &Vars,
+        vars: &Vars,
     ) -> (&'a str, Option<Arc<WildDocValue>>) {
         if let Some(script_name) = Self::script_name(name) {
             (
@@ -155,7 +155,7 @@ impl Parser {
                 },
                 if let Some(script) = self.scripts.get(script_name) {
                     script
-                        .eval(&xml_util::quot_unescape(value), stack)
+                        .eval(&xml_util::quot_unescape(value), vars)
                         .await
                         .ok()
                 } else {
