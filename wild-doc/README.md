@@ -35,21 +35,19 @@ let r=wd.run(br#"<?js
     </collection>
 </wd:update>
 <wd:search
-    name="login" collection="login"
-></wd:search><wd:result
-    search="login"
+    collection="login"
+><result
     var="login"
 ><wd:for var="row" in:var="login.rows"><wd:record var="row" collection="login" row:var="row.row">
     <wd:print value:var="row.row" /> : <wd:print value:var="row.uuid" /> : <wd:print value:var="row.field.test" /> : <wd:print value:var="row.depends.account" />
     <wd:search
-        name="account" collection="account"
-    ><row in:var="row.depends.account.row"></wd:search><wd:result
-        search="account"
+        collection="account"
+    ><row in:var="row.depends.account.row"><result
         var="account"
     ><wd:for var="a" in:var="account.rows"><wd:record var="a" collection="account" row:var="a.row">
         dep:<wd:print value:var="a.field.id" />@<wd:print value:var="a.field.password" />
-    </wd:record></wd:for></wd:result>
-</wd:record></wd:for></wd:result>
+    </wd:record></wd:for></result></wd:search>
+</wd:record></wd:for></result></wd:search>
 </wd:session>"#
     ,b""
 ).unwrap();
@@ -111,8 +109,7 @@ wd.run(
 
 //select data.
 let r=wd.run(br#"
-<wd:search name="p" collection="person">
-</wd:search><wd:result search="p" var="p">
+<wd:search collection="person"><result var="p">
     <div>
         find <wd:print value:var="p.len" /> persons.
     </div>
@@ -121,7 +118,7 @@ let r=wd.run(br#"
             <wd:print value:var="person.row" /> : <wd:print value:var="person.activity" /> : <wd:print value:var="person.uuid" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
         </li></wd:record></wd:for>
     </ul>
-</wd:result>
+</result></wd:search>
 <input type="text" name="hoge" />
 <wd:include src="body.xml" />
 "#,b"").unwrap();
@@ -129,9 +126,7 @@ println!("{}", std::str::from_utf8(r.body()).unwrap());
 
 //seaech data
 let r=wd.run(br#"
-    <wd:search name="p" collection="person">
-        <field name="country" method="match" value="US" />
-    </wd:search><wd:result var="p" search="p">
+    <wd:search collection="person"><field name="country" method="match" value="US" /><result var="p">
         <div>
             find <wd:print value:var="p.len" /> persons from the US.
         </div>
@@ -143,7 +138,7 @@ let r=wd.run(br#"
                 <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
             </li></wd:record></wd:for>
         </ul>
-    </wd:result>
+    </result></wd:search>
 "#,b"").unwrap();
 println!("{}", std::str::from_utf8(r.body()).unwrap());
 
@@ -165,10 +160,7 @@ let r=wd.run(br#"
         let hoge=wd.get_contents('body.xml');
         console.log("hoge",hoge);
     ?>
-    <wd:search name="p" collection="person">
-        <field name="country" method="match" value:js="wd.general.uk" />
-    </wd:search>
-    <wd:result var="p" search="p">
+    <wd:search collection="person"><field name="country" method="match" value:js="wd.general.uk" /><result var="p">
         <div>
             <wd:print value:js="wd.general.ymd()" />
         </div>
@@ -180,7 +172,7 @@ let r=wd.run(br#"
                 <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
             </li></wd:record></wd:for>
         </ul>
-    </wd:result>
+    </result></wd:search>
 "#,b"").unwrap();
 println!(
     "{} : {:#?}",
@@ -192,9 +184,8 @@ println!(
 let r=wd.run(br#"<wd:session name="hoge">
     <wd:update commit="true">
         <wd:search
-            name="person"
             collection="person"
-        ></wd:search><wd:result var="p" search="person">
+        ><result var="p">
             <wd:for
                 var="person" in:var="p.rows"
             ><wd:record var="person" collection="person" row:var="person.row">
@@ -203,13 +194,12 @@ let r=wd.run(br#"<wd:session name="hoge">
                     <field name="country"><wd:print value:var="person.field.country" /></field>
                 </collection>
             </wd:record></wd:for>
-        </wd:result>
+        </result></wd:search>
     </wd:update>
 </wd:session>"#,b"").unwrap();
 println!("{}", std::str::from_utf8(r.body()).unwrap());
 let r=wd.run(br#"
-    <wd:search name="p" collection="person"></wd:search>
-    <wd:result var="p" search="p">
+    <wd:search collection="person"><wresult var="p">
         <div>
             find <wd:print value:var="p.len" /> persons.
         </div>
@@ -220,7 +210,7 @@ let r=wd.run(br#"
                 <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
             </li></wd:record></wd:for>
         </ul>
-    </wd:result>
+    </result></wd:search>
 "#,b"").unwrap();
 println!("{}", std::str::from_utf8(r.body()).unwrap());
 

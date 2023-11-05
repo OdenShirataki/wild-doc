@@ -76,13 +76,14 @@ impl WildDoc {
     ) -> Result<WildDocResult> {
         let parser = Parser::new(Arc::clone(&self.database), include_adaptor, &self.cache_dir)?;
 
+        let mut pos=0;
         let body = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .max_blocking_threads(32)
             .build()?
             .block_on(
                 parser.parse(
-                    xml,
+                    xml,&mut pos,
                     [(
                         "input".into(),
                         Arc::new(

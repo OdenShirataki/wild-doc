@@ -1,4 +1,5 @@
 mod join;
+mod result;
 
 use std::{
     num::{NonZeroI32, NonZeroI64},
@@ -6,6 +7,7 @@ use std::{
     sync::Arc,
 };
 
+use anyhow::Result;
 use async_recursion::async_recursion;
 use chrono::DateTime;
 use futures::FutureExt;
@@ -46,36 +48,39 @@ impl Parser {
     pub(crate) async fn search(
         &self,
         xml: &[u8],
-        lexer: &Lexer<'_>,
         pos: &mut usize,
         attr: Vars,
         vars: &Vars,
-    ) -> Option<(String, Search)> {
-        if let Some(name) = attr.get("name") {
-            let name = name.to_str();
-            if name != "" {
-                if let Some(collection_id) = self.collection_id(&attr) {
-                    let (condition, join) =
-                        self.make_conditions(&attr, xml, lexer, pos, vars).await;
-                    return Some((
-                        name.into_owned(),
-                        Search::new(collection_id, condition, join),
-                    ));
-                }
+    ) -> Result<Vec<u8>> {
+        if let Some(collection_id) = self.collection_id(&attr) {
+            let (condition, join, result_info) = self.make_conditions(xml, pos, &attr, vars).await;
+            if let Some(result_info) = result_info {
+                let mut new_vars = vars.clone();
+                new_vars.extend(
+                    self.result(result_info.0, Search::new(collection_id, condition, join))
+                        .await,
+                );
+                let mut pos = 0;
+                return self.parse(result_info.1, &mut pos, new_vars).await;
             }
+        } else {
+            xml_util::to_end(&unsafe { Lexer::from_slice_unchecked(xml) }, pos);
         }
-        None
+        Ok(vec![])
     }
 
-    async fn make_conditions(
+    async fn make_conditions<'a>(
         &self,
-        attr: &Vars,
-        xml: &[u8],
-        lexer: &Lexer<'_>,
+        xml: &'a [u8],
         pos: &mut usize,
+        attr: &Vars,
         vars: &Vars,
-    ) -> (Vec<Condition>, HashMap<String, Join>) {
-        let (mut conditions, join) = self.condition_loop(xml, lexer, pos, vars).await;
+    ) -> (
+        Vec<Condition>,
+        HashMap<String, Join>,
+        Option<(Vars, &'a [u8])>,
+    ) {
+        let (mut conditions, join, result_info) = self.condition_loop(xml, pos, vars).await;
 
         if let Some(activity) = attr.get("activity") {
             conditions.push(Condition::Activity(if activity.to_str() == "inactive" {
@@ -103,53 +108,63 @@ impl Parser {
                 }));
             }
         }
-        (conditions, join)
+        (conditions, join, result_info)
     }
 
     #[async_recursion(?Send)]
-    async fn condition_loop(
+    async fn condition_loop<'a>(
         &self,
-        xml: &[u8],
-        lexer: &Lexer<'_>,
+        xml: &'a [u8],
         pos: &mut usize,
         vars: &Vars,
-    ) -> (Vec<Condition>, HashMap<String, Join>) {
+    ) -> (
+        Vec<Condition>,
+        HashMap<String, Join>,
+        Option<(Vars, &'a [u8])>,
+    ) {
         let mut join = HashMap::new();
         let mut result_conditions = Vec::new();
+        let mut result_info = None;
 
         let mut futs = vec![];
+
+        let mut deps = 0;
+        let lexer = unsafe { Lexer::from_slice_unchecked(xml) };
 
         while let Some(token) = lexer.tokenize(pos) {
             match token.ty() {
                 Ty::StartTag(st) => {
+                    deps += 1;
                     let name = st.name();
                     if let None = name.namespace_prefix() {
                         match name.local().as_bytes() {
                             b"narrow" => {
-                                let begin = *pos;
-                                let (inner, _) = xml_util::to_end(&lexer, pos);
                                 if let Ok(inner_xml) =
-                                    self.parse(&xml[begin..inner], vars.clone()).await.as_mut()
+                                    self.parse(xml, pos, vars.clone()).await.as_mut()
                                 {
-                                    let (cond, _) =
-                                        self.condition_loop(&inner_xml, &lexer, pos, vars).await;
+                                    let mut _pos = 0;
+                                    let (cond, _, _) =
+                                        self.condition_loop(&inner_xml, &mut _pos, vars).await;
                                     result_conditions.push(Condition::Narrow(cond));
                                 }
                             }
                             b"wide" => {
-                                let begin = *pos;
-                                let (inner, _) = xml_util::to_end(&lexer, pos);
-                                if let Ok(inner_xml) =
-                                    self.parse(&xml[begin..inner], vars.clone()).await
-                                {
-                                    let (cond, _) =
-                                        self.condition_loop(&inner_xml, &lexer, pos, vars).await;
+                                if let Ok(inner_xml) = self.parse(xml, pos, vars.clone()).await {
+                                    let _pos = 0;
+                                    let (cond, _, _) =
+                                        self.condition_loop(&inner_xml, pos, vars).await;
                                     result_conditions.push(Condition::Wide(cond));
                                 }
                             }
                             b"join" => {
                                 let attr = self.vars_from_attibutes(st.attributes(), vars).await;
                                 self.join(&lexer, pos, &attr, &mut join, vars).await;
+                            }
+                            b"result" => {
+                                let attr = self.vars_from_attibutes(st.attributes(), vars).await;
+                                let begin = *pos;
+                                let (inner, _) = xml_util::to_end(&lexer, pos);
+                                result_info = Some((attr, &xml[begin..inner]));
                             }
                             _ => {}
                         }
@@ -170,21 +185,17 @@ impl Parser {
                         _ => {}
                     }
                 }
-                Ty::EndTag(et) => match et.name().as_bytes() {
-                    b"wd:search" | b"narrow" | b"wide" => {
+                Ty::EndTag(_) => {
+                    deps -= 1;
+                    if deps <= 0 {
                         break;
                     }
-                    _ => {}
-                },
-                Ty::Characters(_)
-                | Ty::Cdata(_)
-                | Ty::Comment(_)
-                | Ty::Declaration(_)
-                | Ty::ProcessingInstruction(_) => {}
+                }
+                _ => {}
             }
         }
         result_conditions.extend(futures::future::join_all(futs).await.into_iter().flatten());
-        (result_conditions, join)
+        (result_conditions, join, result_info)
     }
 
     async fn condition_depend(&self, vars: Vars) -> Option<Condition> {

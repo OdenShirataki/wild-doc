@@ -57,9 +57,15 @@ fn rows2val(commit_rows: Vec<CollectionRow>) -> Arc<WildDocValue> {
     ))
 }
 impl Parser {
-    pub async fn update(&self, xml: &[u8], attr: Vars, vars: &Vars) -> Result<Vec<u8>> {
+    pub async fn update(
+        &self,
+        xml: &[u8],
+        pos: &mut usize,
+        attr: Vars,
+        vars: &Vars,
+    ) -> Result<Vec<u8>> {
         let mut r = vec![];
-        if let Ok(inner_xml) = self.parse(xml, vars.clone()).await {
+        if let Ok(inner_xml) = self.parse(xml, pos, vars.clone()).await {
             let (updates, on) = self.make_update_struct(inner_xml.as_slice(), &vars).await?;
 
             let mut commit_rows = vec![];
@@ -124,11 +130,10 @@ impl Parser {
                     }
                 }
             }
-
-            if let Some((on_xml, vars)) = on {
-                let mut vars = vars.clone();
-                vars.insert(
-                    if let Some(var) = vars.get("var") {
+            if let Some((on_xml, on_vars)) = on {
+                let mut new_vars = vars.clone();
+                new_vars.insert(
+                    if let Some(var) = on_vars.get("var") {
                         var.to_str().into()
                     } else {
                         "update".to_owned()
@@ -141,7 +146,8 @@ impl Parser {
                         .into(),
                     )),
                 );
-                r = self.parse(on_xml, vars).await?;
+                let mut pos = 0;
+                r = self.parse(on_xml, &mut pos, new_vars).await?;
             }
         }
         Ok(r)
