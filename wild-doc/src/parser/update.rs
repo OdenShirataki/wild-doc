@@ -57,16 +57,10 @@ fn rows2val(commit_rows: Vec<CollectionRow>) -> Arc<WildDocValue> {
     ))
 }
 impl Parser {
-    pub async fn update(
-        &self,
-        xml: &[u8],
-        pos: &mut usize,
-        attr: Vars,
-        vars: &Vars,
-    ) -> Result<Vec<u8>> {
+    pub async fn update(&self, xml: &[u8], pos: &mut usize, attr: Vars) -> Result<Vec<u8>> {
         let mut r = vec![];
-        if let Ok(inner_xml) = self.parse(xml, pos, vars.clone()).await {
-            let (updates, on) = self.make_update_struct(inner_xml.as_slice(), &vars).await?;
+        if let Ok(inner_xml) = self.parse(xml, pos).await {
+            let (updates, on) = self.make_update_struct(inner_xml.as_slice()).await?;
 
             let mut commit_rows = vec![];
             let mut session_rows = vec![];
@@ -131,7 +125,7 @@ impl Parser {
                 }
             }
             if let Some((on_xml, on_vars)) = on {
-                let mut new_vars = vars.clone();
+                let mut new_vars = Vars::new();
                 new_vars.insert(
                     if let Some(var) = on_vars.get("var") {
                         var.to_str().into()
@@ -147,7 +141,9 @@ impl Parser {
                     )),
                 );
                 let mut pos = 0;
-                r = self.parse(on_xml, &mut pos, new_vars).await?;
+                self.stack.write().push(new_vars);
+                r = self.parse(on_xml, &mut pos).await?;
+                self.stack.write().pop();
             }
         }
         Ok(r)
@@ -334,7 +330,6 @@ impl Parser {
     async fn make_update_struct<'a, 'b>(
         &self,
         xml: &'a [u8],
-        vars: &Vars,
     ) -> Result<(Vec<SessionRecord>, Option<(&'b [u8], Vars)>)>
     where
         'a: 'b,
@@ -353,11 +348,11 @@ impl Parser {
                             let (inner, _) = xml_util::to_end(&lexer, &mut pos);
                             on = Some((
                                 &xml[begin..inner],
-                                self.vars_from_attibutes(st.attributes(), vars).await,
+                                self.vars_from_attibutes(st.attributes()).await,
                             ));
                         }
                         b"collection" => {
-                            let attr = self.vars_from_attibutes(st.attributes(), vars).await;
+                            let attr = self.vars_from_attibutes(st.attributes()).await;
                             if let Some(collection_name) = attr.get("name") {
                                 let collection_id = self
                                     .database
@@ -373,9 +368,8 @@ impl Parser {
                                         Ty::StartTag(st) => {
                                             deps += 1;
 
-                                            let attr = self
-                                                .vars_from_attibutes(st.attributes(), vars)
-                                                .await;
+                                            let attr =
+                                                self.vars_from_attibutes(st.attributes()).await;
                                             match st.name().as_bytes() {
                                                 b"field" => {
                                                     let begin = pos;
@@ -419,10 +413,7 @@ impl Parser {
 
                                                     //TODO: proc for _on_xml?
                                                     let (pends_tmp, _on_xml) = self
-                                                        .make_update_struct(
-                                                            &xml[begin..inner],
-                                                            vars,
-                                                        )
+                                                        .make_update_struct(&xml[begin..inner])
                                                         .await?;
 
                                                     if let Some(key) = attr.get("key") {
@@ -441,10 +432,7 @@ impl Parser {
                                                 b"depend" => {
                                                     self.depend(
                                                         &self
-                                                            .vars_from_attibutes(
-                                                                eet.attributes(),
-                                                                vars,
-                                                            )
+                                                            .vars_from_attibutes(eet.attributes())
                                                             .await,
                                                         &mut depends,
                                                     )?;

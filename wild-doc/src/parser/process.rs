@@ -13,7 +13,7 @@ use crate::xml_util;
 use super::{Parser, WildDocValue};
 
 impl Parser {
-    pub(super) async fn get_include_content(&self, attr: Vars, vars: &Vars) -> Result<Vec<u8>> {
+    pub(super) async fn get_include_content(&self, attr: Vars) -> Result<Vec<u8>> {
         if let Some(src) = attr.get("src") {
             let src = src.to_str();
             let (xml, filename) = self
@@ -41,7 +41,7 @@ impl Parser {
                 if xml.len() > 0 {
                     self.include_stack.lock().push(filename.into());
                     let mut pos = 0;
-                    let r = self.parse(xml.as_slice(), &mut pos, vars.clone()).await?;
+                    let r = self.parse(xml.as_slice(), &mut pos).await?;
                     self.include_stack.lock().pop();
                     return Ok(r);
                 }
@@ -50,13 +50,7 @@ impl Parser {
         Ok(b"".to_vec())
     }
 
-    pub(super) async fn case(
-        &self,
-        xml: &[u8],
-        pos: &mut usize,
-        attr: Vars,
-        vars: &Vars,
-    ) -> Result<Vec<u8>> {
+    pub(super) async fn case(&self, xml: &[u8], pos: &mut usize, attr: Vars) -> Result<Vec<u8>> {
         let mut r = None;
 
         let cmp_src = attr.get("value");
@@ -67,14 +61,12 @@ impl Parser {
                     let name = st.name();
                     match name.as_bytes() {
                         b"wd:when" => {
-                            if let Some(right) = self
-                                .vars_from_attibutes(st.attributes(), vars)
-                                .await
-                                .get("value")
+                            if let Some(right) =
+                                self.vars_from_attibutes(st.attributes()).await.get("value")
                             {
                                 if let Some(cmp_src) = cmp_src {
                                     if cmp_src == right {
-                                        r = Some(self.parse(xml, pos, vars.clone()).await?);
+                                        r = Some(self.parse(xml, pos).await?);
                                     }
                                 }
                             }
@@ -86,7 +78,7 @@ impl Parser {
                             if r.is_some() {
                                 xml_util::to_end(&mut lexer, pos);
                             } else {
-                                r = Some(self.parse(xml, pos, vars.clone()).await?)
+                                r = Some(self.parse(xml, pos).await?)
                             }
                         }
                         _ => {}
@@ -106,7 +98,7 @@ impl Parser {
         Ok(r.unwrap_or_default())
     }
 
-    pub(super) async fn r#for(&self, attr: Vars, xml: &[u8], vars: &Vars) -> Result<Vec<u8>> {
+    pub(super) async fn r#for(&self, attr: Vars, xml: &[u8]) -> Result<Vec<u8>> {
         let mut r = Vec::new();
         if let (Some(var), Some(r#in)) = (attr.get("var"), attr.get("in")) {
             let var = var.to_str();
@@ -115,21 +107,25 @@ impl Parser {
                     WildDocValue::Object(map) => {
                         if let Some(key_name) = attr.get("key") {
                             for (key, value) in map.into_iter() {
-                                let mut new_vars = vars.clone();
+                                let mut new_vars = Vars::new();
                                 new_vars.insert(var.to_string(), Arc::clone(value));
                                 new_vars.insert(
                                     key_name.to_str().into(),
                                     Arc::new(serde_json::json!(key).into()),
                                 );
                                 let mut pos = 0;
-                                r.extend(self.parse(xml, &mut pos, new_vars).await?);
+                                self.stack.write().push(new_vars);
+                                r.extend(self.parse(xml, &mut pos).await?);
+                                self.stack.write().pop();
                             }
                         } else {
                             for (_, value) in map.into_iter() {
-                                let mut new_vars = vars.clone();
+                                let mut new_vars = Vars::new();
                                 new_vars.insert(var.to_string(), Arc::clone(value));
                                 let mut pos = 0;
-                                r.extend(self.parse(xml, &mut pos, new_vars).await?);
+                                self.stack.write().push(new_vars);
+                                r.extend(self.parse(xml, &mut pos).await?);
+                                self.stack.write().pop();
                             }
                         }
                     }
@@ -139,21 +135,25 @@ impl Parser {
                             let mut key = 0;
                             for value in vec.into_iter() {
                                 key += 1;
-                                let mut new_vars = vars.clone();
+                                let mut new_vars = Vars::new();
                                 new_vars.insert(var.to_string(), Arc::clone(value));
                                 new_vars.insert(
                                     key_name.to_str().into(),
                                     Arc::new(serde_json::json!(key).into()),
                                 );
                                 let mut pos = 0;
-                                r.extend(self.parse(xml, &mut pos, new_vars).await?);
+                                self.stack.write().push(new_vars);
+                                r.extend(self.parse(xml, &mut pos).await?);
+                                self.stack.write().pop();
                             }
                         } else {
                             for value in vec.into_iter() {
-                                let mut new_vars = vars.clone();
+                                let mut new_vars = Vars::new();
                                 new_vars.insert(var.to_string(), Arc::clone(value));
                                 let mut pos = 0;
-                                r.extend(self.parse(xml, &mut pos, new_vars).await?);
+                                self.stack.write().push(new_vars);
+                                r.extend(self.parse(xml, &mut pos).await?);
+                                self.stack.write().pop();
                             }
                         }
                     }
@@ -168,19 +168,18 @@ impl Parser {
         &self,
         attributes: Option<Attributes<'_>>,
         xml: &[u8],
-        vars: &Vars,
     ) -> Result<Vec<u8>> {
         let mut r = Vec::new();
         loop {
             if self
-                .vars_from_attibutes(attributes, vars)
+                .vars_from_attibutes(attributes)
                 .await
                 .get("continue")
                 .and_then(|v| v.as_bool())
                 .map_or(false, |v| *v)
             {
                 let mut pos = 0;
-                r.extend(self.parse(xml, &mut pos, vars.clone()).await?);
+                r.extend(self.parse(xml, &mut pos).await?);
             } else {
                 break;
             }

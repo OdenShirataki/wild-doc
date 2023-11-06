@@ -14,7 +14,9 @@ use deno_runtime::{
 };
 
 use parking_lot::Mutex;
-use wild_doc_script::{async_trait, serde_json, IncludeAdaptor, Vars, WildDocScript, WildDocValue};
+use wild_doc_script::{
+    async_trait, serde_json, IncludeAdaptor, Stack, Vars, WildDocScript, WildDocValue,
+};
 
 use module_loader::WdModuleLoader;
 
@@ -24,10 +26,10 @@ pub struct Deno {
 
 fn wdmap2v8obj<'s>(wdv: &Vars, scope: &'s mut HandleScope) -> v8::Local<'s, v8::Object> {
     let root = v8::Object::new(scope);
-    let mut obj_stack: Vec<(v8::Local<v8::Object>, &Vars)> = vec![(root, wdv)];
+    let mut obj_vars: Vec<(v8::Local<v8::Object>, &Vars)> = vec![(root, wdv)];
 
     loop {
-        if let Some((current_obj, current_values)) = obj_stack.pop() {
+        if let Some((current_obj, current_values)) = obj_vars.pop() {
             for (key, value) in current_values.into_iter() {
                 if let Some(v8_key) = v8::String::new(scope, key) {
                     match value.as_ref() {
@@ -43,7 +45,7 @@ fn wdmap2v8obj<'s>(wdv: &Vars, scope: &'s mut HandleScope) -> v8::Local<'s, v8::
                         }
                         WildDocValue::Object(map) => {
                             let new_obj = v8::Object::new(scope);
-                            obj_stack.push((new_obj, map));
+                            obj_vars.push((new_obj, map));
                             current_obj.set(scope, v8_key.into(), new_obj.into());
                         }
                         _ => {
@@ -86,7 +88,7 @@ fn wd2v8<'s>(wdv: &WildDocValue, scope: &'s mut HandleScope) -> Option<v8::Local
     None
 }
 
-fn set_stack(scope: &mut v8::HandleScope, stack: &Vars) {
+fn set_stack(scope: &mut v8::HandleScope, stack: &Stack) {
     if let (Some(wd), Some(v8str_stack)) = (
         v8::String::new(scope, "wd")
             .and_then(|code| v8::Script::compile(scope, code, None))
@@ -94,7 +96,7 @@ fn set_stack(scope: &mut v8::HandleScope, stack: &Vars) {
             .and_then(|v| v8::Local::<v8::Object>::try_from(v).ok()),
         v8::String::new(scope, "stack"),
     ) {
-        let v8ext_stack = v8::External::new(scope, stack as *const Vars as *mut c_void);
+        let v8ext_stack = v8::External::new(scope, stack as *const Stack as *mut c_void);
         wd.set(scope, v8str_stack.into(), v8ext_stack.into());
     }
 }
@@ -164,7 +166,7 @@ impl WildDocScript for Deno {
                         .and_then(|v| v.run(scope))
                     {
                         let stack = unsafe {
-                            &*(v8::Local::<v8::External>::cast(stack).value() as *const Vars)
+                            &*(v8::Local::<v8::External>::cast(stack).value() as *const Stack)
                         };
                         let key = args
                             .get(0)
@@ -215,7 +217,7 @@ impl WildDocScript for Deno {
         })
     }
 
-    async fn evaluate_module(&self, file_name: &str, src: &str, stack: &Vars) -> Result<()> {
+    async fn evaluate_module(&self, file_name: &str, src: &str, stack: &Stack) -> Result<()> {
         let mut worker = self.worker.lock();
 
         set_stack(&mut worker.js_runtime.handle_scope(), stack);
@@ -231,7 +233,7 @@ impl WildDocScript for Deno {
         Ok(())
     }
 
-    async fn eval(&self, code: &str, stack: &Vars) -> Result<Arc<WildDocValue>> {
+    async fn eval(&self, code: &str, stack: &Stack) -> Result<Arc<WildDocValue>> {
         let mut worker = self.worker.lock();
         let scope = &mut worker.js_runtime.handle_scope();
 

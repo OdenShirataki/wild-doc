@@ -1,14 +1,16 @@
 mod include;
+mod stack;
 mod value;
 
 use std::{path::PathBuf, sync::Arc};
 
 pub use async_trait::async_trait;
 pub use include::IncludeAdaptor;
-use parking_lot::Mutex;
+pub use stack::Stack;
 pub use value::{Vars, WildDocValue};
 
 pub use anyhow;
+use parking_lot::Mutex;
 pub use serde_json;
 
 use anyhow::Result;
@@ -21,6 +23,6 @@ pub trait WildDocScript {
     ) -> Result<Self>
     where
         Self: Sized;
-    async fn evaluate_module(&self, file_name: &str, src: &str, stack: &Vars) -> Result<()>;
-    async fn eval(&self, code: &str, stack: &Vars) -> Result<Arc<WildDocValue>>;
+    async fn evaluate_module(&self, file_name: &str, src: &str, stack: &Stack) -> Result<()>;
+    async fn eval(&self, code: &str, stack: &Stack) -> Result<Arc<WildDocValue>>;
 }

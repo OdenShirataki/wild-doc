@@ -74,27 +74,29 @@ impl WildDoc {
         input_json: &[u8],
         include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
     ) -> Result<WildDocResult> {
-        let parser = Parser::new(Arc::clone(&self.database), include_adaptor, &self.cache_dir)?;
+        let parser = Parser::new(
+            Arc::clone(&self.database),
+            include_adaptor,
+            &self.cache_dir,
+            Some(
+                [(
+                    "input".into(),
+                    Arc::new(
+                        serde_json::from_slice(input_json)
+                            .unwrap_or(serde_json::json!({}))
+                            .into(),
+                    ),
+                )]
+                .into(),
+            ),
+        )?;
 
-        let mut pos=0;
+        let mut pos = 0;
         let body = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .max_blocking_threads(32)
             .build()?
-            .block_on(
-                parser.parse(
-                    xml,&mut pos,
-                    [(
-                        "input".into(),
-                        Arc::new(
-                            serde_json::from_slice(input_json)
-                                .unwrap_or(serde_json::json!({}))
-                                .into(),
-                        ),
-                    )]
-                    .into(),
-                ),
-            )?;
+            .block_on(parser.parse(xml, &mut pos))?;
 
         let options = parser.result_options().lock().clone();
 

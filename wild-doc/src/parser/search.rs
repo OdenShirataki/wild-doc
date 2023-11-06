@@ -45,23 +45,20 @@ impl Parser {
         None
     }
 
-    pub(crate) async fn search(
-        &self,
-        xml: &[u8],
-        pos: &mut usize,
-        attr: Vars,
-        vars: &Vars,
-    ) -> Result<Vec<u8>> {
+    pub(crate) async fn search(&self, xml: &[u8], pos: &mut usize, attr: Vars) -> Result<Vec<u8>> {
         if let Some(collection_id) = self.collection_id(&attr) {
-            let (condition, join, result_info) = self.make_conditions(xml, pos, &attr, vars).await;
+            let (condition, join, result_info) = self.make_conditions(xml, pos, &attr).await;
             if let Some(result_info) = result_info {
-                let mut new_vars = vars.clone();
+                let mut new_vars = Vars::new();
                 new_vars.extend(
                     self.result(result_info.0, Search::new(collection_id, condition, join))
                         .await,
                 );
                 let mut pos = 0;
-                return self.parse(result_info.1, &mut pos, new_vars).await;
+                self.stack.write().push(new_vars);
+                let r = self.parse(result_info.1, &mut pos).await;
+                self.stack.write().pop();
+                return r;
             }
         } else {
             xml_util::to_end(&unsafe { Lexer::from_slice_unchecked(xml) }, pos);
@@ -74,13 +71,12 @@ impl Parser {
         xml: &'a [u8],
         pos: &mut usize,
         attr: &Vars,
-        vars: &Vars,
     ) -> (
         Vec<Condition>,
         HashMap<String, Join>,
         Option<(Vars, &'a [u8])>,
     ) {
-        let (mut conditions, join, result_info) = self.condition_loop(xml, pos, vars).await;
+        let (mut conditions, join, result_info) = self.condition_loop(xml, pos).await;
 
         if let Some(activity) = attr.get("activity") {
             conditions.push(Condition::Activity(if activity.to_str() == "inactive" {
@@ -116,7 +112,6 @@ impl Parser {
         &self,
         xml: &'a [u8],
         pos: &mut usize,
-        vars: &Vars,
     ) -> (
         Vec<Condition>,
         HashMap<String, Join>,
@@ -139,29 +134,26 @@ impl Parser {
                     if let None = name.namespace_prefix() {
                         match name.local().as_bytes() {
                             b"narrow" => {
-                                if let Ok(inner_xml) =
-                                    self.parse(xml, pos, vars.clone()).await.as_mut()
-                                {
+                                if let Ok(inner_xml) = self.parse(xml, pos).await.as_mut() {
                                     let mut _pos = 0;
                                     let (cond, _, _) =
-                                        self.condition_loop(&inner_xml, &mut _pos, vars).await;
+                                        self.condition_loop(&inner_xml, &mut _pos).await;
                                     result_conditions.push(Condition::Narrow(cond));
                                 }
                             }
                             b"wide" => {
-                                if let Ok(inner_xml) = self.parse(xml, pos, vars.clone()).await {
+                                if let Ok(inner_xml) = self.parse(xml, pos).await {
                                     let _pos = 0;
-                                    let (cond, _, _) =
-                                        self.condition_loop(&inner_xml, pos, vars).await;
+                                    let (cond, _, _) = self.condition_loop(&inner_xml, pos).await;
                                     result_conditions.push(Condition::Wide(cond));
                                 }
                             }
                             b"join" => {
-                                let attr = self.vars_from_attibutes(st.attributes(), vars).await;
-                                self.join(&lexer, pos, &attr, &mut join, vars).await;
+                                let attr = self.vars_from_attibutes(st.attributes()).await;
+                                self.join(&lexer, pos, &attr, &mut join).await;
                             }
                             b"result" => {
-                                let attr = self.vars_from_attibutes(st.attributes(), vars).await;
+                                let attr = self.vars_from_attibutes(st.attributes()).await;
                                 let begin = *pos;
                                 let (inner, _) = xml_util::to_end(&lexer, pos);
                                 result_info = Some((attr, &xml[begin..inner]));
@@ -171,7 +163,7 @@ impl Parser {
                     }
                 }
                 Ty::EmptyElementTag(eet) => {
-                    let attr = self.vars_from_attibutes(eet.attributes(), vars).await;
+                    let attr = self.vars_from_attibutes(eet.attributes()).await;
                     let name = eet.name();
                     match name.local().as_bytes() {
                         b"row" => futs.push(Self::condition_row(attr).boxed_local()),

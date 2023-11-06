@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use anyhow::Result;
 
 use parking_lot::Mutex;
-use wild_doc_script::{async_trait, IncludeAdaptor, Vars, WildDocScript, WildDocValue};
+use wild_doc_script::{async_trait, IncludeAdaptor, Stack, WildDocScript, WildDocValue};
 
 pub struct Var {}
 
@@ -16,14 +16,14 @@ impl WildDocScript for Var {
         Ok(Self {})
     }
 
-    async fn evaluate_module(&self, _: &str, _: &str, _: &Vars) -> Result<()> {
+    async fn evaluate_module(&self, _: &str, _: &str, _: &Stack) -> Result<()> {
         Ok(())
     }
 
-    async fn eval(&self, code: &str, vars: &Vars) -> Result<Arc<WildDocValue>> {
+    async fn eval(&self, code: &str, stack: &Stack) -> Result<Arc<WildDocValue>> {
         let mut splited = code.split(".");
         if let Some(root) = splited.next() {
-            if let Some(mut next_value) = vars.get(root) {
+            if let Some(mut next_value) = stack.get(root) {
                 loop {
                     if let Some(next) = splited.next() {
                         match next_value.as_ref() {
