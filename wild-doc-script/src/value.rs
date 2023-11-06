@@ -1,9 +1,9 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
 
 use indexmap::IndexMap;
 use serde::Serialize;
 
-pub type Vars = IndexMap<String, Arc<WildDocValue>>;
+pub type Vars = IndexMap<String, WildDocValue>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WildDocValue {
@@ -11,7 +11,7 @@ pub enum WildDocValue {
     Bool(bool),
     Number(serde_json::Number),
     String(String),
-    Array(Vec<Arc<WildDocValue>>),
+    Array(Vec<WildDocValue>),
     Object(Vars),
     Binary(Vec<u8>),
 }
@@ -41,13 +41,11 @@ impl From<serde_json::Value> for WildDocValue {
             serde_json::Value::Number(v) => Self::Number(v),
             serde_json::Value::String(v) => Self::String(v),
             serde_json::Value::Array(v) => {
-                Self::Array(v.into_iter().map(|v| Arc::new(Self::from(v))).collect())
+                Self::Array(v.into_iter().map(|v| Self::from(v)).collect())
             }
-            serde_json::Value::Object(v) => Self::Object(
-                v.into_iter()
-                    .map(|(k, v)| (k, Arc::new(Self::from(v))))
-                    .collect(),
-            ),
+            serde_json::Value::Object(v) => {
+                Self::Object(v.into_iter().map(|(k, v)| (k, Self::from(v))).collect())
+            }
         }
     }
 }

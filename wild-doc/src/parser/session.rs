@@ -1,4 +1,4 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
 
 use serde_json::json;
 
@@ -15,7 +15,7 @@ impl Parser {
             let var = var.to_str();
             if var != "" {
                 let sessions = self.database.read().sessions();
-                r.insert(var.into(), Arc::new(json!(sessions).into()));
+                r.insert(var.into(), json!(sessions).into());
             }
         }
         r
@@ -83,13 +83,10 @@ impl Parser {
         let mut r = Vars::new();
         if let Some(session_state) = self.sessions.read().last() {
             if let Some(cursor) = session_state.session.sequence_cursor() {
-                r.insert(
-                    str_max.into(),
-                    Arc::new(WildDocValue::Number(cursor.max.into())),
-                );
+                r.insert(str_max.into(), WildDocValue::Number(cursor.max.into()));
                 r.insert(
                     str_current.into(),
-                    Arc::new(WildDocValue::Number(cursor.current.into())),
+                    WildDocValue::Number(cursor.current.into()),
                 );
             }
         }

@@ -34,27 +34,27 @@ impl error::Error for DependError {
     }
 }
 
-fn rows2val(commit_rows: Vec<CollectionRow>) -> Arc<WildDocValue> {
-    Arc::new(WildDocValue::Array(
+fn rows2val(commit_rows: Vec<CollectionRow>) -> WildDocValue {
+    WildDocValue::Array(
         commit_rows
             .into_iter()
             .map(|v| {
-                Arc::new(WildDocValue::Object(
+                WildDocValue::Object(
                     [
                         (
                             "collection_id".to_owned(),
-                            Arc::new(serde_json::Number::from(v.collection_id().get()).into()),
+                            serde_json::Number::from(v.collection_id().get()).into(),
                         ),
                         (
                             "row".to_owned(),
-                            Arc::new(serde_json::Number::from(v.row().get()).into()),
+                            serde_json::Number::from(v.row().get()).into(),
                         ),
                     ]
                     .into(),
-                ))
+                )
             })
             .collect(),
-    ))
+    )
 }
 impl Parser {
     pub async fn update(&self, xml: &[u8], pos: &mut usize, attr: Vars) -> Result<Vec<u8>> {
@@ -132,13 +132,13 @@ impl Parser {
                     } else {
                         "update".to_owned()
                     },
-                    Arc::new(WildDocValue::Object(
+                    WildDocValue::Object(
                         [
                             ("commit_rows".to_owned(), rows2val(commit_rows)),
                             ("session_rows".to_owned(), rows2val(session_rows)),
                         ]
                         .into(),
-                    )),
+                    ),
                 );
                 let mut pos = 0;
                 self.stack.write().push(new_vars);

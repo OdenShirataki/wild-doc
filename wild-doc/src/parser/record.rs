@@ -1,7 +1,4 @@
-use std::{
-    num::{NonZeroI64, NonZeroU32},
-    sync::Arc,
-};
+use std::num::{NonZeroI64, NonZeroU32};
 
 use indexmap::IndexMap;
 use semilattice_database_session::{Activity, CollectionRow, Uuid};
@@ -23,10 +20,7 @@ impl Parser {
                     self.database.read().collection_id(&collection.to_str()),
                     row.to_str().parse::<NonZeroI64>(),
                 ) {
-                    inner.insert(
-                        "row".into(),
-                        Arc::new(WildDocValue::Number(row.get().into())),
-                    );
+                    inner.insert("row".into(), WildDocValue::Number(row.get().into()));
                     let mut find_session = false;
                     for i in (0..self.sessions.read().len()).rev() {
                         if let Some(temporary_collection) = self
@@ -40,63 +34,60 @@ impl Parser {
                                 inner.extend([
                                     (
                                         "uuid".into(),
-                                        Arc::new(WildDocValue::String(
+                                        WildDocValue::String(
                                             Uuid::from_u128(entity.uuid()).to_string(),
-                                        )),
+                                        ),
                                     ),
                                     (
                                         "activity".into(),
-                                        Arc::new(WildDocValue::Bool(
-                                            entity.activity() == Activity::Active,
-                                        )),
+                                        WildDocValue::Bool(entity.activity() == Activity::Active),
                                     ),
                                     (
                                         "term_begin".into(),
-                                        Arc::new(WildDocValue::Number(entity.term_begin().into())),
+                                        WildDocValue::Number(entity.term_begin().into()),
                                     ),
                                     (
                                         "term_end".into(),
-                                        Arc::new(WildDocValue::Number(entity.term_end().into())),
+                                        WildDocValue::Number(entity.term_end().into()),
                                     ),
                                     (
                                         "depends".into(),
-                                        Arc::new(WildDocValue::Object(
+                                        WildDocValue::Object(
                                             entity
                                                 .depends()
                                                 .into_iter()
                                                 .map(|d| {
                                                     (
                                                         d.key().into(),
-                                                        Arc::new(WildDocValue::Object(
+                                                        WildDocValue::Object(
                                                             [
                                                                 (
                                                                     "collection_id".into(),
-                                                                    Arc::new(WildDocValue::Number(
+                                                                    WildDocValue::Number(
                                                                         d.collection_id()
                                                                             .get()
                                                                             .into(),
-                                                                    )),
+                                                                    ),
                                                                 ),
                                                                 (
                                                                     "row".into(),
-                                                                    Arc::new(WildDocValue::Number(
+                                                                    WildDocValue::Number(
                                                                         d.row().get().into(),
-                                                                    )),
+                                                                    ),
                                                                 ),
                                                             ]
                                                             .into(),
-                                                        )),
+                                                        ),
                                                     )
                                                 })
                                                 .collect(),
-                                        )),
+                                        ),
                                     ),
                                     (
                                         "field".into(),
-                                        Arc::new(WildDocValue::Object(
+                                        WildDocValue::Object(
                                             if let Some(field_mask) = vars.get("fields") {
-                                                if let WildDocValue::Array(field_mask) =
-                                                    field_mask.as_ref()
+                                                if let WildDocValue::Array(field_mask) = field_mask
                                                 {
                                                     let entities = entity.fields();
                                                     field_mask
@@ -108,21 +99,17 @@ impl Parser {
                                                             {
                                                                 Some((
                                                                     field_name.into(),
-                                                                    Arc::new(
-                                                                        if let Ok(str) =
-                                                                            std::str::from_utf8(
-                                                                                bytes,
-                                                                            )
-                                                                        {
-                                                                            WildDocValue::String(
-                                                                                str.into(),
-                                                                            )
-                                                                        } else {
-                                                                            WildDocValue::Binary(
-                                                                                bytes.to_owned(),
-                                                                            )
-                                                                        },
-                                                                    ),
+                                                                    if let Ok(str) =
+                                                                        std::str::from_utf8(bytes)
+                                                                    {
+                                                                        WildDocValue::String(
+                                                                            str.into(),
+                                                                        )
+                                                                    } else {
+                                                                        WildDocValue::Binary(
+                                                                            bytes.to_owned(),
+                                                                        )
+                                                                    },
                                                                 ))
                                                             } else {
                                                                 None
@@ -140,22 +127,20 @@ impl Parser {
                                                     .map(|(field_name, value)| {
                                                         (
                                                             field_name.into(),
-                                                            Arc::new(
-                                                                if let Ok(str) =
-                                                                    std::str::from_utf8(value)
-                                                                {
-                                                                    WildDocValue::String(str.into())
-                                                                } else {
-                                                                    WildDocValue::Binary(
-                                                                        value.to_owned(),
-                                                                    )
-                                                                },
-                                                            ),
+                                                            if let Ok(str) =
+                                                                std::str::from_utf8(value)
+                                                            {
+                                                                WildDocValue::String(str.into())
+                                                            } else {
+                                                                WildDocValue::Binary(
+                                                                    value.to_owned(),
+                                                                )
+                                                            },
                                                         )
                                                     })
                                                     .collect()
                                             },
-                                        )),
+                                        ),
                                     ),
                                 ]);
                             }
@@ -169,40 +154,40 @@ impl Parser {
 
                             inner.insert(
                                 "serial".into(),
-                                Arc::new(WildDocValue::Number(collection.serial(row).into())),
+                                WildDocValue::Number(collection.serial(row).into()),
                             );
 
                             if let Some(uuid) = collection.uuid_string(row) {
-                                inner.insert("uuid".into(), Arc::new(WildDocValue::String(uuid)));
+                                inner.insert("uuid".into(), WildDocValue::String(uuid));
                             }
                             if let Some(activity) = collection.activity(row) {
                                 inner.insert(
                                     "activity".into(),
-                                    Arc::new(WildDocValue::Bool(activity == Activity::Active)),
+                                    WildDocValue::Bool(activity == Activity::Active),
                                 );
                             };
                             if let Some(term_begin) = collection.term_begin(row) {
                                 inner.insert(
                                     "term_begin".into(),
-                                    Arc::new(WildDocValue::Number(term_begin.into())),
+                                    WildDocValue::Number(term_begin.into()),
                                 );
                             }
                             if let Some(term_end) = collection.term_end(row) {
                                 inner.insert(
                                     "term_end".into(),
-                                    Arc::new(WildDocValue::Number(term_end.into())),
+                                    WildDocValue::Number(term_end.into()),
                                 );
                             }
                             if let Some(last_updated) = collection.last_updated(row) {
                                 inner.insert(
                                     "last_updated".into(),
-                                    Arc::new(WildDocValue::Number(last_updated.into())),
+                                    WildDocValue::Number(last_updated.into()),
                                 );
                             }
                             inner.extend([
                                 (
                                     "depends".into(),
-                                    Arc::new(WildDocValue::Object(
+                                    WildDocValue::Object(
                                         self.database
                                             .read()
                                             .relation()
@@ -214,56 +199,46 @@ impl Parser {
                                                     |collection| {
                                                         (
                                                             d.key().into(),
-                                                            Arc::new(WildDocValue::Object(
+                                                            WildDocValue::Object(
                                                                 [
                                                                     (
                                                                         "collection_id".into(),
-                                                                        Arc::new(
-                                                                            WildDocValue::Number(
-                                                                                collection_id
-                                                                                    .get()
-                                                                                    .into(),
-                                                                            ),
+                                                                        WildDocValue::Number(
+                                                                            collection_id
+                                                                                .get()
+                                                                                .into(),
                                                                         ),
                                                                     ),
                                                                     (
                                                                         "collection_name".into(),
-                                                                        Arc::new(
-                                                                            WildDocValue::String(
-                                                                                collection
-                                                                                    .name()
-                                                                                    .into(),
-                                                                            ),
+                                                                        WildDocValue::String(
+                                                                            collection
+                                                                                .name()
+                                                                                .into(),
                                                                         ),
                                                                     ),
                                                                     (
                                                                         "row".into(),
-                                                                        Arc::new(
-                                                                            WildDocValue::Number(
-                                                                                d.row()
-                                                                                    .get()
-                                                                                    .into(),
-                                                                            ),
+                                                                        WildDocValue::Number(
+                                                                            d.row().get().into(),
                                                                         ),
                                                                     ),
                                                                 ]
                                                                 .into(),
-                                                            )),
+                                                            ),
                                                         )
                                                     },
                                                 )
                                             })
                                             .flatten()
                                             .collect(),
-                                    )),
+                                    ),
                                 ),
                                 (
                                     "field".to_owned(),
-                                    Arc::new(WildDocValue::Object(
+                                    WildDocValue::Object(
                                         if let Some(field_mask) = vars.get("fields") {
-                                            if let WildDocValue::Array(field_mask) =
-                                                field_mask.as_ref()
-                                            {
+                                            if let WildDocValue::Array(field_mask) = field_mask {
                                                 field_mask
                                                     .into_iter()
                                                     .map(|field_name| {
@@ -272,17 +247,13 @@ impl Parser {
                                                             .field_bytes(row, field_name.as_ref());
                                                         (
                                                             field_name.into(),
-                                                            Arc::new(
-                                                                if let Ok(str) =
-                                                                    std::str::from_utf8(bytes)
-                                                                {
-                                                                    WildDocValue::String(str.into())
-                                                                } else {
-                                                                    WildDocValue::Binary(
-                                                                        bytes.into(),
-                                                                    )
-                                                                },
-                                                            ),
+                                                            if let Ok(str) =
+                                                                std::str::from_utf8(bytes)
+                                                            {
+                                                                WildDocValue::String(str.into())
+                                                            } else {
+                                                                WildDocValue::Binary(bytes.into())
+                                                            },
                                                         )
                                                     })
                                                     .collect()
@@ -298,26 +269,23 @@ impl Parser {
                                                         collection.field_bytes(row, field_name);
                                                     (
                                                         field_name.into(),
-                                                        Arc::new(
-                                                            if let Ok(str) =
-                                                                std::str::from_utf8(bytes)
-                                                            {
-                                                                WildDocValue::String(str.into())
-                                                            } else {
-                                                                WildDocValue::Binary(bytes.into())
-                                                            },
-                                                        ),
+                                                        if let Ok(str) = std::str::from_utf8(bytes)
+                                                        {
+                                                            WildDocValue::String(str.into())
+                                                        } else {
+                                                            WildDocValue::Binary(bytes.into())
+                                                        },
                                                     )
                                                 })
                                                 .collect()
                                         },
-                                    )),
+                                    ),
                                 ),
                             ]);
                         }
                     }
                 }
-                r.insert(var.into(), Arc::new(WildDocValue::Object(inner)));
+                r.insert(var.into(), WildDocValue::Object(inner));
             }
         }
         r

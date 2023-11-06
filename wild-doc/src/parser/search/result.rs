@@ -39,13 +39,10 @@ impl Parser {
                                 .await
                                 .into_iter()
                                 .map(|row| {
-                                    Arc::new(WildDocValue::Object(
-                                        [(
-                                            "row".into(),
-                                            Arc::new(WildDocValue::Number(row.get().into())),
-                                        )]
-                                        .into(),
-                                    ))
+                                    WildDocValue::Object(
+                                        [("row".into(), WildDocValue::Number(row.get().into()))]
+                                            .into(),
+                                    )
                                 })
                                 .collect();
                             break;
@@ -66,13 +63,9 @@ impl Parser {
                     }
                     .into_iter()
                     .map(|row| {
-                        Arc::new(WildDocValue::Object(
-                            [(
-                                "row".into(),
-                                Arc::new(WildDocValue::Number(row.get().into())),
-                            )]
-                            .into(),
-                        ))
+                        WildDocValue::Object(
+                            [("row".into(), WildDocValue::Number(row.get().into()))].into(),
+                        )
                     })
                     .collect();
                 }
@@ -81,17 +74,17 @@ impl Parser {
 
                 r.insert(
                     var.into(),
-                    Arc::new(WildDocValue::Object(
+                    WildDocValue::Object(
                         [
                             (
                                 "collection_id".into(),
-                                Arc::new(WildDocValue::Number(collection_id.get().into())),
+                                WildDocValue::Number(collection_id.get().into()),
                             ),
-                            ("rows".into(), Arc::new(WildDocValue::Array(rows))),
-                            ("len".into(), Arc::new(WildDocValue::Number(len.into()))),
+                            ("rows".into(), WildDocValue::Array(rows)),
+                            ("len".into(), WildDocValue::Number(len.into())),
                         ]
                         .into(),
-                    )),
+                    ),
                 );
             }
         }

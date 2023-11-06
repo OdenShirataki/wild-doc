@@ -1,4 +1,4 @@
-use std::{borrow::Cow, ops::Deref, path::Path, sync::Arc};
+use std::{borrow::Cow, path::Path};
 
 use anyhow::Result;
 
@@ -103,15 +103,15 @@ impl Parser {
         if let (Some(var), Some(r#in)) = (attr.get("var"), attr.get("in")) {
             let var = var.to_str();
             if var != "" {
-                match r#in.deref() {
+                match r#in {
                     WildDocValue::Object(map) => {
                         if let Some(key_name) = attr.get("key") {
                             for (key, value) in map.into_iter() {
                                 let mut new_vars = Vars::new();
-                                new_vars.insert(var.to_string(), Arc::clone(value));
+                                new_vars.insert(var.to_string(), value.clone());
                                 new_vars.insert(
                                     key_name.to_str().into(),
-                                    Arc::new(serde_json::json!(key).into()),
+                                    serde_json::json!(key).into(),
                                 );
                                 let mut pos = 0;
                                 self.stack.write().push(new_vars);
@@ -121,7 +121,7 @@ impl Parser {
                         } else {
                             for (_, value) in map.into_iter() {
                                 let mut new_vars = Vars::new();
-                                new_vars.insert(var.to_string(), Arc::clone(value));
+                                new_vars.insert(var.to_string(), value.clone());
                                 let mut pos = 0;
                                 self.stack.write().push(new_vars);
                                 r.extend(self.parse(xml, &mut pos).await?);
@@ -136,10 +136,10 @@ impl Parser {
                             for value in vec.into_iter() {
                                 key += 1;
                                 let mut new_vars = Vars::new();
-                                new_vars.insert(var.to_string(), Arc::clone(value));
+                                new_vars.insert(var.to_string(), value.clone());
                                 new_vars.insert(
                                     key_name.to_str().into(),
-                                    Arc::new(serde_json::json!(key).into()),
+                                    serde_json::json!(key).into(),
                                 );
                                 let mut pos = 0;
                                 self.stack.write().push(new_vars);
@@ -149,7 +149,7 @@ impl Parser {
                         } else {
                             for value in vec.into_iter() {
                                 let mut new_vars = Vars::new();
-                                new_vars.insert(var.to_string(), Arc::clone(value));
+                                new_vars.insert(var.to_string(), value.clone());
                                 let mut pos = 0;
                                 self.stack.write().push(new_vars);
                                 r.extend(self.parse(xml, &mut pos).await?);

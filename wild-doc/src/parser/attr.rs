@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use hashbrown::HashMap;
 use maybe_xml::token::prop::Attributes;
 use wild_doc_script::{Vars, WildDocValue};
@@ -75,21 +73,16 @@ impl Parser {
                         } else {
                             if let Ok(value) = value.to_str() {
                                 futs_noscript.push(async move {
-                                    (
-                                        name.into(),
-                                        Arc::new({
-                                            let value = xml_util::quot_unescape(value);
-                                            if let Ok(json) =
-                                                serde_json::from_str::<serde_json::Value>(
-                                                    value.as_str(),
-                                                )
-                                            {
-                                                json.into()
-                                            } else {
-                                                WildDocValue::String(value)
-                                            }
-                                        }),
-                                    )
+                                    (name.into(), {
+                                        let value = xml_util::quot_unescape(value);
+                                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(
+                                            value.as_str(),
+                                        ) {
+                                            json.into()
+                                        } else {
+                                            WildDocValue::String(value)
+                                        }
+                                    })
                                 });
                             }
                         }
@@ -137,7 +130,7 @@ impl Parser {
         &self,
         name: &'a str,
         value: &str,
-    ) -> (&'a str, Option<Arc<WildDocValue>>) {
+    ) -> (&'a str, Option<WildDocValue>) {
         if let Some(script_name) = Self::script_name(name) {
             (
                 unsafe {

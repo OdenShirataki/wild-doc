@@ -1,7 +1,4 @@
-use std::{
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
+use std::ops::{Deref, DerefMut};
 
 use crate::{Vars, WildDocValue};
 
@@ -17,7 +14,7 @@ impl Stack {
         }
     }
 
-    pub fn get(&self, key: &str) -> Option<&Arc<WildDocValue>> {
+    pub fn get(&self, key: &str) -> Option<&WildDocValue> {
         for vars in self.vars.iter().rev() {
             if let Some(vars) = vars.get(key) {
                 return Some(vars);

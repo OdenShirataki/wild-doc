@@ -32,7 +32,7 @@ fn wdmap2v8obj<'s>(wdv: &Vars, scope: &'s mut HandleScope) -> v8::Local<'s, v8::
         if let Some((current_obj, current_values)) = obj_vars.pop() {
             for (key, value) in current_values.into_iter() {
                 if let Some(v8_key) = v8::String::new(scope, key) {
-                    match value.as_ref() {
+                    match value {
                         WildDocValue::Binary(v) => {
                             let ab = v8::ArrayBuffer::with_backing_store(
                                 scope,
@@ -233,7 +233,7 @@ impl WildDocScript for Deno {
         Ok(())
     }
 
-    async fn eval(&self, code: &str, stack: &Stack) -> Result<Arc<WildDocValue>> {
+    async fn eval(&self, code: &str, stack: &Stack) -> Result<WildDocValue> {
         let mut worker = self.worker.lock();
         let scope = &mut worker.js_runtime.handle_scope();
 
@@ -250,7 +250,7 @@ impl WildDocScript for Deno {
                         if let Ok(a) = v8::Local::<v8::ArrayBufferView>::try_from(v) {
                             if let Some(b) = a.buffer(scope) {
                                 if let Some(d) = b.data() {
-                                    return Ok(Arc::new(WildDocValue::Binary(
+                                    return Ok(WildDocValue::Binary(
                                         unsafe {
                                             std::slice::from_raw_parts::<u8>(
                                                 d.as_ptr() as *const u8,
@@ -258,19 +258,19 @@ impl WildDocScript for Deno {
                                             )
                                         }
                                         .into(),
-                                    )));
+                                    ));
                                 }
                             }
                         }
                     } else {
                         if let Ok(serv) = serde_v8::from_v8::<serde_json::Value>(scope, v) {
-                            return Ok(Arc::new(serv.into()));
+                            return Ok(serv.into());
                         }
                     }
                 }
             }
         }
 
-        Ok(Arc::new(WildDocValue::Null))
+        Ok(WildDocValue::Null)
     }
 }

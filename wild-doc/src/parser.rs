@@ -6,7 +6,7 @@ mod search;
 mod session;
 mod update;
 
-use std::{ops::Deref, path::Path, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 use anyhow::Result;
 use async_recursion::async_recursion;
@@ -106,7 +106,7 @@ impl Parser {
         match name {
             b"print" => {
                 return Ok(self.vars_from_attibutes(attributes).await.get("value").map(
-                    |v| match v.deref() {
+                    |v| match v {
                         WildDocValue::String(s) => s.to_owned().into(),
                         WildDocValue::Binary(v) => v.to_vec(),
                         _ => v.to_str().as_bytes().into(),
@@ -118,7 +118,7 @@ impl Parser {
                 if let (Some(var), Some(value)) = (attr.get("var"), attr.get("value")) {
                     self.result_options
                         .lock()
-                        .insert(var.to_str().into(), Arc::clone(value));
+                        .insert(var.to_str().into(), value.clone());
                 }
             }
             b"print_escape_html" => {

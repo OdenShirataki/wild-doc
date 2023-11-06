@@ -81,11 +81,9 @@ impl WildDoc {
             Some(
                 [(
                     "input".into(),
-                    Arc::new(
-                        serde_json::from_slice(input_json)
-                            .unwrap_or(serde_json::json!({}))
-                            .into(),
-                    ),
+                    serde_json::from_slice(input_json)
+                        .unwrap_or(serde_json::json!({}))
+                        .into(),
                 )]
                 .into(),
             ),
