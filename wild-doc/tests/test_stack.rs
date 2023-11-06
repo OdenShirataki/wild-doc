@@ -13,7 +13,7 @@ fn test_stack() {
 
     let xml = br#"<?js
         wd.general.script_var=[1,2,3,4];
-    ?><wd:local
+    ?><wd:var
         hoge="1"
         hoge2="hoge"
         hoge3="true"
@@ -33,7 +33,7 @@ fn test_stack() {
         <wd:print value:var="hoge4" />
         <wd:print value:var="hoge5" />
         <wd:print value:var="hoge6" />
-    </wd:local>"#;
+    </wd:var>"#;
     let r = wd.run(xml, b"").unwrap();
     println!("{}", std::str::from_utf8(r.body()).unwrap());
 }
