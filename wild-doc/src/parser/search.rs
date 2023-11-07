@@ -61,7 +61,7 @@ impl Parser {
                 return r;
             }
         } else {
-            xml_util::to_end(&unsafe { Lexer::from_slice_unchecked(xml) }, pos);
+            xml_util::to_end(xml, pos);
         }
         Ok(vec![])
     }
@@ -150,12 +150,12 @@ impl Parser {
                             }
                             b"join" => {
                                 let attr = self.vars_from_attibutes(st.attributes()).await;
-                                self.join(&lexer, pos, &attr, &mut join).await;
+                                self.join(xml, pos, &attr, &mut join).await;
                             }
                             b"result" => {
                                 let attr = self.vars_from_attibutes(st.attributes()).await;
                                 let begin = *pos;
-                                let (inner, _) = xml_util::to_end(&lexer, pos);
+                                let (inner, _) = xml_util::to_end(xml, pos);
                                 result_info = Some((attr, &xml[begin..inner]));
                             }
                             _ => {}

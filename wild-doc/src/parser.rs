@@ -1,6 +1,8 @@
 mod attr;
+mod case;
 mod collection;
-mod process;
+mod include;
+mod r#loop;
 mod record;
 mod search;
 mod session;
@@ -269,11 +271,11 @@ impl Parser {
                                     r.extend(self.parse(&parsed, &mut new_pos).await?);
                                 }
                                 b"comment" => {
-                                    xml_util::to_end(&lexer, pos);
+                                    xml_util::to_end(xml, pos);
                                 }
                                 b"letitgo" => {
                                     let begin = *pos;
-                                    let (inner, _) = xml_util::to_end(&lexer, pos);
+                                    let (inner, _) = xml_util::to_end(xml, pos);
                                     r.extend(&xml[begin..inner]);
                                 }
                                 b"update" => {
@@ -281,7 +283,7 @@ impl Parser {
                                     self.update(xml, pos, attr).await?;
                                 }
                                 b"on" => {
-                                    let (_, outer) = xml_util::to_end(&lexer, pos);
+                                    let (_, outer) = xml_util::to_end(xml, pos);
                                     r.extend(&xml[pos_before..outer]);
                                 }
                                 b"search" => {
@@ -317,18 +319,18 @@ impl Parser {
                                         }
                                     }
                                     if matched == false {
-                                        xml_util::to_end(&lexer, pos);
+                                        xml_util::to_end(xml, pos);
                                     }
                                 }
                                 b"for" => {
                                     let begin = *pos;
-                                    let (inner, _) = xml_util::to_end(&lexer, pos);
+                                    let (inner, _) = xml_util::to_end(xml, pos);
                                     let attr = self.vars_from_attibutes(st.attributes()).await;
                                     r.extend(self.r#for(attr, &xml[begin..inner]).await?);
                                 }
                                 b"while" => {
                                     let begin = *pos;
-                                    let (inner, _) = xml_util::to_end(&lexer, pos);
+                                    let (inner, _) = xml_util::to_end(xml, pos);
                                     r.extend(
                                         self.r#while(st.attributes(), &xml[begin..inner]).await?,
                                     );

@@ -1,9 +1,10 @@
 use maybe_xml::{token::Ty, Lexer};
 
 #[inline(always)]
-pub(crate) fn to_end(lexer: &Lexer, pos: &mut usize) -> (usize, usize) {
+pub(crate) fn to_end(xml: &[u8], pos: &mut usize) -> (usize, usize) {
     let mut pos_before = *pos;
     let mut deps = 0;
+    let lexer = unsafe { Lexer::from_slice_unchecked(xml) };
     while let Some(token) = lexer.tokenize(pos) {
         match token.ty() {
             Ty::StartTag(_) => {

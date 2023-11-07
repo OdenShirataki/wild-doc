@@ -60,7 +60,10 @@ impl Parser {
     pub async fn update(&self, xml: &[u8], pos: &mut usize, attr: Vars) -> Result<Vec<u8>> {
         let mut r = vec![];
         if let Ok(inner_xml) = self.parse(xml, pos).await {
-            let (updates, on) = self.make_update_struct(inner_xml.as_slice()).await?;
+            let mut pos = 0;
+            let (updates, on) = self
+                .make_update_struct(inner_xml.as_slice(), &mut pos)
+                .await?;
 
             let mut commit_rows = vec![];
             let mut session_rows = vec![];
@@ -330,6 +333,7 @@ impl Parser {
     async fn make_update_struct<'a, 'b>(
         &self,
         xml: &'a [u8],
+        pos: &mut usize,
     ) -> Result<(Vec<SessionRecord>, Option<(&'b [u8], Vars)>)>
     where
         'a: 'b,
@@ -337,15 +341,14 @@ impl Parser {
         let mut updates = Vec::new();
         let mut on = None;
 
-        let mut pos = 0;
         let lexer = unsafe { Lexer::from_slice_unchecked(xml) };
-        while let Some(token) = lexer.tokenize(&mut pos) {
+        while let Some(token) = lexer.tokenize(pos) {
             match token.ty() {
                 Ty::StartTag(st) => {
                     match st.name().as_bytes() {
                         b"wd:on" => {
-                            let begin = pos;
-                            let (inner, _) = xml_util::to_end(&lexer, &mut pos);
+                            let begin = *pos;
+                            let (inner, _) = xml_util::to_end(xml, pos);
                             on = Some((
                                 &xml[begin..inner],
                                 self.vars_from_attibutes(st.attributes()).await,
@@ -363,7 +366,7 @@ impl Parser {
                                 let mut depends = Vec::new();
                                 let mut fields = HashMap::new();
                                 let mut deps = 1;
-                                while let Some(token) = lexer.tokenize(&mut pos) {
+                                while let Some(token) = lexer.tokenize(pos) {
                                     match token.ty() {
                                         Ty::StartTag(st) => {
                                             deps += 1;
@@ -372,9 +375,8 @@ impl Parser {
                                                 self.vars_from_attibutes(st.attributes()).await;
                                             match st.name().as_bytes() {
                                                 b"field" => {
-                                                    let begin = pos;
-                                                    let (inner, _) =
-                                                        xml_util::to_end(&lexer, &mut pos);
+                                                    let begin = *pos;
+                                                    let (inner, _) = xml_util::to_end(xml, pos);
 
                                                     if let Some(field_name) = attr.get("name") {
                                                         let mut value = std::str::from_utf8(
@@ -407,14 +409,9 @@ impl Parser {
                                                     }
                                                 }
                                                 b"pends" => {
-                                                    let begin = pos;
-                                                    let (inner, _) =
-                                                        xml_util::to_end(&lexer, &mut pos);
-
                                                     //TODO: proc for _on_xml?
-                                                    let (pends_tmp, _on_xml) = self
-                                                        .make_update_struct(&xml[begin..inner])
-                                                        .await?;
+                                                    let (pends_tmp, _on_xml) =
+                                                        self.make_update_struct(xml, pos).await?;
 
                                                     if let Some(key) = attr.get("key") {
                                                         pends.push(Pend {

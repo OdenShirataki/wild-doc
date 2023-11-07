@@ -8,7 +8,7 @@ use crate::parser::Parser;
 impl Parser {
     pub async fn join(
         &self,
-        lexer: &Lexer<'_>,
+        xml: &[u8],
         pos: &mut usize,
         attr: &Vars,
         search_map: &mut HashMap<String, Join>,
@@ -17,16 +17,16 @@ impl Parser {
             let name = name.to_str();
             if name != "" {
                 if let Some(collection_id) = self.collection_id(attr) {
-                    let condition = self.join_condition_loop(lexer, pos).await;
+                    let condition = self.join_condition_loop(xml, pos).await;
                     search_map.insert(name.into(), Join::new(collection_id, condition));
                 }
             }
         }
     }
 
-    async fn join_condition_loop(&self, lexer: &Lexer<'_>, pos: &mut usize) -> Vec<JoinCondition> {
+    async fn join_condition_loop(&self, xml: &[u8], pos: &mut usize) -> Vec<JoinCondition> {
         let mut futs = vec![];
-
+        let lexer = unsafe { Lexer::from_slice_unchecked(xml) };
         while let Some(token) = lexer.tokenize(pos) {
             match token.ty() {
                 Ty::EmptyElementTag(eet) => match eet.name().local().as_bytes() {
