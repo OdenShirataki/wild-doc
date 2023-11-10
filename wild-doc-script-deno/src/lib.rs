@@ -21,7 +21,7 @@ use wild_doc_script::{
 use module_loader::WdModuleLoader;
 
 pub struct Deno {
-    worker: Arc<Mutex<MainWorker>>,
+    worker: Mutex<MainWorker>,
 }
 
 fn wdmap2v8obj<'s>(wdv: &Vars, scope: &'s mut HandleScope) -> v8::Local<'s, v8::Object> {
@@ -213,7 +213,7 @@ impl WildDocScript for Deno {
             }
         }
         Ok(Self {
-            worker: Arc::new(Mutex::new(worker)),
+            worker: Mutex::new(worker),
         })
     }
 
