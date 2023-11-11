@@ -226,10 +226,9 @@ impl Parser {
                             deps += 1;
                             match name.local().as_bytes() {
                                 b"session" => {
-                                    let attr = self.vars_from_attibutes(st.attributes()).await;
-                                    let session = self.session(attr);
-
-                                    if let Some(session) = session {
+                                    if let Some(session) = self
+                                        .session(self.vars_from_attibutes(st.attributes()).await)
+                                    {
                                         self.sessions.write().push(session);
                                         r.extend(self.parse(xml, pos).await?);
                                         if let Some(ref mut session_state) =
@@ -252,15 +251,16 @@ impl Parser {
                                     }
                                 }
                                 b"session_sequence_cursor" => {
-                                    let attr = self.vars_from_attibutes(st.attributes()).await;
-                                    let vars = self.session_sequence(attr);
+                                    let vars = self.session_sequence(
+                                        self.vars_from_attibutes(st.attributes()).await,
+                                    );
                                     self.stack.write().push(vars);
                                     r.extend(self.parse(xml, pos).await?);
                                     self.stack.write().pop();
                                 }
                                 b"sessions" => {
-                                    let attr = self.vars_from_attibutes(st.attributes()).await;
-                                    let vars = self.sessions(attr);
+                                    let vars = self
+                                        .sessions(self.vars_from_attibutes(st.attributes()).await);
                                     self.stack.write().push(vars);
                                     r.extend(self.parse(xml, pos).await?);
                                     self.stack.write().pop();
@@ -279,34 +279,51 @@ impl Parser {
                                     r.extend(&xml[begin..inner]);
                                 }
                                 b"update" => {
-                                    let attr = self.vars_from_attibutes(st.attributes()).await;
-                                    self.update(xml, pos, attr).await?;
+                                    self.update(
+                                        xml,
+                                        pos,
+                                        self.vars_from_attibutes(st.attributes()).await,
+                                    )
+                                    .await?;
                                 }
                                 b"on" => {
                                     let (_, outer) = xml_util::to_end(xml, pos);
                                     r.extend(&xml[pos_before..outer]);
                                 }
                                 b"search" => {
-                                    let attr = self.vars_from_attibutes(st.attributes()).await;
-                                    r.extend(self.search(xml, pos, attr).await?);
+                                    r.extend(
+                                        self.search(
+                                            xml,
+                                            pos,
+                                            self.vars_from_attibutes(st.attributes()).await,
+                                        )
+                                        .await?,
+                                    );
                                 }
                                 b"record" => {
-                                    let attr = self.vars_from_attibutes(st.attributes()).await;
-                                    let vars = self.record(attr);
+                                    let vars = self
+                                        .record(self.vars_from_attibutes(st.attributes()).await);
                                     self.stack.write().push(vars);
                                     r.extend(self.parse(xml, pos).await?);
                                     self.stack.write().pop();
                                 }
                                 b"collections" => {
-                                    let attr = self.vars_from_attibutes(st.attributes()).await;
-                                    let vars = self.collections(attr);
+                                    let vars = self.collections(
+                                        self.vars_from_attibutes(st.attributes()).await,
+                                    );
                                     self.stack.write().push(vars);
                                     r.extend(self.parse(xml, pos).await?);
                                     self.stack.write().pop();
                                 }
                                 b"case" => {
-                                    let attr = self.vars_from_attibutes(st.attributes()).await;
-                                    r.extend(self.case(xml, pos, attr).await?);
+                                    r.extend(
+                                        self.case(
+                                            xml,
+                                            pos,
+                                            self.vars_from_attibutes(st.attributes()).await,
+                                        )
+                                        .await?,
+                                    );
                                 }
                                 b"if" => {
                                     let mut matched = false;
@@ -325,8 +342,13 @@ impl Parser {
                                 b"for" => {
                                     let begin = *pos;
                                     let (inner, _) = xml_util::to_end(xml, pos);
-                                    let attr = self.vars_from_attibutes(st.attributes()).await;
-                                    r.extend(self.r#for(attr, &xml[begin..inner]).await?);
+                                    r.extend(
+                                        self.r#for(
+                                            self.vars_from_attibutes(st.attributes()).await,
+                                            &xml[begin..inner],
+                                        )
+                                        .await?,
+                                    );
                                 }
                                 b"while" => {
                                     let begin = *pos;
@@ -336,8 +358,9 @@ impl Parser {
                                     );
                                 }
                                 b"tag" => {
-                                    let attr = self.vars_from_attibutes(st.attributes()).await;
-                                    let (name, attr) = self.custom_tag(attr);
+                                    let (name, attr) = self.custom_tag(
+                                        self.vars_from_attibutes(st.attributes()).await,
+                                    );
                                     r.push(b'<');
                                     r.extend(name.clone().into_bytes());
                                     r.extend(attr);
