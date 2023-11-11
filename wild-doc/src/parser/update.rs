@@ -57,7 +57,7 @@ fn rows2val(commit_rows: Vec<CollectionRow>) -> WildDocValue {
     )
 }
 impl Parser {
-    pub async fn update(&self, xml: &[u8], pos: &mut usize, attr: Vars) -> Result<Vec<u8>> {
+    pub async fn update(&mut self, xml: &[u8], pos: &mut usize, attr: Vars) -> Result<Vec<u8>> {
         let mut r = vec![];
         if let Ok(inner_xml) = self.parse(xml, pos).await {
             let mut pos = 0;
@@ -68,7 +68,7 @@ impl Parser {
             let mut commit_rows = vec![];
             let mut session_rows = vec![];
 
-            if !self.sessions.read().last().is_some()
+            if !self.sessions.last().is_some()
                 || attr
                     .get("without_session")
                     .and_then(|v| v.as_bool())
@@ -110,7 +110,7 @@ impl Parser {
                     }
                 }
             } else {
-                if let Some(session_state) = self.sessions.write().last_mut() {
+                if let Some(session_state) = self.sessions.last_mut() {
                     session_rows = self
                         .database
                         .write()
@@ -144,9 +144,9 @@ impl Parser {
                     ),
                 );
                 let mut pos = 0;
-                self.stack.write().push(new_vars);
+                self.stack.push(new_vars);
                 r = self.parse(on_xml, &mut pos).await?;
-                self.stack.write().pop();
+                self.stack.pop();
             }
         }
         Ok(r)
@@ -287,7 +287,7 @@ impl Parser {
     }
 
     fn depend(
-        &self,
+        &mut self,
         vars: &Vars,
         depends: &mut Vec<(String, CollectionRow)>,
     ) -> Result<(), DependError> {
@@ -301,7 +301,7 @@ impl Parser {
                 let in_session = row.get() < 0;
                 if in_session {
                     let mut valid = false;
-                    if let Some(session_state) = self.sessions.write().pop() {
+                    if let Some(session_state) = self.sessions.pop() {
                         if let Some(temporary_collection) =
                             session_state.session.temporary_collection(collection_id)
                         {
@@ -309,7 +309,7 @@ impl Parser {
                                 valid = true;
                             }
                         }
-                        self.sessions.write().push(session_state);
+                        self.sessions.push(session_state);
                     }
                     if !valid {
                         return Err(DependError);
@@ -331,7 +331,7 @@ impl Parser {
 
     #[async_recursion(?Send)]
     async fn make_update_struct<'a, 'b>(
-        &self,
+        &mut self,
         xml: &'a [u8],
         pos: &mut usize,
     ) -> Result<(Vec<SessionRecord>, Option<(&'b [u8], Vars)>)>
@@ -427,12 +427,10 @@ impl Parser {
                                             let name = eet.name();
                                             match name.as_bytes() {
                                                 b"depend" => {
-                                                    self.depend(
-                                                        &self
-                                                            .vars_from_attibutes(eet.attributes())
-                                                            .await,
-                                                        &mut depends,
-                                                    )?;
+                                                    let attr = self
+                                                        .vars_from_attibutes(eet.attributes())
+                                                        .await;
+                                                    self.depend(&attr, &mut depends)?;
                                                 }
                                                 _ => {}
                                             }

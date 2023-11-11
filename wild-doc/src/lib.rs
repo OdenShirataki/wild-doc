@@ -69,12 +69,12 @@ impl WildDoc {
     }
 
     fn run_inner(
-        &self,
+        &mut self,
         xml: &[u8],
         input_json: &[u8],
         include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
     ) -> Result<WildDocResult> {
-        let parser = Parser::new(
+        let mut parser = Parser::new(
             Arc::clone(&self.database),
             include_adaptor,
             &self.cache_dir,
@@ -96,17 +96,17 @@ impl WildDoc {
             .build()?
             .block_on(parser.parse(xml, &mut pos))?;
 
-        let options = parser.result_options().lock().clone();
+        let options = parser.result_options().clone();
 
         Ok(WildDocResult { body, options })
     }
 
-    pub fn run(&self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {
+    pub fn run(&mut self, xml: &[u8], input_json: &[u8]) -> Result<WildDocResult> {
         self.run_inner(xml, input_json, Arc::clone(&self.default_include_adaptor))
     }
 
     pub fn run_with_include_adaptor(
-        &self,
+        &mut self,
         xml: &[u8],
         input_json: &[u8],
         include_adaptor: Box<dyn IncludeAdaptor + Send>,

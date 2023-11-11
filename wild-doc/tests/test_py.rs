@@ -10,7 +10,7 @@ fn test_py() {
     }
     std::fs::create_dir_all(dir).unwrap();
 
-    let wd = WildDoc::new(dir, Box::new(IncludeLocal::new("./include/")), None, 1);
+    let mut wd = WildDoc::new(dir, Box::new(IncludeLocal::new("./include/")), None, 1);
 
     let xml = br#"<?py
 hoge=100

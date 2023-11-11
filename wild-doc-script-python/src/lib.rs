@@ -30,7 +30,7 @@ impl WildDocScript for WdPy {
         Ok(WdPy {})
     }
 
-    async fn evaluate_module(&self, _: &str, code: &str, stack: &Stack) -> Result<()> {
+    async fn evaluate_module(&mut self, _: &str, code: &str, stack: &Stack) -> Result<()> {
         Python::with_gil(|py| -> PyResult<()> {
             let builtins = PyModule::import(py, "builtins")?;
             builtins.set_item(
@@ -43,7 +43,7 @@ impl WildDocScript for WdPy {
         Ok(())
     }
 
-    async fn eval(&self, code: &str, stack: &Stack) -> Result<WildDocValue> {
+    async fn eval(&mut self, code: &str, stack: &Stack) -> Result<WildDocValue> {
         Ok(WildDocValue::Binary(
             Python::with_gil(|py| -> PyResult<PyObject> {
                 let builtins = PyModule::import(py, "builtins")?;

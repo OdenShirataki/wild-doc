@@ -7,7 +7,7 @@ use crate::parser::Parser;
 
 impl Parser {
     pub async fn join(
-        &self,
+        &mut self,
         xml: &[u8],
         pos: &mut usize,
         attr: &Vars,
@@ -24,7 +24,7 @@ impl Parser {
         }
     }
 
-    async fn join_condition_loop(&self, xml: &[u8], pos: &mut usize) -> Vec<JoinCondition> {
+    async fn join_condition_loop(&mut self, xml: &[u8], pos: &mut usize) -> Vec<JoinCondition> {
         let mut futs = vec![];
         let lexer = unsafe { Lexer::from_slice_unchecked(xml) };
         while let Some(token) = lexer.tokenize(pos) {

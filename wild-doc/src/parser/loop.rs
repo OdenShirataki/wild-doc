@@ -6,7 +6,7 @@ use wild_doc_script::Vars;
 use super::{Parser, WildDocValue};
 
 impl Parser {
-    pub(super) async fn r#for(&self, attr: Vars, xml: &[u8]) -> Result<Vec<u8>> {
+    pub(super) async fn r#for(&mut self, attr: Vars, xml: &[u8]) -> Result<Vec<u8>> {
         let mut r = Vec::new();
         if let (Some(var), Some(r#in)) = (attr.get("var"), attr.get("in")) {
             let var = var.to_str();
@@ -22,18 +22,18 @@ impl Parser {
                                     serde_json::json!(key).into(),
                                 );
                                 let mut pos = 0;
-                                self.stack.write().push(new_vars);
+                                self.stack.push(new_vars);
                                 r.extend(self.parse(xml, &mut pos).await?);
-                                self.stack.write().pop();
+                                self.stack.pop();
                             }
                         } else {
                             for (_, value) in map.into_iter() {
                                 let mut new_vars = Vars::new();
                                 new_vars.insert(var.to_string(), value.clone());
                                 let mut pos = 0;
-                                self.stack.write().push(new_vars);
+                                self.stack.push(new_vars);
                                 r.extend(self.parse(xml, &mut pos).await?);
-                                self.stack.write().pop();
+                                self.stack.pop();
                             }
                         }
                     }
@@ -50,18 +50,18 @@ impl Parser {
                                     serde_json::json!(key).into(),
                                 );
                                 let mut pos = 0;
-                                self.stack.write().push(new_vars);
+                                self.stack.push(new_vars);
                                 r.extend(self.parse(xml, &mut pos).await?);
-                                self.stack.write().pop();
+                                self.stack.pop();
                             }
                         } else {
                             for value in vec.into_iter() {
                                 let mut new_vars = Vars::new();
                                 new_vars.insert(var.to_string(), value.clone());
                                 let mut pos = 0;
-                                self.stack.write().push(new_vars);
+                                self.stack.push(new_vars);
                                 r.extend(self.parse(xml, &mut pos).await?);
-                                self.stack.write().pop();
+                                self.stack.pop();
                             }
                         }
                     }
@@ -73,7 +73,7 @@ impl Parser {
     }
 
     pub(super) async fn r#while(
-        &self,
+        &mut self,
         attributes: Option<Attributes<'_>>,
         xml: &[u8],
     ) -> Result<Vec<u8>> {

@@ -16,11 +16,11 @@ impl WildDocScript for Var {
         Ok(Self {})
     }
 
-    async fn evaluate_module(&self, _: &str, _: &str, _: &Stack) -> Result<()> {
+    async fn evaluate_module(&mut self, _: &str, _: &str, _: &Stack) -> Result<()> {
         Ok(())
     }
 
-    async fn eval(&self, code: &str, stack: &Stack) -> Result<WildDocValue> {
+    async fn eval(&mut self, code: &str, stack: &Stack) -> Result<WildDocValue> {
         let mut splited = code.split(".");
         if let Some(root) = splited.next() {
             if let Some(mut next_value) = stack.get(root) {

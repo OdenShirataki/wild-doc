@@ -21,7 +21,7 @@ use wild_doc_script::{
 use module_loader::WdModuleLoader;
 
 pub struct Deno {
-    worker: Mutex<MainWorker>,
+    worker: MainWorker,
 }
 
 fn wdmap2v8obj<'s>(wdv: &Vars, scope: &'s mut HandleScope) -> v8::Local<'s, v8::Object> {
@@ -212,30 +212,26 @@ impl WildDocScript for Deno {
                 wd.set(scope, v8str_v.into(), v8func_v.into());
             }
         }
-        Ok(Self {
-            worker: Mutex::new(worker),
-        })
+        Ok(Self { worker })
     }
 
-    async fn evaluate_module(&self, file_name: &str, src: &str, stack: &Stack) -> Result<()> {
-        let mut worker = self.worker.lock();
+    async fn evaluate_module(&mut self, file_name: &str, src: &str, stack: &Stack) -> Result<()> {
+        set_stack(&mut self.worker.js_runtime.handle_scope(), stack);
 
-        set_stack(&mut worker.js_runtime.handle_scope(), stack);
-
-        let mod_id = worker
+        let mod_id = self
+            .worker
             .js_runtime
             .load_side_module(
                 &(ModuleSpecifier::parse(&("wd://script".to_owned() + file_name))?),
                 Some(String::from_utf8(src.into())?.into()),
             )
             .await?;
-        worker.evaluate_module(mod_id).await?;
+        self.worker.evaluate_module(mod_id).await?;
         Ok(())
     }
 
-    async fn eval(&self, code: &str, stack: &Stack) -> Result<WildDocValue> {
-        let mut worker = self.worker.lock();
-        let scope = &mut worker.js_runtime.handle_scope();
+    async fn eval(&mut self, code: &str, stack: &Stack) -> Result<WildDocValue> {
+        let scope = &mut self.worker.js_runtime.handle_scope();
 
         set_stack(scope, stack);
 

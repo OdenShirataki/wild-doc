@@ -81,7 +81,7 @@ impl Parser {
         }
 
         let mut r = Vars::new();
-        if let Some(session_state) = self.sessions.read().last() {
+        if let Some(session_state) = self.sessions.last() {
             if let Some(cursor) = session_state.session.sequence_cursor() {
                 r.insert(str_max.into(), WildDocValue::Number(cursor.max.into()));
                 r.insert(

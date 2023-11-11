@@ -9,7 +9,7 @@ fn test_stack() {
     }
     std::fs::create_dir_all(dir).unwrap();
 
-    let wd = WildDoc::new(dir, Box::new(IncludeLocal::new("./include/")), None, 1);
+    let mut wd = WildDoc::new(dir, Box::new(IncludeLocal::new("./include/")), None, 1);
 
     let xml = br#"<?js
         wd.general.script_var=[1,2,3,4];

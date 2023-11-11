@@ -11,7 +11,7 @@ use super::Parser;
 
 impl Parser {
     #[must_use]
-    pub(super) async fn result(&self, vars: Vars, mut search: Search) -> Vars {
+    pub(super) async fn result(&mut self, vars: Vars, mut search: Search) -> Vars {
         let mut r = Vars::new();
 
         if let Some(var) = vars.get("var") {
@@ -29,8 +29,8 @@ impl Parser {
                 let mut rows: Vec<_> = vec![];
 
                 let mut found_session = false;
-                for i in (0..self.sessions.read().len()).rev() {
-                    if let Some(state) = self.sessions.write().get_mut(i) {
+                for i in (0..self.sessions.len()).rev() {
+                    if let Some(state) = self.sessions.get_mut(i) {
                         if state.session.temporary_collection(collection_id).is_some() {
                             found_session = true;
                             rows = state

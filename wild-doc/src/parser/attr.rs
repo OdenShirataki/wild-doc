@@ -7,7 +7,7 @@ use crate::xml_util;
 use super::Parser;
 
 impl Parser {
-    pub(super) async fn output_attributes(&self, r: &mut Vec<u8>, attributes: Attributes<'_>) {
+    pub(super) async fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes<'_>) {
         for attr in attributes.into_iter() {
             if let (Ok(name), Some(value)) = (attr.name().to_str(), attr.value()) {
                 if let Ok(value) = value.to_str() {
@@ -52,7 +52,7 @@ impl Parser {
     }
 
     #[must_use]
-    pub(super) async fn vars_from_attibutes(&self, attributes: Option<Attributes<'_>>) -> Vars {
+    pub(super) async fn vars_from_attibutes(&mut self, attributes: Option<Attributes<'_>>) -> Vars {
         let mut r = Vars::new();
 
         let mut values_per_script = HashMap::new();
@@ -92,15 +92,12 @@ impl Parser {
         }
 
         let mut futs = vec![];
-        for (script_name, script) in self.scripts.iter() {
+        for (script_name, script) in self.scripts.iter_mut() {
             if let Some(v) = values_per_script.get(script_name.as_str()) {
                 futs.push(async {
                     let mut r = Vars::new();
                     for (name, value) in v.into_iter() {
-                        if let Ok(v) = script
-                            .eval(value.to_str().unwrap(), &self.stack.read())
-                            .await
-                        {
+                        if let Ok(v) = script.eval(value.to_str().unwrap(), &self.stack).await {
                             r.insert(name.to_string(), v);
                         }
                     }
@@ -127,7 +124,7 @@ impl Parser {
     }
 
     pub(crate) async fn attibute_var_or_script<'a>(
-        &self,
+        &mut self,
         name: &'a str,
         value: &str,
     ) -> (&'a str, Option<WildDocValue>) {
@@ -138,9 +135,9 @@ impl Parser {
                         &name.as_bytes()[..name.len() - (script_name.len() + 1)],
                     )
                 },
-                if let Some(script) = self.scripts.get(script_name) {
+                if let Some(script) = self.scripts.get_mut(script_name) {
                     script
-                        .eval(&xml_util::quot_unescape(value), &self.stack.read())
+                        .eval(&xml_util::quot_unescape(value), &self.stack)
                         .await
                         .ok()
                 } else {

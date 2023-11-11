@@ -7,7 +7,7 @@ use crate::xml_util;
 use super::Parser;
 
 impl Parser {
-    pub(super) async fn case(&self, xml: &[u8], pos: &mut usize, attr: Vars) -> Result<Vec<u8>> {
+    pub(super) async fn case(&mut self, xml: &[u8], pos: &mut usize, attr: Vars) -> Result<Vec<u8>> {
         let mut r = None;
 
         let cmp_src = attr.get("value");

@@ -11,7 +11,7 @@ if std::path::Path::new(dir).exists(){
 }
 std::fs::create_dir_all(dir).unwrap();
 
-let wd = WildDoc::new(dir, Box::new(IncludeLocal::new("./include/")), None);
+let mut wd = WildDoc::new(dir, Box::new(IncludeLocal::new("./include/")), None);
 
 let update_xml = br#"<wd:session name="account"><wd:update commit="true">
     <collection name="account">

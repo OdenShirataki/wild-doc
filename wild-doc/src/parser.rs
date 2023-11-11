@@ -41,12 +41,12 @@ struct SessionState {
 
 pub struct Parser {
     database: Arc<RwLock<SessionDatabase>>,
-    sessions: RwLock<Vec<SessionState>>,
+    sessions: Vec<SessionState>,
     scripts: HashMap<String, Box<dyn WildDocScript>>,
     include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
-    stack: RwLock<Stack>,
-    result_options: Mutex<Vars>,
-    include_stack: Mutex<Vec<String>>,
+    stack: Stack,
+    result_options: Vars,
+    include_stack: Vec<String>,
 }
 
 impl Parser {
@@ -87,21 +87,21 @@ impl Parser {
 
         Ok(Self {
             scripts,
-            sessions: RwLock::new(vec![]),
+            sessions: vec![],
             database,
             include_adaptor,
-            stack: RwLock::new(Stack::new(input)),
-            result_options: Mutex::new(Vars::new()),
-            include_stack: Mutex::new(vec![]),
+            stack: Stack::new(input),
+            result_options: Vars::new(),
+            include_stack: vec![],
         })
     }
 
-    pub fn result_options(&self) -> &Mutex<Vars> {
+    pub fn result_options(&self) -> &Vars {
         &self.result_options
     }
 
     async fn parse_wd_start_or_empty_tag(
-        &self,
+        &mut self,
         name: &[u8],
         attributes: Option<Attributes<'_>>,
     ) -> Result<Option<Vec<u8>>> {
@@ -119,7 +119,6 @@ impl Parser {
                 let attr = self.vars_from_attibutes(attributes).await;
                 if let (Some(var), Some(value)) = (attr.get("var"), attr.get("value")) {
                     self.result_options
-                        .lock()
                         .insert(var.to_str().into(), value.clone());
                 }
             }
@@ -153,7 +152,7 @@ impl Parser {
     }
 
     #[async_recursion(?Send)]
-    pub async fn parse(&self, xml: &[u8], pos: &mut usize) -> Result<Vec<u8>> {
+    pub async fn parse(&mut self, xml: &[u8], pos: &mut usize) -> Result<Vec<u8>> {
         let mut r: Vec<u8> = Vec::new();
 
         let mut deps = 0;
@@ -165,13 +164,14 @@ impl Parser {
                 Ty::ProcessingInstruction(pi) => {
                     if let Some(i) = pi.instructions() {
                         let target = pi.target();
-                        if let Some(script) = self.scripts.get(unsafe { target.as_str_unchecked() })
+                        if let Some(script) =
+                            self.scripts.get_mut(unsafe { target.as_str_unchecked() })
                         {
                             if let Err(e) = script
                                 .evaluate_module(
-                                    self.include_stack.lock().last().map_or("", |v| v),
+                                    self.include_stack.last().map_or("", |v| v),
                                     i.to_str()?,
-                                    &self.stack.read(),
+                                    &self.stack,
                                 )
                                 .await
                             {
@@ -226,14 +226,11 @@ impl Parser {
                             deps += 1;
                             match name.local().as_bytes() {
                                 b"session" => {
-                                    if let Some(session) = self
-                                        .session(self.vars_from_attibutes(st.attributes()).await)
-                                    {
-                                        self.sessions.write().push(session);
+                                    let attr = self.vars_from_attibutes(st.attributes()).await;
+                                    if let Some(session) = self.session(attr) {
+                                        self.sessions.push(session);
                                         r.extend(self.parse(xml, pos).await?);
-                                        if let Some(ref mut session_state) =
-                                            self.sessions.write().pop()
-                                        {
+                                        if let Some(ref mut session_state) = self.sessions.pop() {
                                             if session_state.commit_on_close {
                                                 self.database
                                                     .write()
@@ -251,19 +248,18 @@ impl Parser {
                                     }
                                 }
                                 b"session_sequence_cursor" => {
-                                    let vars = self.session_sequence(
-                                        self.vars_from_attibutes(st.attributes()).await,
-                                    );
-                                    self.stack.write().push(vars);
+                                    let attr = self.vars_from_attibutes(st.attributes()).await;
+                                    let vars = self.session_sequence(attr);
+                                    self.stack.push(vars);
                                     r.extend(self.parse(xml, pos).await?);
-                                    self.stack.write().pop();
+                                    self.stack.pop();
                                 }
                                 b"sessions" => {
-                                    let vars = self
-                                        .sessions(self.vars_from_attibutes(st.attributes()).await);
-                                    self.stack.write().push(vars);
+                                    let attr = self.vars_from_attibutes(st.attributes()).await;
+                                    let vars = self.sessions(attr);
+                                    self.stack.push(vars);
                                     r.extend(self.parse(xml, pos).await?);
-                                    self.stack.write().pop();
+                                    self.stack.pop();
                                 }
                                 b"re" => {
                                     let parsed = self.parse(xml, pos).await?;
@@ -279,51 +275,34 @@ impl Parser {
                                     r.extend(&xml[begin..inner]);
                                 }
                                 b"update" => {
-                                    self.update(
-                                        xml,
-                                        pos,
-                                        self.vars_from_attibutes(st.attributes()).await,
-                                    )
-                                    .await?;
+                                    let attr = self.vars_from_attibutes(st.attributes()).await;
+                                    self.update(xml, pos, attr).await?;
                                 }
                                 b"on" => {
                                     let (_, outer) = xml_util::to_end(xml, pos);
                                     r.extend(&xml[pos_before..outer]);
                                 }
                                 b"search" => {
-                                    r.extend(
-                                        self.search(
-                                            xml,
-                                            pos,
-                                            self.vars_from_attibutes(st.attributes()).await,
-                                        )
-                                        .await?,
-                                    );
+                                    let attr = self.vars_from_attibutes(st.attributes()).await;
+                                    r.extend(self.search(xml, pos, attr).await?);
                                 }
                                 b"record" => {
-                                    let vars = self
-                                        .record(self.vars_from_attibutes(st.attributes()).await);
-                                    self.stack.write().push(vars);
+                                    let attr = self.vars_from_attibutes(st.attributes()).await;
+                                    let vars = self.record(attr);
+                                    self.stack.push(vars);
                                     r.extend(self.parse(xml, pos).await?);
-                                    self.stack.write().pop();
+                                    self.stack.pop();
                                 }
                                 b"collections" => {
-                                    let vars = self.collections(
-                                        self.vars_from_attibutes(st.attributes()).await,
-                                    );
-                                    self.stack.write().push(vars);
+                                    let attr = self.vars_from_attibutes(st.attributes()).await;
+                                    let vars = self.collections(attr);
+                                    self.stack.push(vars);
                                     r.extend(self.parse(xml, pos).await?);
-                                    self.stack.write().pop();
+                                    self.stack.pop();
                                 }
                                 b"case" => {
-                                    r.extend(
-                                        self.case(
-                                            xml,
-                                            pos,
-                                            self.vars_from_attibutes(st.attributes()).await,
-                                        )
-                                        .await?,
-                                    );
+                                    let attr = self.vars_from_attibutes(st.attributes()).await;
+                                    r.extend(self.case(xml, pos, attr).await?);
                                 }
                                 b"if" => {
                                     let mut matched = false;
@@ -342,13 +321,8 @@ impl Parser {
                                 b"for" => {
                                     let begin = *pos;
                                     let (inner, _) = xml_util::to_end(xml, pos);
-                                    r.extend(
-                                        self.r#for(
-                                            self.vars_from_attibutes(st.attributes()).await,
-                                            &xml[begin..inner],
-                                        )
-                                        .await?,
-                                    );
+                                    let attr = self.vars_from_attibutes(st.attributes()).await;
+                                    r.extend(self.r#for(attr, &xml[begin..inner]).await?);
                                 }
                                 b"while" => {
                                     let begin = *pos;
@@ -358,9 +332,8 @@ impl Parser {
                                     );
                                 }
                                 b"tag" => {
-                                    let (name, attr) = self.custom_tag(
-                                        self.vars_from_attibutes(st.attributes()).await,
-                                    );
+                                    let attr = self.vars_from_attibutes(st.attributes()).await;
+                                    let (name, attr) = self.custom_tag(attr);
                                     r.push(b'<');
                                     r.extend(name.clone().into_bytes());
                                     r.extend(attr);
@@ -373,10 +346,10 @@ impl Parser {
                                     r.push(b'>');
                                 }
                                 b"var" => {
-                                    let vars = self.vars_from_attibutes(st.attributes()).await;
-                                    self.stack.write().push(vars);
+                                    let attr = self.vars_from_attibutes(st.attributes()).await;
+                                    self.stack.push(attr);
                                     r.extend(self.parse(xml, pos).await?);
-                                    self.stack.write().pop();
+                                    self.stack.pop();
                                 }
                                 _ => {}
                             }

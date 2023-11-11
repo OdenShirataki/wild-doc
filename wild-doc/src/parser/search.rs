@@ -45,7 +45,12 @@ impl Parser {
         None
     }
 
-    pub(crate) async fn search(&self, xml: &[u8], pos: &mut usize, attr: Vars) -> Result<Vec<u8>> {
+    pub(crate) async fn search(
+        &mut self,
+        xml: &[u8],
+        pos: &mut usize,
+        attr: Vars,
+    ) -> Result<Vec<u8>> {
         if let Some(collection_id) = self.collection_id(&attr) {
             let (condition, join, result_info) = self.make_conditions(xml, pos, &attr).await;
             if let Some(result_info) = result_info {
@@ -55,9 +60,9 @@ impl Parser {
                         .await,
                 );
                 let mut pos = 0;
-                self.stack.write().push(new_vars);
+                self.stack.push(new_vars);
                 let r = self.parse(result_info.1, &mut pos).await;
-                self.stack.write().pop();
+                self.stack.pop();
                 return r;
             }
         } else {
@@ -67,7 +72,7 @@ impl Parser {
     }
 
     async fn make_conditions<'a>(
-        &self,
+        &mut self,
         xml: &'a [u8],
         pos: &mut usize,
         attr: &Vars,
@@ -109,7 +114,7 @@ impl Parser {
 
     #[async_recursion(?Send)]
     async fn condition_loop<'a>(
-        &self,
+        &mut self,
         xml: &'a [u8],
         pos: &mut usize,
     ) -> (
