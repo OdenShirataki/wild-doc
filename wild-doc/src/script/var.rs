@@ -30,13 +30,20 @@ impl WildDocScript for Var {
                             WildDocValue::Object(map) => {
                                 if let Some(v) = map.get(next) {
                                     next_value = v;
+                                } else {
+                                    break;
                                 }
                             }
                             WildDocValue::Array(map) => {
+                                let mut found = false;
                                 if let Ok(v) = next.parse::<usize>() {
                                     if let Some(v) = map.get(v) {
+                                        found = true;
                                         next_value = v;
                                     }
+                                }
+                                if !found {
+                                    break;
                                 }
                             }
                             _ => break,
