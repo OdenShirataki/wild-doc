@@ -20,6 +20,7 @@ pub trait WildDocScript {
     fn new(
         include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
         cache_dir: PathBuf,
+        stack: &Stack,
     ) -> Result<Self>
     where
         Self: Sized;
