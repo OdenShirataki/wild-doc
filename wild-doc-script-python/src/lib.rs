@@ -14,7 +14,7 @@ pub struct WdPy {}
 
 #[async_trait(?Send)]
 impl WildDocScript for WdPy {
-    fn new(_: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>, _: PathBuf) -> Result<Self> {
+    fn new(_: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>, _: PathBuf, _: &Stack) -> Result<Self> {
         let _ = Python::with_gil(|py| -> PyResult<()> {
             let builtins = PyModule::import(py, "builtins")?;
 
