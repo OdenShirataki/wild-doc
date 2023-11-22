@@ -9,7 +9,7 @@ pub struct Var {}
 
 #[async_trait(?Send)]
 impl WildDocScript for Var {
-    fn new(_: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>, _: PathBuf) -> Result<Self>
+    fn new(_: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>, _: PathBuf, _: &Stack) -> Result<Self>
     where
         Self: Sized,
     {

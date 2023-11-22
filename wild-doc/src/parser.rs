@@ -44,7 +44,7 @@ pub struct Parser {
     sessions: Vec<SessionState>,
     scripts: HashMap<String, Box<dyn WildDocScript>>,
     include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
-    stack: Stack,
+    stack: Box<Stack>,
     result_options: Vars,
     include_stack: Vec<String>,
 }
@@ -56,6 +56,7 @@ impl Parser {
         cache_dir: &Path,
         input: Option<Vars>,
     ) -> Result<Self> {
+        let stack = Box::new(Stack::new(input));
         let mut scripts: hashbrown::HashMap<String, Box<dyn WildDocScript>> =
             hashbrown::HashMap::new();
 
@@ -64,6 +65,7 @@ impl Parser {
             Box::new(Var::new(
                 Arc::clone(&include_adaptor),
                 cache_dir.to_owned(),
+                &stack,
             )?),
         );
 
@@ -73,6 +75,7 @@ impl Parser {
             Box::new(Deno::new(
                 Arc::clone(&include_adaptor),
                 cache_dir.to_owned(),
+                &stack,
             )?),
         );
 
@@ -82,6 +85,7 @@ impl Parser {
             Box::new(WdPy::new(
                 Arc::clone(&include_adaptor),
                 cache_dir.to_owned(),
+                &stack,
             )?),
         );
 
@@ -90,7 +94,7 @@ impl Parser {
             sessions: vec![],
             database,
             include_adaptor,
-            stack: Stack::new(input),
+            stack,
             result_options: Vars::new(),
             include_stack: vec![],
         })
