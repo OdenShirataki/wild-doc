@@ -9,7 +9,7 @@ use async_recursion::async_recursion;
 use base64::{engine::general_purpose, Engine};
 use chrono::DateTime;
 use hashbrown::HashMap;
-use maybe_xml::{token::Ty, Lexer};
+use maybe_xml::{token::Ty, Reader};
 
 use semilattice_database_session::{
     Activity, CollectionRow, Depends, Pend, Record, SessionRecord, Term,
@@ -341,8 +341,8 @@ impl Parser {
         let mut updates = Vec::new();
         let mut on = None;
 
-        let lexer = unsafe { Lexer::from_slice_unchecked(xml) };
-        while let Some(token) = lexer.tokenize(pos) {
+        let reader = Reader::from_str(unsafe { std::str::from_utf8_unchecked(xml) });
+        while let Some(token) = reader.tokenize(pos) {
             match token.ty() {
                 Ty::StartTag(st) => {
                     match st.name().as_bytes() {
@@ -366,7 +366,7 @@ impl Parser {
                                 let mut depends = Vec::new();
                                 let mut fields = HashMap::new();
                                 let mut deps = 1;
-                                while let Some(token) = lexer.tokenize(pos) {
+                                while let Some(token) = reader.tokenize(pos) {
                                     match token.ty() {
                                         Ty::StartTag(st) => {
                                             deps += 1;

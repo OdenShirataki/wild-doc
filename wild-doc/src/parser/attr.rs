@@ -9,35 +9,35 @@ use super::Parser;
 impl Parser {
     pub(super) async fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes<'_>) {
         for attr in attributes.into_iter() {
-            if let (Ok(name), Some(value)) = (attr.name().to_str(), attr.value()) {
-                if let Ok(value) = value.to_str() {
-                    let (new_name, new_value) = self.attibute_var_or_script(name, value).await;
-                    if new_name == "wd-attr:replace" {
-                        if let Some(value) = new_value {
-                            if !value.is_null() {
-                                r.push(b' ');
-                                r.extend(value.to_str().as_bytes());
-                            }
+            let name = attr.name().as_str();
+            if let Some(value) = attr.value() {
+                let value = value.as_str();
+                let (new_name, new_value) = self.attibute_var_or_script(name, value).await;
+                if new_name == "wd-attr:replace" {
+                    if let Some(value) = new_value {
+                        if !value.is_null() {
+                            r.push(b' ');
+                            r.extend(value.to_str().as_bytes());
+                        }
+                    }
+                } else {
+                    r.push(b' ');
+                    r.extend(new_name.as_bytes());
+                    if let Some(value) = new_value {
+                        if value.is_null() {
+                            Self::output_attribute_value(r, b"");
+                        } else {
+                            Self::output_attribute_value(
+                                r,
+                                xml_util::escape_html(&value.to_str()).as_bytes(),
+                            );
                         }
                     } else {
-                        r.push(b' ');
-                        r.extend(new_name.as_bytes());
-                        if let Some(value) = new_value {
-                            if value.is_null() {
-                                Self::output_attribute_value(r, b"");
-                            } else {
-                                Self::output_attribute_value(
-                                    r,
-                                    xml_util::escape_html(&value.to_str()).as_bytes(),
-                                );
-                            }
-                        } else {
-                            Self::output_attribute_value(r, value.as_bytes());
-                        }
+                        Self::output_attribute_value(r, value.as_bytes());
                     }
                 }
             } else {
-                r.extend(attr.as_bytes().to_vec());
+                r.extend(name.as_bytes().to_vec());
             };
         }
     }
@@ -60,32 +60,30 @@ impl Parser {
 
         if let Some(attributes) = attributes {
             for attr in attributes.into_iter() {
-                if let Ok(name) = attr.name().to_str() {
-                    if let Some(value) = attr.value() {
-                        if let Some(script_name) = Self::script_name(name) {
-                            let new_name = unsafe {
-                                std::str::from_utf8_unchecked(
-                                    &name.as_bytes()[..name.len() - (script_name.len() + 1)],
-                                )
-                            };
-                            let v = values_per_script.entry(script_name).or_insert(vec![]);
-                            v.push((new_name, value));
-                        } else {
-                            if let Ok(value) = value.to_str() {
-                                futs_noscript.push(async move {
-                                    (name.into(), {
-                                        let value = xml_util::quot_unescape(value);
-                                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(
-                                            value.as_str(),
-                                        ) {
-                                            json.into()
-                                        } else {
-                                            WildDocValue::String(value)
-                                        }
-                                    })
-                                });
-                            }
-                        }
+                if let Some(value) = attr.value() {
+                    let name = attr.name().as_str();
+                    if let Some(script_name) = Self::script_name(name) {
+                        let new_name = unsafe {
+                            std::str::from_utf8_unchecked(
+                                &name.as_bytes()[..name.len() - (script_name.len() + 1)],
+                            )
+                        };
+                        let v = values_per_script.entry(script_name).or_insert(vec![]);
+                        v.push((new_name, value));
+                    } else {
+                        let value = value.as_str();
+                        futs_noscript.push(async move {
+                            (name.into(), {
+                                let value = xml_util::quot_unescape(value);
+                                if let Ok(json) =
+                                    serde_json::from_str::<serde_json::Value>(value.as_str())
+                                {
+                                    json.into()
+                                } else {
+                                    WildDocValue::String(value)
+                                }
+                            })
+                        });
                     }
                 }
             }
@@ -97,7 +95,7 @@ impl Parser {
                 futs.push(async {
                     let mut r = Vars::new();
                     for (name, value) in v.into_iter() {
-                        if let Ok(v) = script.eval(value.to_str().unwrap(), &self.stack).await {
+                        if let Ok(v) = script.eval(value.as_str(), &self.stack).await {
                             r.insert(name.to_string(), v);
                         }
                     }

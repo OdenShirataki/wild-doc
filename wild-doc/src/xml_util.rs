@@ -1,11 +1,11 @@
-use maybe_xml::{token::Ty, Lexer};
+use maybe_xml::{token::Ty, Reader};
 
 #[inline(always)]
 pub(crate) fn to_end(xml: &[u8], pos: &mut usize) -> (usize, usize) {
     let mut pos_before = *pos;
     let mut deps = 0;
-    let lexer = unsafe { Lexer::from_slice_unchecked(xml) };
-    while let Some(token) = lexer.tokenize(pos) {
+    let reader = Reader::from_str(unsafe { std::str::from_utf8_unchecked(xml) });
+    while let Some(token) = reader.tokenize(pos) {
         match token.ty() {
             Ty::StartTag(_) => {
                 deps += 1;

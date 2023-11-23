@@ -1,5 +1,5 @@
 use hashbrown::HashMap;
-use maybe_xml::{token::Ty, Lexer};
+use maybe_xml::{token::Ty, Reader};
 use semilattice_database_session::search::{Join, JoinCondition};
 use wild_doc_script::Vars;
 
@@ -26,8 +26,8 @@ impl Parser {
 
     async fn join_condition_loop(&mut self, xml: &[u8], pos: &mut usize) -> Vec<JoinCondition> {
         let mut futs = vec![];
-        let lexer = unsafe { Lexer::from_slice_unchecked(xml) };
-        while let Some(token) = lexer.tokenize(pos) {
+        let reader = Reader::from_str(unsafe { std::str::from_utf8_unchecked(xml) });
+        while let Some(token) = reader.tokenize(pos) {
             match token.ty() {
                 Ty::EmptyElementTag(eet) => match eet.name().local().as_bytes() {
                     b"pends" => {

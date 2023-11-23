@@ -12,7 +12,7 @@ use async_recursion::async_recursion;
 use chrono::DateTime;
 use futures::FutureExt;
 use hashbrown::HashMap;
-use maybe_xml::{token::Ty, Lexer};
+use maybe_xml::{token::Ty, Reader};
 use semilattice_database_session::{
     search::{self, Join, Search},
     Activity, CollectionRow, Condition, Uuid,
@@ -129,9 +129,9 @@ impl Parser {
         let mut futs = vec![];
 
         let mut deps = 0;
-        let lexer = unsafe { Lexer::from_slice_unchecked(xml) };
+        let reader = Reader::from_str(unsafe { std::str::from_utf8_unchecked(xml) });
 
-        while let Some(token) = lexer.tokenize(pos) {
+        while let Some(token) = reader.tokenize(pos) {
             match token.ty() {
                 Ty::StartTag(st) => {
                     deps += 1;

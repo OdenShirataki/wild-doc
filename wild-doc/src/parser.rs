@@ -20,7 +20,7 @@ use maybe_xml::{
         prop::{Attributes, TagName},
         Ty,
     },
-    Lexer,
+    Reader,
 };
 use semilattice_database_session::{Session, SessionDatabase};
 use wild_doc_script::{IncludeAdaptor, Stack, Vars, WildDocScript, WildDocValue};
@@ -161,20 +161,18 @@ impl Parser {
 
         let mut deps = 0;
         let mut pos_before = 0;
-        let lexer = unsafe { Lexer::from_slice_unchecked(xml) };
+        let reader = Reader::from_str(unsafe { std::str::from_utf8_unchecked(xml) });
 
-        while let Some(token) = lexer.tokenize(pos) {
+        while let Some(token) = reader.tokenize(pos) {
             match token.ty() {
                 Ty::ProcessingInstruction(pi) => {
                     if let Some(i) = pi.instructions() {
                         let target = pi.target();
-                        if let Some(script) =
-                            self.scripts.get_mut(unsafe { target.as_str_unchecked() })
-                        {
+                        if let Some(script) = self.scripts.get_mut(target.as_str()) {
                             if let Err(e) = script
                                 .evaluate_module(
                                     self.include_stack.last().map_or("", |v| v),
-                                    i.to_str()?,
+                                    i.as_str(),
                                     &self.stack,
                                 )
                                 .await
