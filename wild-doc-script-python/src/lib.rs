@@ -51,8 +51,7 @@ impl WildDocScript for WdPy {
                     "wdvars",
                     PyCapsule::new(py, stack.clone(), Some(CString::new("builtins.wdstack")?))?,
                 )?;
-                py.eval(("(".to_owned() + code + ")").as_str(), None, None)?
-                    .extract()
+                py.eval(code, None, None)?.extract()
             })?
             .to_string()
             .into_bytes(),
