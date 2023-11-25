@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.104.6"
+version = "0.104.7"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -18,6 +18,7 @@ categories = ["database","database-implementations","text-processing","web-progr
 default = [ "js" ]
 js = [ "wild-doc-script-deno" ]
 py = [ "wild-doc-script-python" ]
+image = [ "wild-doc-script-image" ]
 
 [dependencies]
 hashbrown.workspace = true
@@ -47,4 +48,9 @@ optional = true
 [dependencies.wild-doc-script-python]
 version = "0.18"
 path = "../wild-doc-script-python"
+optional = true
+
+[dependencies.wild-doc-script-image]
+version = "0.0"
+path = "../wild-doc-script-image"
 optional = true

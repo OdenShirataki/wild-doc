@@ -1,0 +1,23 @@
+[package]
+name = "wild-doc-script-image"
+version = "0.0.0"
+edition = "2021"
+
+authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
+
+description = "image for wild-doc"
+
+repository = "https://github.com/OdenShirataki/wild-doc"
+
+license = "MIT/Apache-2.0"
+
+keywords = ["database","xml","html","Image"]
+categories = ["database","database-implementations","web-programming","template-engine"]
+
+[dependencies]
+parking_lot.workspace = true
+indexmap.workspace = true
+hashbrown.workspace = true
+
+wild-doc-script = { version = "0.26", path = "../wild-doc-script" }
+image = { version = "0.24", features = ["webp-encoder"] }

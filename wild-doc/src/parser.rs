@@ -33,6 +33,9 @@ use wild_doc_script_deno::Deno;
 #[cfg(feature = "py")]
 use wild_doc_script_python::WdPy;
 
+#[cfg(feature = "image")]
+use wild_doc_script_image::WdImage;
+
 struct SessionState {
     session: Session,
     commit_on_close: bool,
@@ -83,6 +86,16 @@ impl Parser {
         scripts.insert(
             "py".to_owned(),
             Box::new(WdPy::new(
+                Arc::clone(&include_adaptor),
+                cache_dir.to_owned(),
+                &stack,
+            )?),
+        );
+
+        #[cfg(feature = "image")]
+        scripts.insert(
+            "image".to_owned(),
+            Box::new(WdImage::new(
                 Arc::clone(&include_adaptor),
                 cache_dir.to_owned(),
                 &stack,
