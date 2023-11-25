@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-script-deno"
-version = "0.19.0"
+version = "0.19.1"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -19,7 +19,7 @@ parking_lot.workspace = true
 indexmap.workspace = true
 
 ring = "0.16.20"
-deno_runtime = "0.132"
+deno_runtime = "0.133"
 deno_ast = { version = "0.31", features = ["transpiling"] }
 futures = "0.3"
 
