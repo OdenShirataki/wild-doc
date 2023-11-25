@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
-use image::{imageops::FilterType, GenericImageView, ImageBuffer, RgbImage, RgbaImage};
+use image::{imageops::FilterType, GenericImageView, RgbaImage};
 use parking_lot::Mutex;
 use wild_doc_script::{
     anyhow::Result, async_trait, IncludeAdaptor, Stack, WildDocScript, WildDocValue,
