@@ -2,7 +2,10 @@ mod custom_sort;
 
 use std::{borrow::Cow, ops::Deref, sync::Arc};
 
-use semilattice_database_session::{search::Search, Order, OrderKey};
+use semilattice_database_session::{
+    search::{Search, SearchResult},
+    Order, OrderKey,
+};
 use wild_doc_script::{Vars, WildDocValue};
 
 use self::custom_sort::WdCustomSort;
@@ -11,16 +14,17 @@ use super::Parser;
 
 impl Parser {
     #[must_use]
-    pub(super) async fn result(&mut self, vars: Vars, mut search: Search) -> Vars {
+    pub(super) async fn result(&self, vars: Vars, search: Search) -> Vars {
         let mut r = Vars::new();
 
         if let Some(var) = vars.get("var") {
             let var = var.to_str();
             if var != "" {
                 let collection_id = search.collection_id();
+                let result = Arc::new(search.result(self.database.read().deref()).await);
 
                 let orders = make_order(
-                    &search,
+                    &result,
                     &vars
                         .get("sort")
                         .map_or_else(|| Cow::Borrowed(""), |v| v.to_str()),
@@ -30,12 +34,17 @@ impl Parser {
 
                 let mut found_session = false;
                 for i in (0..self.sessions.len()).rev() {
-                    if let Some(state) = self.sessions.get_mut(i) {
+                    if let Some(state) = self.sessions.get(i) {
                         if state.session.temporary_collection(collection_id).is_some() {
                             found_session = true;
                             rows = state
                                 .session
-                                .result_with(&mut search, self.database.read().deref(), &orders)
+                                .result_with(
+                                    &result,
+                                    self.database.read().deref(),
+                                    search.conditions(),
+                                    &orders,
+                                )
                                 .await
                                 .into_iter()
                                 .map(|row| {
@@ -51,23 +60,15 @@ impl Parser {
                 }
 
                 if !found_session {
-                    rows = if let Some(v) = search
-                        .result(self.database.read().deref())
-                        .await
-                        .read()
-                        .deref()
-                    {
-                        v.sort(self.database.read().deref(), &orders)
-                    } else {
-                        vec![]
-                    }
-                    .into_iter()
-                    .map(|row| {
-                        WildDocValue::Object(
-                            [("row".into(), WildDocValue::Number(row.get().into()))].into(),
-                        )
-                    })
-                    .collect();
+                    rows = result
+                        .sort(self.database.read().deref(), &orders)
+                        .into_iter()
+                        .map(|row| {
+                            WildDocValue::Object(
+                                [("row".into(), WildDocValue::Number(row.get().into()))].into(),
+                            )
+                        })
+                        .collect();
                 }
 
                 let len = rows.len();
@@ -93,7 +94,7 @@ impl Parser {
     }
 }
 
-fn make_order(search: &Search, sort: &str) -> Vec<Order> {
+fn make_order(result: &Arc<SearchResult>, sort: &str) -> Vec<Order> {
     let mut orders = vec![];
     if sort.len() > 0 {
         for o in sort.trim().split(",") {
@@ -109,7 +110,7 @@ fn make_order(search: &Search, sort: &str) -> Vec<Order> {
                 field.strip_prefix("join.").map(|v| -> OrderKey {
                     let s: Vec<_> = v.split(".").collect();
                     OrderKey::Custom(Box::new(WdCustomSort {
-                        result: Arc::clone(search.get_result()),
+                        result: Arc::clone(result),
                         join_name: s[0].into(),
                         property: s[1].into(),
                     }))
