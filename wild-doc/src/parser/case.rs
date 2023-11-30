@@ -46,15 +46,10 @@ impl Parser {
                         _ => {}
                     }
                 }
-                Ty::EmptyElementTag(_)
-                | Ty::EndTag(_)
-                | Ty::Characters(_)
-                | Ty::Cdata(_)
-                | Ty::Comment(_)
-                | Ty::Declaration(_) => {}
-                _ => {
+                Ty::EndTag(_) => {
                     break;
                 }
+                _ => {}
             }
         }
         Ok(r.unwrap_or_default())
