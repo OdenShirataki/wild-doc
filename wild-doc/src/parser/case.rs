@@ -32,16 +32,13 @@ impl Parser {
                                     }
                                 }
                             }
-                            if !r.is_some() {
-                                xml_util::to_end(xml, pos);
-                            }
+                            xml_util::to_end(xml, pos);
                         }
                         b"wd:else" => {
-                            if r.is_some() {
-                                xml_util::to_end(xml, pos);
-                            } else {
+                            if r.is_none() {
                                 r = Some(self.parse(xml, pos).await?)
                             }
+                            xml_util::to_end(xml, pos);
                         }
                         _ => {}
                     }

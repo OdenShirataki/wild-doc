@@ -1,4 +1,3 @@
-use hashbrown::HashMap;
 use maybe_xml::token::prop::Attributes;
 use wild_doc_script::{Vars, WildDocValue};
 
@@ -55,62 +54,38 @@ impl Parser {
     pub(super) async fn vars_from_attibutes(&mut self, attributes: Option<Attributes<'_>>) -> Vars {
         let mut r = Vars::new();
 
-        let mut values_per_script = HashMap::new();
-        let mut futs_noscript = vec![];
-
         if let Some(attributes) = attributes {
             for attr in attributes.into_iter() {
                 if let Some(value) = attr.value() {
                     let name = attr.name().as_str();
                     if let Some(script_name) = Self::script_name(name) {
-                        let new_name = unsafe {
-                            std::str::from_utf8_unchecked(
-                                &name.as_bytes()[..name.len() - (script_name.len() + 1)],
-                            )
-                        };
-                        let v = values_per_script.entry(script_name).or_insert(vec![]);
-                        v.push((new_name, value));
+                        if let Some(script) = self.scripts.get_mut(script_name) {
+                            if let Ok(v) = script.eval(value.as_str(), &self.stack).await {
+                                let name = unsafe {
+                                    std::str::from_utf8_unchecked(
+                                        &name.as_bytes()[..name.len() - (script_name.len() + 1)],
+                                    )
+                                };
+                                r.insert(name.to_string(), v);
+                            }
+                        }
                     } else {
                         let value = value.as_str();
-                        futs_noscript.push(async move {
-                            (name.into(), {
-                                let value = xml_util::quot_unescape(value);
-                                if let Ok(json) =
-                                    serde_json::from_str::<serde_json::Value>(value.as_str())
-                                {
-                                    json.into()
-                                } else {
-                                    WildDocValue::String(value)
-                                }
-                            })
+                        r.insert(name.into(), {
+                            let value = xml_util::quot_unescape(value);
+                            if let Ok(json) =
+                                serde_json::from_str::<serde_json::Value>(value.as_str())
+                            {
+                                json.into()
+                            } else {
+                                WildDocValue::String(value)
+                            }
                         });
                     }
                 }
             }
         }
 
-        let mut futs = vec![];
-        for (script_name, script) in self.scripts.iter_mut() {
-            if let Some(v) = values_per_script.get(script_name.as_str()) {
-                futs.push(async {
-                    let mut r = Vars::new();
-                    for (name, value) in v.into_iter() {
-                        if let Ok(v) = script.eval(value.as_str(), &self.stack).await {
-                            r.insert(name.to_string(), v);
-                        }
-                    }
-                    r
-                })
-            }
-        }
-
-        let (f1, f2) = futures::future::join(
-            futures::future::join_all(futs),
-            futures::future::join_all(futs_noscript),
-        )
-        .await;
-        r.extend(f1.into_iter().flatten());
-        r.extend(f2.into_iter());
         r
     }
 
