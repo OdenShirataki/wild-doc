@@ -20,7 +20,6 @@ impl Parser {
         while let Some(token) = reader.tokenize(pos) {
             match token.ty() {
                 Ty::StartTag(st) => {
-                    println!("start {:?}", st);
                     let name = st.name();
                     match name.as_bytes() {
                         b"wd:when" => {
