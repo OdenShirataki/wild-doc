@@ -20,6 +20,7 @@ impl Parser {
         while let Some(token) = reader.tokenize(pos) {
             match token.ty() {
                 Ty::StartTag(st) => {
+                    println!("start {:?}", st);
                     let name = st.name();
                     match name.as_bytes() {
                         b"wd:when" => {
@@ -32,19 +33,24 @@ impl Parser {
                                     }
                                 }
                             }
-                            xml_util::to_end(xml, pos);
+                            if r.is_none() {
+                                xml_util::to_end(xml, pos);
+                            }
                         }
                         b"wd:else" => {
                             if r.is_none() {
                                 r = Some(self.parse(xml, pos).await?)
+                            } else {
+                                xml_util::to_end(xml, pos);
                             }
-                            xml_util::to_end(xml, pos);
                         }
                         _ => {}
                     }
                 }
-                Ty::EndTag(_) => {
-                    break;
+                Ty::EndTag(t) => {
+                    if t.name().as_str() == "wd:case" {
+                        break;
+                    }
                 }
                 _ => {}
             }
