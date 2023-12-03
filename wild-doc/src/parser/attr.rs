@@ -36,6 +36,7 @@ impl Parser {
                     }
                 }
             } else {
+                r.push(b' ');
                 r.extend(name.as_bytes().to_vec());
             };
         }

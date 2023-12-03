@@ -148,7 +148,11 @@ impl Parser {
             }
             b"include" => {
                 let attr = self.vars_from_attibutes(attributes).await;
-                return Ok(Some(self.get_include_content(attr).await?));
+                return Ok(Some(self.get_include_content(attr,true).await?));
+            }
+            b"noparse_include" => {
+                let attr = self.vars_from_attibutes(attributes).await;
+                return Ok(Some(self.get_include_content(attr,false).await?));
             }
             b"delete_collection" => {
                 let attr = self.vars_from_attibutes(attributes).await;
@@ -373,14 +377,18 @@ impl Parser {
                         r.push(b'<');
                         r.extend(name.as_bytes());
                         if let Some(attributes) = st.attributes() {
-                            r.push(b' ');
                             self.output_attributes(&mut r, attributes).await;
                         }
                         r.push(b'>');
-                        r.extend(self.parse(xml, pos).await?);
-                        r.extend(b"</");
-                        r.extend(name.as_bytes());
-                        r.push(b'>');
+                        match name.as_bytes() {
+                            b"input" | b"br" | b"hr" => {}
+                            _ => {
+                                r.extend(self.parse(xml, pos).await?);
+                                r.extend(b"</");
+                                r.extend(name.as_bytes());
+                                r.push(b'>');
+                            }
+                        }
                     }
                 }
                 Ty::EndTag(_) => {
