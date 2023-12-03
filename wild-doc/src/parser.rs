@@ -370,10 +370,10 @@ impl Parser {
                             }
                         }
                     } else {
-                        //println!("{}",name.to_str().unwrap());
                         r.push(b'<');
                         r.extend(name.as_bytes());
                         if let Some(attributes) = st.attributes() {
+                            r.push(b' ');
                             self.output_attributes(&mut r, attributes).await;
                         }
                         r.push(b'>');
