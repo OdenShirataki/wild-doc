@@ -1,7 +1,7 @@
 use std::{borrow::Cow, path::Path};
 
 use anyhow::Result;
-use wild_doc_script::{Vars, WildDocValue};
+use wild_doc_script::Vars;
 
 use super::Parser;
 
