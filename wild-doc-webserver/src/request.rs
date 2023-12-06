@@ -90,9 +90,15 @@ pub(super) async fn request(
             let host = host.to_string();
             let uri_path = req.uri().path().to_owned();
             if let Some(static_file) = get_static_filename(&document_dir, &host, &uri_path) {
+                if let Some(mime) = mime_infer::from_path(&static_file).first() {
+                    let mut header_map = HeaderMap::new();
+                    header_map.insert("Content-Type", mime.essence_str().parse().unwrap());
+                    *response.headers_mut() = header_map;
+                }
                 let mut f = File::open(static_file).unwrap();
                 let mut buf = Vec::new();
                 f.read_to_end(&mut buf).unwrap();
+
                 *response.body_mut() = Body::from(buf);
             } else {
                 let mut wdc = WildDocClient::new(&wd_host, &wd_port, &document_dir, &host);

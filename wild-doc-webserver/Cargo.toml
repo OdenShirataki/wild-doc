@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-webserver"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -9,21 +9,21 @@ description = "This is still in development."
 
 repository = "https://github.com/OdenShirataki/wild-doc"
 
-keywords = ["database","javascript","v8","xml","html"]
-categories = ["database-implementations","web-programming","template-engine"]
+keywords = ["database", "javascript", "v8", "xml", "html"]
+categories = ["database-implementations", "web-programming", "template-engine"]
 
 license = "MIT/Apache-2.0"
 
 [dependencies]
-hyper = {version="0.14",features=["server"]}
+hyper = { version = "0.14", features = ["server"] }
 tokio = { version = "1.28", features = ["rt-multi-thread", "macros"] }
 rustls = "0.21"
-rustls-pemfile="1.0"
+rustls-pemfile = "1.0"
 hyper-rustls = "0.24"
 tokio-rustls = "0.24"
-futures = "0.3"
-futures-util = "0.3"
-toml = "0.7"
+futures = "0.3.29"
+futures-util = "0.3.29"
+toml = "0.8.8"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
@@ -33,4 +33,5 @@ multer = "2"
 serde-querystring = "0.2"
 urlencoding = "2"
 base64 = "0.21"
-wild-doc-client-lib={version="0",path="../wild-doc-client-lib"}
+mime-infer = "3.0.0"
+wild-doc-client-lib = { version = "0", path = "../wild-doc-client-lib" }
