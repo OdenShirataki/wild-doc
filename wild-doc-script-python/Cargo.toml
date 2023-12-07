@@ -11,14 +11,20 @@ repository = "https://github.com/OdenShirataki/wild-doc"
 
 license = "MIT/Apache-2.0"
 
-keywords = ["database","xml","html","Python"]
-categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
+keywords = ["database", "xml", "html", "Python"]
+categories = [
+    "database",
+    "database-implementations",
+    "text-processing",
+    "web-programming",
+    "template-engine",
+]
 
 [dependencies]
 parking_lot.workspace = true
 indexmap.workspace = true
 
-wild-doc-script = { version = "0.26", path = "../wild-doc-script" }
+wild-doc-script.workspace = true
 
 [dependencies.pyo3]
 version = "0.20.0"

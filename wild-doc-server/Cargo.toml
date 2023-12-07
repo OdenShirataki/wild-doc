@@ -9,8 +9,12 @@ description = "wild-doc server"
 
 repository = "https://github.com/OdenShirataki/wild-doc"
 
-keywords = ["database","javascript","v8","xml","html"]
-categories = ["database-implementations","network-programming","template-engine"]
+keywords = ["database", "javascript", "v8", "xml", "html"]
+categories = [
+    "database-implementations",
+    "network-programming",
+    "template-engine",
+]
 
 license = "MIT/Apache-2.0"
 
@@ -20,5 +24,10 @@ anyhow.workspace = true
 toml.workspace = true
 serde.workspace = true
 
-wild-doc = { version = "0.104" , path = "../wild-doc" ,features=[ "js","py","image" ] }
-wild-doc-script = { version = "0.26", path = "../wild-doc-script" }
+wild-doc-script.workspace = true
+
+wild-doc = { version = "0.104", path = "../wild-doc", features = [
+    "js",
+    "py",
+    "image",
+] }

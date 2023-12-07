@@ -11,14 +11,20 @@ repository = "https://github.com/OdenShirataki/wild-doc"
 
 license = "MIT/Apache-2.0"
 
-keywords = ["database","javascript","TypeScript","xml","html"]
-categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
+keywords = ["database", "javascript", "TypeScript", "xml", "html"]
+categories = [
+    "database",
+    "database-implementations",
+    "text-processing",
+    "web-programming",
+    "template-engine",
+]
 
 [features]
-default = [ "js" ]
-js = [ "wild-doc-script-deno" ]
-py = [ "wild-doc-script-python" ]
-image = [ "wild-doc-script-image" ]
+default = ["js"]
+js = ["wild-doc-script-deno"]
+py = ["wild-doc-script-python"]
+image = ["wild-doc-script-image"]
 
 [dependencies]
 hashbrown.workspace = true
@@ -28,17 +34,18 @@ serde_json.workspace = true
 toml.workspace = true
 indexmap.workspace = true
 anyhow.workspace = true
+futures.workspace = true
 
-chrono = "0.4"
-base64 = "0.21"
-maybe_xml = "0.10"
-futures = "0.3"
+wild-doc-script.workspace = true
+
+chrono = "0.4.31"
+base64 = "0.21.5"
+maybe_xml = "0.10.1"
 async-recursion = "1.0"
 tokio = "1.33"
 
-semilattice-database-session = { version = "0.35", path = "../../semilattice-database/semilattice-database-session" }
+semilattice-database-session = "0.35"
 
-wild-doc-script = { version = "0.26", path = "../wild-doc-script" }
 
 [dependencies.wild-doc-script-deno]
 version = "0.19"
