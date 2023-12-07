@@ -8,15 +8,18 @@ members = [
     "wild-doc-script",
     "wild-doc-script-deno",
     "wild-doc-script-python",
-    "wild-doc-script-image"
+    "wild-doc-script-image",
 ]
 
 [workspace.dependencies]
-hashbrown = "0.14.0"
-parking_lot = "0.12"
-anyhow = "1.0"
-serde = { version = "1.0", features = ["derive" , "rc"] }
-serde_json = "1.0"
-toml = "0.8"
-indexmap = { version = "2.1", features = ["serde"] }
-async-trait = "0.1"
+hashbrown = "0.14.3"
+parking_lot = "0.12.1"
+anyhow = "1.0.75"
+serde = { version = "1.0.193", features = ["derive", "rc"] }
+serde_json = "1.0.108"
+toml = "0.8.8"
+indexmap = { version = "2.1.0", features = ["serde"] }
+async-trait = "0.1.74"
+futures = "0.3.29"
+
+wild-doc-script = "0"
