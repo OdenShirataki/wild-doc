@@ -4,7 +4,6 @@ mod result;
 use std::{
     num::{NonZeroI32, NonZeroI64},
     str::FromStr,
-    sync::Arc,
 };
 
 use anyhow::Result;
@@ -291,22 +290,16 @@ impl Parser {
                         "match" => Some(search::Field::Match(value.to_string().into())),
                         "min" => Some(search::Field::Min(value.to_string().into())),
                         "max" => Some(search::Field::Max(value.to_string().into())),
-                        "partial" => Some(search::Field::Partial(Arc::new(value.into()))),
-                        "forward" => Some(search::Field::Forward(Arc::new(value.into()))),
-                        "backward" => Some(search::Field::Backward(Arc::new(value.into()))),
+                        "partial" => Some(search::Field::Partial(value.into())),
+                        "forward" => Some(search::Field::Forward(value.into())),
+                        "backward" => Some(search::Field::Backward(value.into())),
                         "range" => {
                             let s: Vec<_> = value.split("..").collect();
                             (s.len() == 2).then(|| search::Field::Range(s[0].into(), s[1].into()))
                         }
-                        "value_forward" => {
-                            Some(search::Field::ValueForward(Arc::new(value.into())))
-                        }
-                        "value_backward" => {
-                            Some(search::Field::ValueBackward(Arc::new(value.into())))
-                        }
-                        "value_partial" => {
-                            Some(search::Field::ValuePartial(Arc::new(value.into())))
-                        }
+                        "value_forward" => Some(search::Field::ValueForward(value.into())),
+                        "value_backward" => Some(search::Field::ValueBackward(value.into())),
+                        "value_partial" => Some(search::Field::ValuePartial(value.into())),
                         _ => None,
                     }
                     .map(|method| Condition::Field(name.into(), method))
