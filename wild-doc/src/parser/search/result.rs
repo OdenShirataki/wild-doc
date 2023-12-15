@@ -47,12 +47,7 @@ impl Parser {
                                 )
                                 .await
                                 .into_iter()
-                                .map(|row| {
-                                    WildDocValue::Object(
-                                        [("row".into(), WildDocValue::Number(row.get().into()))]
-                                            .into(),
-                                    )
-                                })
+                                .map(|row| WildDocValue::Number(row.get().into()))
                                 .collect();
                             break;
                         }
@@ -63,15 +58,9 @@ impl Parser {
                     rows = result
                         .sort(self.database.read().deref(), &orders)
                         .into_iter()
-                        .map(|row| {
-                            WildDocValue::Object(
-                                [("row".into(), WildDocValue::Number(row.get().into()))].into(),
-                            )
-                        })
+                        .map(|row| WildDocValue::Number(row.get().into()))
                         .collect();
                 }
-
-                let len = rows.len();
 
                 r.insert(
                     var.into(),
@@ -82,7 +71,6 @@ impl Parser {
                                 WildDocValue::Number(collection_id.get().into()),
                             ),
                             ("rows".into(), WildDocValue::Array(rows)),
-                            ("len".into(), WildDocValue::Number(len.into())),
                         ]
                         .into(),
                     ),
