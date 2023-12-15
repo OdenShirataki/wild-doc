@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-script"
-version = "0.26.0"
+version = "0.27.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -11,8 +11,14 @@ repository = "https://github.com/OdenShirataki/wild-doc"
 
 license = "MIT/Apache-2.0"
 
-keywords = ["database","xml","html"]
-categories = ["database","database-implementations","text-processing","web-programming","template-engine"]
+keywords = ["database", "xml", "html"]
+categories = [
+    "database",
+    "database-implementations",
+    "text-processing",
+    "web-programming",
+    "template-engine",
+]
 
 [dependencies]
 hashbrown.workspace = true
@@ -22,3 +28,5 @@ serde.workspace = true
 indexmap.workspace = true
 parking_lot.workspace = true
 async-trait.workspace = true
+
+semilattice-database-session.workspace = true
