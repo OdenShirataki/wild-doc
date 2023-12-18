@@ -6,6 +6,7 @@ mod r#loop;
 mod record;
 mod search;
 mod session;
+mod sort;
 mod update;
 
 use std::{path::Path, sync::Arc};
@@ -148,11 +149,11 @@ impl Parser {
             }
             b"include" => {
                 let attr = self.vars_from_attibutes(attributes).await;
-                return Ok(Some(self.get_include_content(attr,true).await?));
+                return Ok(Some(self.get_include_content(attr, true).await?));
             }
             b"noparse_include" => {
                 let attr = self.vars_from_attibutes(attributes).await;
-                return Ok(Some(self.get_include_content(attr,false).await?));
+                return Ok(Some(self.get_include_content(attr, false).await?));
             }
             b"delete_collection" => {
                 let attr = self.vars_from_attibutes(attributes).await;
@@ -304,6 +305,10 @@ impl Parser {
                                 b"search" => {
                                     let attr = self.vars_from_attibutes(st.attributes()).await;
                                     r.extend(self.search(xml, pos, attr).await?);
+                                }
+                                b"sort" => {
+                                    let attr = self.vars_from_attibutes(st.attributes()).await;
+                                    r.extend(self.sort(xml, pos, attr).await?);
                                 }
                                 b"record" => {
                                     let attr = self.vars_from_attibutes(st.attributes()).await;

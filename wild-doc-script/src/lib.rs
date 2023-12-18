@@ -9,7 +9,7 @@ pub use async_trait::async_trait;
 pub use include::IncludeAdaptor;
 pub use serde_json;
 pub use stack::Stack;
-pub use value::{SearchResult, Vars, WildDocValue};
+pub use value::{SearchResult, SessionSearchResult, Vars, WildDocValue};
 
 use anyhow::Result;
 use parking_lot::Mutex;

@@ -46,6 +46,44 @@ impl WildDocScript for Var {
                                     break;
                                 }
                             }
+                            WildDocValue::SearchResult(result) => {
+                                if next == "rows" {
+                                    if let Some(next) = splited.next() {
+                                        if next == "len" {
+                                            return Ok(WildDocValue::Number(
+                                                result.rows().len().into(),
+                                            ));
+                                        }
+                                    } else {
+                                        return Ok(WildDocValue::Array(
+                                            result
+                                                .rows()
+                                                .into_iter()
+                                                .map(|v| WildDocValue::Number(v.get().into()))
+                                                .collect(),
+                                        ));
+                                    }
+                                }
+                            }
+                            WildDocValue::SessionSearchResult(result) => {
+                                if next == "rows" {
+                                    if let Some(next) = splited.next() {
+                                        if next == "len" {
+                                            return Ok(WildDocValue::Number(
+                                                result.rows().len().into(),
+                                            ));
+                                        }
+                                    } else {
+                                        return Ok(WildDocValue::Array(
+                                            result
+                                                .rows()
+                                                .into_iter()
+                                                .map(|v| WildDocValue::Number(v.get().into()))
+                                                .collect(),
+                                        ));
+                                    }
+                                }
+                            }
                             _ => break,
                         }
                     } else {

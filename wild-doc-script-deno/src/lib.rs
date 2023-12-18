@@ -2,6 +2,7 @@ pub mod module_loader;
 
 use std::{
     ffi::c_void,
+    num::{NonZeroI64, NonZeroU32},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -15,13 +16,173 @@ use deno_runtime::{
 
 use parking_lot::Mutex;
 use wild_doc_script::{
-    async_trait, serde_json, IncludeAdaptor, Stack, Vars, WildDocScript, WildDocValue,
+    async_trait, serde_json, IncludeAdaptor, SearchResult, SessionSearchResult, Stack, Vars,
+    WildDocScript, WildDocValue,
 };
 
 use module_loader::WdModuleLoader;
 
 pub struct Deno {
     worker: MainWorker,
+}
+
+fn session_result2v8obj<'s>(
+    result: &SessionSearchResult,
+    scope: &'s mut HandleScope,
+) -> v8::Local<'s, v8::Object> {
+    let r: v8::Local<'_, v8::Object> = v8::Object::new(scope);
+
+    if let (Some(v8str_inner), Some(v8str_rows), Some(v8str_join)) = (
+        v8::String::new(scope, "inner"),
+        v8::String::new(scope, "rows"),
+        v8::String::new(scope, "join"),
+    ) {
+        let pkey = v8::Private::for_api(scope, v8str_inner.into());
+        let v8ext_inner =
+            v8::External::new(scope, result as *const SessionSearchResult as *mut c_void);
+        r.set_private(scope, pkey.into(), v8ext_inner.into());
+
+        r.set_accessor(
+            scope,
+            v8str_rows.into(),
+            |scope: &mut v8::HandleScope,
+             _: v8::Local<v8::Name>,
+             args: v8::PropertyCallbackArguments,
+             mut rv: v8::ReturnValue| {
+                if let Some(key_inner) = v8::String::new(scope, "inner") {
+                    let this = args.this();
+                    let pkey = v8::Private::for_api(scope, key_inner.into());
+                    if let Some(v8v) = this.get_private(scope, pkey) {
+                        let inner = unsafe {
+                            &*(v8::Local::<v8::External>::cast(v8v).value()
+                                as *const SessionSearchResult)
+                        };
+                        let rows = inner.rows();
+                        let v8rows = v8::Array::new(scope, rows.len() as i32);
+                        let mut index = 0;
+                        for i in rows {
+                            let v8num = v8::BigInt::new_from_i64(scope, i.get());
+                            v8rows.set_index(scope, index, v8num.into());
+                            index += 1;
+                        }
+                        rv.set(v8rows.into());
+                    }
+                }
+            },
+        );
+        if let Some(v8func_join) = v8::Function::new(
+            scope,
+            |scope: &mut v8::HandleScope,
+             args: v8::FunctionCallbackArguments,
+             mut rv: v8::ReturnValue| {
+                if let (Some(v8str_inner), Some(row)) = (
+                    v8::String::new(scope, "inner"),
+                    args.get(1).to_uint32(scope),
+                ) {
+                    let row = row.value();
+                    let this = args.this();
+                    let pkey = v8::Private::for_api(scope, v8str_inner.into());
+                    if let Some(v8v) = this.get_private(scope, pkey) {
+                        let result = unsafe {
+                            &*(v8::Local::<v8::External>::cast(v8v).value()
+                                as *const SessionSearchResult)
+                        };
+                        let key = args.get(0).to_rust_string_lossy(scope);
+                        if let Some(join) = result.join().get(&key) {
+                            if let Some(row) = NonZeroI64::new(row.into()) {
+                                if let Some(result) = join.get(&row) {
+                                    let obj: v8::Local<'_, v8::Object> =
+                                        session_result2v8obj(result, scope);
+                                    rv.set(obj.into());
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        ) {
+            r.set(scope, v8str_join.into(), v8func_join.into());
+        }
+    }
+    r
+}
+
+fn result2v8obj<'s>(
+    result: &SearchResult,
+    scope: &'s mut HandleScope,
+) -> v8::Local<'s, v8::Object> {
+    let r: v8::Local<'_, v8::Object> = v8::Object::new(scope);
+
+    if let (Some(v8str_inner), Some(v8str_rows), Some(v8str_join)) = (
+        v8::String::new(scope, "inner"),
+        v8::String::new(scope, "rows"),
+        v8::String::new(scope, "join"),
+    ) {
+        let pkey = v8::Private::for_api(scope, v8str_inner.into());
+        let v8ext_inner = v8::External::new(scope, result as *const SearchResult as *mut c_void);
+        r.set_private(scope, pkey.into(), v8ext_inner.into());
+
+        r.set_accessor(
+            scope,
+            v8str_rows.into(),
+            |scope: &mut v8::HandleScope,
+             _: v8::Local<v8::Name>,
+             args: v8::PropertyCallbackArguments,
+             mut rv: v8::ReturnValue| {
+                if let Some(key_inner) = v8::String::new(scope, "inner") {
+                    let this = args.this();
+                    let pkey = v8::Private::for_api(scope, key_inner.into());
+                    if let Some(v8v) = this.get_private(scope, pkey) {
+                        let inner = unsafe {
+                            &*(v8::Local::<v8::External>::cast(v8v).value() as *const SearchResult)
+                        };
+                        let rows = inner.rows();
+                        let v8rows = v8::Array::new(scope, rows.len() as i32);
+                        let mut index = 0;
+                        for i in rows {
+                            let v8num = v8::Integer::new_from_unsigned(scope, i.get());
+                            v8rows.set_index(scope, index, v8num.into());
+                            index += 1;
+                        }
+                        rv.set(v8rows.into());
+                    }
+                }
+            },
+        );
+        if let Some(v8func_join) = v8::Function::new(
+            scope,
+            |scope: &mut v8::HandleScope,
+             args: v8::FunctionCallbackArguments,
+             mut rv: v8::ReturnValue| {
+                if let (Some(v8str_inner), Some(row)) = (
+                    v8::String::new(scope, "inner"),
+                    args.get(1).to_uint32(scope),
+                ) {
+                    let row = row.value();
+                    let this = args.this();
+                    let pkey = v8::Private::for_api(scope, v8str_inner.into());
+                    if let Some(v8v) = this.get_private(scope, pkey) {
+                        let result = unsafe {
+                            &*(v8::Local::<v8::External>::cast(v8v).value() as *const SearchResult)
+                        };
+                        let key = args.get(0).to_rust_string_lossy(scope);
+                        if let Some(join) = result.join().get(&key) {
+                            if let Some(row) = NonZeroU32::new(row) {
+                                if let Some(result) = join.get(&row) {
+                                    let obj: v8::Local<'_, v8::Object> =
+                                        result2v8obj(result, scope);
+                                    rv.set(obj.into());
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        ) {
+            r.set(scope, v8str_join.into(), v8func_join.into());
+        }
+    }
+    r
 }
 
 fn wdmap2v8obj<'s>(wdv: &Vars, scope: &'s mut HandleScope) -> v8::Local<'s, v8::Object> {
@@ -77,6 +238,12 @@ fn wd2v8<'s>(wdv: &WildDocValue, scope: &'s mut HandleScope) -> Option<v8::Local
         }
         WildDocValue::Object(map) => {
             return Some(wdmap2v8obj(map, scope).into());
+        }
+        WildDocValue::SearchResult(result) => {
+            return Some(result2v8obj(result, scope).into());
+        }
+        WildDocValue::SessionSearchResult(result) => {
+            return Some(session_result2v8obj(result, scope).into());
         }
         _ => {
             if let Ok(r) = serde_v8::to_v8(scope, wdv) {

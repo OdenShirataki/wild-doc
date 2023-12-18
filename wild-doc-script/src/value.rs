@@ -1,14 +1,8 @@
-use std::borrow::Cow;
+pub use semilattice_database_session::{SearchResult, SessionSearchResult};
 
 use indexmap::IndexMap;
-use semilattice_database_session::search::Search;
 use serde::Serialize;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct SearchResult {
-    search: Search,
-    result: semilattice_database_session::SearchResult,
-}
+use std::{borrow::Cow, sync::Arc};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WildDocValue {
@@ -19,7 +13,8 @@ pub enum WildDocValue {
     Array(Vec<WildDocValue>),
     Object(Vars),
     Binary(Vec<u8>),
-    SearchResult(SearchResult),
+    SearchResult(Arc<SearchResult>),
+    SessionSearchResult(Arc<SessionSearchResult>),
 }
 pub type Vars = IndexMap<String, WildDocValue>;
 
@@ -37,6 +32,7 @@ impl Serialize for WildDocValue {
             Self::Object(v) => v.serialize(serializer),
             Self::Binary(v) => v.serialize(serializer),
             Self::SearchResult(_v) => "SearchResult".serialize(serializer), //v.deref().serialize(serializer),
+            Self::SessionSearchResult(_v) => "SessionSearchResult".serialize(serializer),
         }
     }
 }
@@ -102,6 +98,9 @@ impl std::fmt::Display for WildDocValue {
                 write!(f, "{:?}", v)
             }
             Self::SearchResult(v) => {
+                write!(f, "{:?}", v)
+            }
+            Self::SessionSearchResult(v) => {
                 write!(f, "{:?}", v)
             }
         }

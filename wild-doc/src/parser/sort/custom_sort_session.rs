@@ -1,16 +1,15 @@
-use std::{cmp::Ordering, num::NonZeroU32, sync::Arc};
+use std::{cmp::Ordering, num::NonZeroI64, sync::Arc};
 
-use semilattice_database_session::{search::SearchResult, CustomSort};
+use semilattice_database_session::{SessionCustomOrder, SessionSearchResult};
 
-pub struct WdCustomSort {
-    pub(super) result: Arc<SearchResult>,
+pub struct WdCustomSortSession {
+    pub(super) result: Arc<SessionSearchResult>,
     pub(super) join_name: String,
     pub(super) property: String,
 }
 
-impl CustomSort for WdCustomSort {
-    #[inline(always)]
-    fn compare(&self, a: NonZeroU32, b: NonZeroU32) -> std::cmp::Ordering {
+impl SessionCustomOrder for WdCustomSortSession {
+    fn compare(&self, a: NonZeroI64, b: NonZeroI64) -> std::cmp::Ordering {
         if let Some(join) = self.result.as_ref().join().get(&self.join_name) {
             match self.property.as_str() {
                 "len" => {
@@ -24,8 +23,7 @@ impl CustomSort for WdCustomSort {
         Ordering::Equal
     }
 
-    #[inline(always)]
-    fn asc(&self) -> Vec<NonZeroU32> {
+    fn asc(&self) -> Vec<NonZeroI64> {
         if let Some(join) = self.result.join().get(&self.join_name) {
             match self.property.as_str() {
                 "len" => {
@@ -45,8 +43,7 @@ impl CustomSort for WdCustomSort {
         vec![]
     }
 
-    #[inline(always)]
-    fn desc(&self) -> Vec<NonZeroU32> {
+    fn desc(&self) -> Vec<NonZeroI64> {
         if let Some(join) = self.result.join().get(&self.join_name) {
             match self.property.as_str() {
                 "len" => {

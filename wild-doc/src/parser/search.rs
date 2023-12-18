@@ -1,9 +1,10 @@
 mod join;
-mod result;
 
 use std::{
     num::{NonZeroI32, NonZeroI64},
+    ops::Deref,
     str::FromStr,
+    sync::Arc,
 };
 
 use anyhow::Result;
@@ -13,10 +14,10 @@ use futures::FutureExt;
 use hashbrown::HashMap;
 use maybe_xml::{token::Ty, Reader};
 use semilattice_database_session::{
-    search::{self, Join, Search},
+    search::{self, Search},
     Activity, CollectionRow, Condition, Uuid,
 };
-use wild_doc_script::Vars;
+use wild_doc_script::{Vars, WildDocValue};
 
 use crate::xml_util;
 
@@ -54,10 +55,30 @@ impl Parser {
             let (condition, join, result_info) = self.make_conditions(xml, pos, &attr).await;
             if let Some(result_info) = result_info {
                 let mut new_vars = Vars::new();
-                new_vars.extend(
-                    self.result(result_info.0, Search::new(collection_id, condition, join))
-                        .await,
-                );
+                if let Some(var) = result_info.0.get("var") {
+                    let search = Search::new(collection_id, condition, join);
+                    let var = var.to_str();
+                    if var != "" {
+                        let result = search.result(self.database.read().deref()).await;
+                        let mut found_session = false;
+                        for i in (0..self.sessions.len()).rev() {
+                            if let Some(state) = self.sessions.get(i) {
+                                if state.session.temporary_collection(collection_id).is_some() {
+                                    found_session = true;
+                                    let session_result = state.session.result_with(&result).await;
+                                    new_vars.insert(
+                                        var.to_string(),
+                                        WildDocValue::SessionSearchResult(Arc::new(session_result)),
+                                    );
+                                }
+                            }
+                        }
+                        if !found_session {
+                            new_vars
+                                .insert(var.into(), WildDocValue::SearchResult(Arc::new(result)));
+                        }
+                    }
+                }
                 let mut pos = 0;
                 self.stack.push(new_vars);
                 let r = self.parse(result_info.1, &mut pos).await;
@@ -77,7 +98,7 @@ impl Parser {
         attr: &Vars,
     ) -> (
         Vec<Condition>,
-        HashMap<String, Join>,
+        HashMap<String, Search>,
         Option<(Vars, &'a [u8])>,
     ) {
         let (mut conditions, join, result_info) = self.condition_loop(xml, pos).await;
@@ -118,7 +139,7 @@ impl Parser {
         pos: &mut usize,
     ) -> (
         Vec<Condition>,
-        HashMap<String, Join>,
+        HashMap<String, Search>,
         Option<(Vars, &'a [u8])>,
     ) {
         let mut join = HashMap::new();

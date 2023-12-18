@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.104.14"
+version = "0.105.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -47,7 +47,7 @@ async-recursion = "1.0"
 tokio = "1.33"
 
 [dependencies.wild-doc-script-deno]
-version = "0.19"
+version = "0.20"
 path = "../wild-doc-script-deno"
 optional = true
 
