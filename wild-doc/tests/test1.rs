@@ -36,13 +36,13 @@ fn test1() {
         collection="login"
     ><result
         var="login"
-    ><wd:for var="row" in:var="login.rows"><wd:record var="row" collection="login" row:var="row.row">
+    ><wd:for var="row" in:var="login.rows"><wd:record var="row" collection="login" row:var="row">
         <wd:print value:var="row.row" /> : <wd:print value:var="row.uuid" /> : <wd:print value:var="row.field.test" /> : <wd:print value:var="row.depends.account" />
         <wd:search
             collection="account"
         ><row in:var="row.depends.account.row"><result
             var="account"
-        ><wd:for var="a" in:var="account.rows"><wd:record var="a" collection="account" row:var="a.row">
+        ><wd:for var="a" in:var="account.rows"><wd:record var="a" collection="account" row:var="a">
             dep:<wd:print value:var="a.field.id" />@<wd:print value:var="a.field.password" />
         </wd:record></wd:for></result></wd:search>
     </wd:record></wd:for></result></wd:search>
@@ -112,7 +112,7 @@ fn test1() {
             find <wd:print value:var="p.len" /> persons.
         </div>
         <ul>
-            <wd:for var="person" in:var="p.rows"><wd:record var="person" collection="person" row:var="person.row"><li>
+            <wd:for var="person" in:var="p.rows"><wd:record var="person" collection="person" row:var="person"><li>
                 <wd:print value:var="person.row" /> : <wd:print value:var="person.activity" /> : <wd:print value:var="person.uuid" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
             </li></wd:record></wd:for>
         </ul>
@@ -132,7 +132,7 @@ fn test1() {
                 <wd:for
                     var="person"
                     in:var="p.rows"
-                ><wd:record var="person" collection="person" row:var="person.row"><li>
+                ><wd:record var="person" collection="person" row:var="person"><li>
                     <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
                 </li></wd:record></wd:for>
             </ul>
@@ -166,7 +166,7 @@ fn test1() {
                 find <wd:print value:var="p.len" /> persons from the <wd:print value:js="wd.general.uk" />.
             </div>
             <ul>
-                <wd:for var="person" in:var="p.rows"><wd:record var="person" collection="person" row:var="person.row"><li>
+                <wd:for var="person" in:var="p.rows"><wd:record var="person" collection="person" row:var="person"><li>
                     <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
                 </li></wd:record></wd:for>
             </ul>
@@ -186,7 +186,7 @@ fn test1() {
             ><result var="p">
                 <wd:for
                     var="person" in:var="p.rows"
-                ><wd:record var="person" collection="person" row:var="person.row">
+                ><wd:record var="person" collection="person" row:var="person">
                     <collection name="person" row:var="person.row">
                         <field name="name">Renamed <wd:print value:var="person.field.name" /></field>
                         <field name="country"><wd:print value:var="person.field.country" /></field>
@@ -204,7 +204,7 @@ fn test1() {
             <ul>
                 <wd:for
                     var="person" in:var="p.rows"
-                ><wd:record var="person" collection="person" row:var="person.row"><li>
+                ><wd:record var="person" collection="person" row:var="person"><li>
                     <wd:print value:var="person.row" /> : <wd:print value:var="person.field.name" /> : <wd:print value:var="person.field.country" />
                 </li></wd:record></wd:for>
             </ul>
