@@ -1,5 +1,3 @@
-mod join;
-
 use std::{
     num::{NonZeroI32, NonZeroI64},
     ops::Deref,
@@ -14,7 +12,7 @@ use futures::FutureExt;
 use hashbrown::HashMap;
 use maybe_xml::{token::Ty, Reader};
 use semilattice_database_session::{
-    search::{self, Search},
+    search::{self, Search, SearchJoin},
     Activity, CollectionRow, Condition, Uuid,
 };
 use wild_doc_script::{Vars, WildDocValue};
@@ -98,7 +96,7 @@ impl Parser {
         attr: &Vars,
     ) -> (
         Vec<Condition>,
-        HashMap<String, Search>,
+        HashMap<String, SearchJoin>,
         Option<(Vars, &'a [u8])>,
     ) {
         let (mut conditions, join, result_info) = self.condition_loop(xml, pos).await;
@@ -139,7 +137,7 @@ impl Parser {
         pos: &mut usize,
     ) -> (
         Vec<Condition>,
-        HashMap<String, Search>,
+        HashMap<String, SearchJoin>,
         Option<(Vars, &'a [u8])>,
     ) {
         let mut join = HashMap::new();
@@ -328,6 +326,29 @@ impl Parser {
                 .and_then(|v| v)
         } else {
             None
+        }
+    }
+
+    async fn join(
+        &mut self,
+        xml: &[u8],
+        pos: &mut usize,
+        attr: &Vars,
+        search_map: &mut HashMap<String, SearchJoin>,
+    ) {
+        if let Some(name) = attr.get("name") {
+            let name = name.to_str();
+            if name != "" {
+                if let Some(collection_id) = self.collection_id(attr) {
+                    let relation_key = attr.get("relation").map(|v| v.to_string());
+
+                    let (conditions, join, _result_info) = self.condition_loop(xml, pos).await;
+                    search_map.insert(
+                        name.into(),
+                        SearchJoin::new(collection_id, conditions, relation_key, join),
+                    );
+                }
+            }
         }
     }
 }
