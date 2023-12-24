@@ -90,7 +90,6 @@ impl Parser {
         r
     }
 
-    #[inline(always)]
     fn output_attribute_value(r: &mut Vec<u8>, val: &[u8]) {
         r.extend(b"=\"");
         r.extend(val);

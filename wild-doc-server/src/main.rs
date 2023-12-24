@@ -4,6 +4,7 @@ use std::{
     collections::HashMap,
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
+    ops::{Deref, DerefMut},
     sync::{Arc, Mutex},
     thread,
 };
@@ -28,6 +29,25 @@ struct ConfigServer {
     delete_dir_on_start: Option<String>,
     collection: Option<HashMap<String, DataOption>>,
     relation_reserve_unit: Option<u32>,
+}
+
+struct WildDocWrapper {
+    inner: WildDoc,
+}
+unsafe impl Sync for WildDocWrapper {}
+unsafe impl Send for WildDocWrapper {}
+
+impl Deref for WildDocWrapper {
+    type Target = WildDoc;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl DerefMut for WildDocWrapper {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
 }
 
 fn main() {
@@ -69,12 +89,16 @@ fn main() {
                                                     if !std::path::Path::new(dir).exists() {
                                                         std::fs::create_dir_all(dir).unwrap();
                                                     }
-                                                    Arc::new(Mutex::new(WildDoc::new(
-                                                        dir,
-                                                        Box::new(IncludeEmpty::new()),
-                                                        config.collection.clone(),
-                                                        config.relation_reserve_unit.unwrap_or(1),
-                                                    )))
+                                                    Arc::new(Mutex::new(WildDocWrapper {
+                                                        inner: WildDoc::new(
+                                                            dir,
+                                                            Box::new(IncludeEmpty::new()),
+                                                            config.collection.clone(),
+                                                            config
+                                                                .relation_reserve_unit
+                                                                .unwrap_or(1),
+                                                        ),
+                                                    }))
                                                 });
                                             let wd = Arc::clone(&wd);
                                             thread::spawn(move || {
@@ -96,7 +120,7 @@ fn main() {
     }
 }
 
-fn handler(mut stream: TcpStream, wd: Arc<Mutex<WildDoc>>) -> Result<()> {
+fn handler(mut stream: TcpStream, wd: Arc<Mutex<WildDocWrapper>>) -> Result<()> {
     stream.write_all(&[0])?;
 
     let mut writer = stream.try_clone().unwrap();

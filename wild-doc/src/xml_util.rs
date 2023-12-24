@@ -1,6 +1,5 @@
 use maybe_xml::{token::Ty, Reader};
 
-#[inline(always)]
 pub(crate) fn to_end(xml: &[u8], pos: &mut usize) -> (usize, usize) {
     let mut pos_before = *pos;
     let mut deps = 0;
@@ -28,12 +27,10 @@ pub(crate) fn to_end(xml: &[u8], pos: &mut usize) -> (usize, usize) {
     (0, 0)
 }
 
-#[inline(always)]
 pub(crate) fn quot_unescape(value: &str) -> String {
     value.replace("&#039;", "'").replace("&quot;", "\"")
 }
 
-#[inline(always)]
 pub(crate) fn escape_html(s: &str) -> String {
     s.replace("&", "&amp;")
         .replace("<", "&lt;")
