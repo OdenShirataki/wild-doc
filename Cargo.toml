@@ -22,7 +22,7 @@ indexmap = { version = "2.1.0", features = ["serde"] }
 async-trait = "0.1.74"
 futures = "0.3.29"
 
-semilattice-database-session = { version = "0.39.0" }
+semilattice-database-session = { version = "0.40.0" }
 
 wild-doc-script = { version = "0.29.0", path = "wild-doc-script" }
 wild-doc = { version = "0.107", path = "wild-doc" }

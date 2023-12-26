@@ -12,7 +12,7 @@ use hashbrown::HashMap;
 use maybe_xml::{token::Ty, Reader};
 
 use semilattice_database_session::{
-    Activity, CollectionRow, Depends, Pend, Record, SessionRecord, Term,
+    Activity, CollectionRow, Depends, Operation, Pend, Record, SessionRecord, Term,
 };
 
 use wild_doc_script::{Vars, WildDocValue};
@@ -227,7 +227,7 @@ impl Parser {
                 if let Some(v) = self.database.write().collection_mut(collection_id) {
                     Some(CollectionRow::new(
                         collection_id,
-                        v.create_row(record).await,
+                        v.update(Operation::New(record)).await.unwrap(),
                     ))
                 } else {
                     None
@@ -260,7 +260,7 @@ impl Parser {
         if collection_id.get() > 0 {
             let collection_row =
                 if let Some(collection) = self.database.write().collection_mut(collection_id) {
-                    Arc::new(collection.update_row(row, record).await);
+                    Arc::new(collection.update(Operation::Update { row, record }).await);
                     Some(CollectionRow::new(collection_id, row))
                 } else {
                     None
