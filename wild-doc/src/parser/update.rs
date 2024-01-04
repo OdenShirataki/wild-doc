@@ -153,7 +153,7 @@ impl Parser {
     }
 
     #[async_recursion(?Send)]
-    async fn update_pends(&self, depend: CollectionRow, pends: Vec<Pend>) -> Vec<CollectionRow> {
+    async fn update_pends(&self, depend: &CollectionRow, pends: Vec<Pend>) -> Vec<CollectionRow> {
         let mut rows = vec![];
         for pend in pends.into_iter() {
             let pend_key = pend.key;
@@ -171,10 +171,10 @@ impl Parser {
                                 record,
                                 &Depends::Overwrite(
                                     if let Depends::Overwrite(mut depends) = depends {
-                                        depends.push((pend_key.to_owned(), depend));
+                                        depends.push((pend_key.to_owned(), depend.clone()));
                                         depends
                                     } else {
-                                        vec![(pend_key.to_owned(), depend)]
+                                        vec![(pend_key.to_owned(), depend.clone())]
                                     },
                                 ),
                                 pends,
@@ -196,10 +196,10 @@ impl Parser {
                                 record,
                                 &Depends::Overwrite(
                                     if let Depends::Overwrite(mut depends) = depends {
-                                        depends.push((pend_key.to_owned(), depend));
+                                        depends.push((pend_key.to_owned(), depend.clone()));
                                         depends
                                     } else {
-                                        vec![(pend_key.to_owned(), depend)]
+                                        vec![(pend_key.to_owned(), depend.clone())]
                                     },
                                 ),
                                 pends,
@@ -232,16 +232,16 @@ impl Parser {
                 } else {
                     None
                 };
-            if let Some(collection_row) = collection_row {
+            if let Some(ref collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
                     for (depend_key, depend_row) in depends.into_iter() {
                         self.database
                             .write()
-                            .register_relation(depend_key, depend_row, collection_row)
+                            .register_relation(depend_key, depend_row, collection_row.clone())
                             .await;
                     }
                 }
-                rows.push(collection_row);
+                rows.push(collection_row.clone());
                 self.update_pends(collection_row, pends).await;
             }
         }
@@ -265,21 +265,21 @@ impl Parser {
                 } else {
                     None
                 };
-            if let Some(collection_row) = collection_row {
+            if let Some(ref collection_row) = collection_row {
                 if let Depends::Overwrite(depends) = depends {
                     self.database
                         .write()
                         .relation_mut()
-                        .delete_pends_by_collection_row(&collection_row)
+                        .delete_pends_by_collection_row(collection_row)
                         .await;
                     for d in depends.into_iter() {
                         self.database
                             .write()
-                            .register_relation(&d.0, &d.1, collection_row)
+                            .register_relation(&d.0, &d.1, collection_row.clone())
                             .await;
                     }
                 }
-                rows.push(collection_row);
+                rows.push(collection_row.clone());
                 self.update_pends(collection_row, pends).await;
             }
         }

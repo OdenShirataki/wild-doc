@@ -4,7 +4,10 @@ mod script;
 mod xml_util;
 
 pub use include::IncludeLocal;
-pub use semilattice_database_session::DataOption;
+pub use semilattice_database_session::{
+    search, Activity, CollectionRow, Condition, DataOption, Operation, Record, SearchResult,
+    SessionDatabase,
+};
 
 use std::{
     collections::HashMap,
@@ -14,8 +17,6 @@ use std::{
 
 use anyhow::Result;
 use parking_lot::{Mutex, RwLock};
-
-use semilattice_database_session::SessionDatabase;
 
 use wild_doc_script::{IncludeAdaptor, Vars};
 
