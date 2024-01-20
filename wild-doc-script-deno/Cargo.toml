@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc-script-deno"
-version = "0.20.4"
+version = "0.20.5"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -28,5 +28,8 @@ futures.workspace = true
 wild-doc-script.workspace = true
 
 ring = "0.17.7"
-deno_runtime = "0.137.0"
-deno_ast = { version = "0.31.6", features = ["transpiling"] }
+deno_runtime = { version = "0.140.0" }
+deno_ast = { version = "1.0.1", features = ["transpiling"] }
+
+[build-dependencies]
+deno_runtime = "0.140.0"

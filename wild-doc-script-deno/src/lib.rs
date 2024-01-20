@@ -8,7 +8,7 @@ use std::{
 };
 
 use deno_runtime::{
-    deno_core::{self, anyhow::Result, serde_v8, ModuleCode, ModuleSpecifier},
+    deno_core::{self, anyhow::Result, serde_v8, ModuleSpecifier},
     deno_napi::v8::{self, HandleScope},
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
@@ -318,6 +318,9 @@ impl WildDocScript for Deno {
             PermissionsContainer::allow_all(),
             WorkerOptions {
                 module_loader: WdModuleLoader::new(cache_dir),
+                startup_snapshot: Some(deno_core::Snapshot::Static(include_bytes!(
+                    "../runtime.bin"
+                ))),
                 ..Default::default()
             },
         );
@@ -382,10 +385,7 @@ impl WildDocScript for Deno {
     }
 
     async fn eval(&mut self, code: &str, _: &Stack) -> Result<WildDocValue> {
-        if let Ok(v) = self
-            .worker
-            .execute_script("<anon>", ModuleCode::from(code.to_owned()))
-        {
+        if let Ok(v) = self.worker.execute_script("<anon>", code.to_owned().into()) {
             let scope = &mut self.worker.js_runtime.handle_scope();
             let v = v8::Local::new(scope, v);
             if v.is_array_buffer_view() {

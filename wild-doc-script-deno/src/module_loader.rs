@@ -16,7 +16,7 @@ use deno_runtime::{
     deno_core::{
         self,
         error::{custom_error, generic_error},
-        ResolutionKind,
+        ModuleSourceCode, ResolutionKind,
     },
     deno_fetch::{
         create_http_client,
@@ -120,21 +120,23 @@ impl ModuleLoader for WdModuleLoader {
                 } else {
                     ModuleType::JavaScript
                 },
-                if string_specifier.ends_with(".ts") {
-                    deno_ast::parse_module(deno_ast::ParseParams {
-                        specifier: string_specifier,
-                        text_info: deno_ast::SourceTextInfo::new(code.into()),
-                        media_type: deno_ast::MediaType::TypeScript,
-                        capture_tokens: true,
-                        scope_analysis: true,
-                        maybe_syntax: None,
-                    })?
-                    .transpile(&Default::default())?
-                    .text
-                } else {
-                    code
-                }
-                .into(),
+                ModuleSourceCode::String(
+                    if string_specifier.ends_with(".ts") {
+                        deno_ast::parse_module(deno_ast::ParseParams {
+                            specifier: string_specifier,
+                            text_info: deno_ast::SourceTextInfo::new(code.into()),
+                            media_type: deno_ast::MediaType::TypeScript,
+                            capture_tokens: true,
+                            scope_analysis: true,
+                            maybe_syntax: None,
+                        })?
+                        .transpile(&Default::default())?
+                        .text
+                    } else {
+                        code
+                    }
+                    .into(),
+                ),
                 &module_specifier,
             ))
         }
