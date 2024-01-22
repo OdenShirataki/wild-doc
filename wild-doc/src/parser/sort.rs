@@ -5,7 +5,7 @@ use std::{ops::Deref, sync::Arc};
 
 use anyhow::Result;
 use semilattice_database_session::{
-    Order, OrderKey, SearchResult, SessionOrder, SessionOrderKey, SessionSearchResult,
+    CustomOrderKey, Order, SearchResult, SessionOrder, SessionOrderKey, SessionSearchResult,
 };
 use wild_doc_script::{Vars, WildDocValue};
 
@@ -49,7 +49,7 @@ impl Parser {
     }
 }
 
-fn make_order(result: &Arc<SearchResult>, sort: &str) -> Vec<Order> {
+fn make_order(result: &Arc<SearchResult>, sort: &str) -> Vec<Order<WdCustomSort>> {
     let mut orders = vec![];
     if sort.len() > 0 {
         for o in sort.trim().split(",") {
@@ -60,23 +60,25 @@ fn make_order(result: &Arc<SearchResult>, sort: &str) -> Vec<Order> {
             if let Some(order_key) = if field.starts_with("field.") {
                 field
                     .strip_prefix("field.")
-                    .map(|v| OrderKey::Field(v.into()))
+                    .map(|v| CustomOrderKey::Field(v.into()))
             } else if field.starts_with("join.") {
-                field.strip_prefix("join.").map(|v| -> OrderKey {
-                    let s: Vec<_> = v.split(".").collect();
-                    OrderKey::Custom(Box::new(WdCustomSort {
-                        result: Arc::clone(result),
-                        join_name: s[0].into(),
-                        property: s[1].into(),
-                    }))
-                })
+                field
+                    .strip_prefix("join.")
+                    .map(|v| -> CustomOrderKey<WdCustomSort> {
+                        let s: Vec<_> = v.split(".").collect();
+                        CustomOrderKey::Custom(WdCustomSort {
+                            result: Arc::clone(result),
+                            join_name: s[0].into(),
+                            property: s[1].into(),
+                        })
+                    })
             } else {
                 match field {
-                    "serial" => Some(OrderKey::Serial),
-                    "row" => Some(OrderKey::Row),
-                    "term_begin" => Some(OrderKey::TermBegin),
-                    "term_end" => Some(OrderKey::TermEnd),
-                    "last_update" => Some(OrderKey::LastUpdated),
+                    "serial" => Some(CustomOrderKey::Serial),
+                    "row" => Some(CustomOrderKey::Row),
+                    "term_begin" => Some(CustomOrderKey::TermBegin),
+                    "term_end" => Some(CustomOrderKey::TermEnd),
+                    "last_update" => Some(CustomOrderKey::LastUpdated),
                     _ => None,
                 }
             } {
