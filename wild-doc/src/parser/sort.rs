@@ -93,7 +93,10 @@ fn make_order(result: &Arc<SearchResult>, sort: &str) -> Vec<Order<WdCustomSort>
     orders
 }
 
-fn make_order_session(result: &Arc<SessionSearchResult>, sort: &str) -> Vec<SessionOrder> {
+fn make_order_session(
+    result: &Arc<SessionSearchResult>,
+    sort: &str,
+) -> Vec<SessionOrder<WdCustomSortSession>> {
     let mut orders = vec![];
     if sort.len() > 0 {
         for o in sort.trim().split(",") {
@@ -106,14 +109,16 @@ fn make_order_session(result: &Arc<SessionSearchResult>, sort: &str) -> Vec<Sess
                     .strip_prefix("field.")
                     .map(|v| SessionOrderKey::Field(v.into()))
             } else if field.starts_with("join.") {
-                field.strip_prefix("join.").map(|v| -> SessionOrderKey {
-                    let s: Vec<_> = v.split(".").collect();
-                    SessionOrderKey::Custom(Box::new(WdCustomSortSession {
-                        result: Arc::clone(result),
-                        join_name: s[0].into(),
-                        property: s[1].into(),
-                    }))
-                })
+                field
+                    .strip_prefix("join.")
+                    .map(|v| -> SessionOrderKey<WdCustomSortSession> {
+                        let s: Vec<_> = v.split(".").collect();
+                        SessionOrderKey::Custom(WdCustomSortSession {
+                            result: Arc::clone(result),
+                            join_name: s[0].into(),
+                            property: s[1].into(),
+                        })
+                    })
             } else {
                 match field {
                     "serial" => Some(SessionOrderKey::Serial),
