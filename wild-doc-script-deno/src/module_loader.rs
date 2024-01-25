@@ -16,7 +16,7 @@ use deno_runtime::{
     deno_core::{
         self,
         error::{custom_error, generic_error},
-        ModuleSourceCode, ResolutionKind,
+        ModuleSourceCode, RequestedModuleType, ResolutionKind,
     },
     deno_fetch::{
         create_http_client,
@@ -56,6 +56,7 @@ impl ModuleLoader for WdModuleLoader {
         module_specifier: &ModuleSpecifier,
         _maybe_referrer: Option<&ModuleSpecifier>,
         _is_dynamic: bool,
+        _requested_module_type: RequestedModuleType,
     ) -> Pin<Box<deno_core::ModuleSourceFuture>> {
         let module_specifier = module_specifier.clone();
         let mut module_cache_path = self.module_cache_dir.clone();
