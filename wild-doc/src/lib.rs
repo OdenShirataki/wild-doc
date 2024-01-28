@@ -5,8 +5,8 @@ mod xml_util;
 
 pub use include::IncludeLocal;
 pub use semilattice_database_session::{
-    search, Activity, CollectionRow, Condition, DataOption, Operation, Record, SearchResult,
-    SessionDatabase,
+    search, Activity, CollectionRow, Condition, DataOption, FieldName, SearchResult,
+    SessionDatabase, Term,
 };
 
 use std::{

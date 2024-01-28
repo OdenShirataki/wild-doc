@@ -1,7 +1,7 @@
 use std::num::{NonZeroI64, NonZeroU32};
 
 use indexmap::IndexMap;
-use semilattice_database_session::{Activity, CollectionRow, Uuid};
+use semilattice_database_session::{Activity, CollectionRow, FieldName, Uuid};
 use wild_doc_script::{Vars, WildDocValue};
 
 use super::Parser;
@@ -92,12 +92,13 @@ impl Parser {
                                                     field_mask
                                                         .into_iter()
                                                         .map(|field_name| {
-                                                            let field_name = field_name.to_str();
+                                                            let field_name: FieldName =
+                                                                field_name.to_str().into();
                                                             if let Some(bytes) =
-                                                                entities.get(field_name.as_ref())
+                                                                entities.get(&field_name)
                                                             {
                                                                 Some((
-                                                                    field_name.into(),
+                                                                    field_name.to_string(),
                                                                     if let Ok(str) =
                                                                         std::str::from_utf8(bytes)
                                                                     {
@@ -125,7 +126,7 @@ impl Parser {
                                                     .into_iter()
                                                     .map(|(field_name, value)| {
                                                         (
-                                                            field_name.into(),
+                                                            field_name.as_ref().to_string(),
                                                             if let Ok(str) =
                                                                 std::str::from_utf8(value)
                                                             {
@@ -242,8 +243,10 @@ impl Parser {
                                                     .into_iter()
                                                     .map(|field_name| {
                                                         let field_name = field_name.to_str();
-                                                        let bytes = collection
-                                                            .field_bytes(row, field_name.as_ref());
+                                                        let bytes = collection.field_bytes(
+                                                            row,
+                                                            &field_name.as_ref().into(),
+                                                        );
                                                         (
                                                             field_name.into(),
                                                             if let Ok(str) =
@@ -261,13 +264,13 @@ impl Parser {
                                             }
                                         } else {
                                             collection
-                                                .field_names()
+                                                .fields()
                                                 .into_iter()
-                                                .map(|field_name| {
+                                                .map(|(field_name, _)| {
                                                     let bytes =
                                                         collection.field_bytes(row, field_name);
                                                     (
-                                                        field_name.into(),
+                                                        field_name.to_string(),
                                                         if let Ok(str) = std::str::from_utf8(bytes)
                                                         {
                                                             WildDocValue::String(str.into())

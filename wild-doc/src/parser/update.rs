@@ -12,7 +12,7 @@ use hashbrown::HashMap;
 use maybe_xml::{token::Ty, Reader};
 
 use semilattice_database_session::{
-    Activity, CollectionRow, Depends, Operation, Pend, Record, SessionRecord, Term,
+    Activity, CollectionRow, Depends, FieldName, Pend, SessionRecord, Term,
 };
 
 use wild_doc_script::{Vars, WildDocValue};
@@ -76,27 +76,28 @@ impl Parser {
             {
                 for record in updates.into_iter() {
                     match record {
-                        SessionRecord::New {
-                            collection_id,
-                            record,
-                            depends,
-                            pends,
-                        } => {
-                            commit_rows.extend(
-                                self.record_new(collection_id, record, &depends, pends)
-                                    .await,
-                            );
-                        }
                         SessionRecord::Update {
                             collection_id,
                             row,
-                            record,
+                            activity,
+                            term_begin,
+                            term_end,
+                            fields,
                             depends,
                             pends,
                         } => {
                             commit_rows.extend(
-                                self.record_update(collection_id, row, record, &depends, pends)
-                                    .await,
+                                self.record_update(
+                                    collection_id,
+                                    row,
+                                    activity,
+                                    term_begin,
+                                    term_end,
+                                    fields,
+                                    &depends,
+                                    pends,
+                                )
+                                .await,
                             );
                         }
                         SessionRecord::Delete { collection_id, row } => {
@@ -159,33 +160,13 @@ impl Parser {
             let pend_key = pend.key;
             for record in pend.records.into_iter() {
                 match record {
-                    SessionRecord::New {
-                        collection_id,
-                        record,
-                        depends,
-                        pends,
-                    } => {
-                        rows.extend(
-                            self.record_new(
-                                collection_id,
-                                record,
-                                &Depends::Overwrite(
-                                    if let Depends::Overwrite(mut depends) = depends {
-                                        depends.push((pend_key.to_owned(), depend.clone()));
-                                        depends
-                                    } else {
-                                        vec![(pend_key.to_owned(), depend.clone())]
-                                    },
-                                ),
-                                pends,
-                            )
-                            .await,
-                        );
-                    }
                     SessionRecord::Update {
                         collection_id,
                         row,
-                        record,
+                        activity,
+                        term_begin,
+                        term_end,
+                        fields,
                         depends,
                         pends,
                     } => {
@@ -193,7 +174,10 @@ impl Parser {
                             self.record_update(
                                 collection_id,
                                 row,
-                                record,
+                                activity,
+                                term_begin,
+                                term_end,
+                                fields,
                                 &Depends::Overwrite(
                                     if let Depends::Overwrite(mut depends) = depends {
                                         depends.push((pend_key.to_owned(), depend.clone()));
@@ -214,73 +198,74 @@ impl Parser {
         rows
     }
 
-    async fn record_new(
-        &self,
-        collection_id: NonZeroI32,
-        record: Record,
-        depends: &Depends,
-        pends: Vec<Pend>,
-    ) -> Vec<CollectionRow> {
-        let mut rows = vec![];
-        if collection_id.get() > 0 {
-            let collection_row =
-                if let Some(v) = self.database.write().collection_mut(collection_id) {
-                    Some(CollectionRow::new(
-                        collection_id,
-                        v.update(Operation::New(record)).await.unwrap(),
-                    ))
-                } else {
-                    None
-                };
-            if let Some(ref collection_row) = collection_row {
-                if let Depends::Overwrite(depends) = depends {
-                    for (depend_key, depend_row) in depends.into_iter() {
-                        self.database
-                            .write()
-                            .register_relation(depend_key, depend_row, collection_row.clone())
-                            .await;
-                    }
-                }
-                rows.push(collection_row.clone());
-                self.update_pends(collection_row, pends).await;
-            }
-        }
-        rows
-    }
-
     async fn record_update(
         &self,
         collection_id: NonZeroI32,
-        row: NonZeroU32,
-        record: Record,
+        row: Option<NonZeroU32>,
+        activity: Activity,
+        term_begin: Term,
+        term_end: Term,
+        fields: HashMap<FieldName, Vec<u8>>,
         depends: &Depends,
         pends: Vec<Pend>,
     ) -> Vec<CollectionRow> {
         let mut rows = vec![];
-        if collection_id.get() > 0 {
-            let collection_row =
-                if let Some(collection) = self.database.write().collection_mut(collection_id) {
-                    Arc::new(collection.update(Operation::Update { row, record }).await);
-                    Some(CollectionRow::new(collection_id, row))
-                } else {
-                    None
-                };
-            if let Some(ref collection_row) = collection_row {
-                if let Depends::Overwrite(depends) = depends {
-                    self.database
-                        .write()
-                        .relation_mut()
-                        .delete_pends_by_collection_row(collection_row)
-                        .await;
-                    for d in depends.into_iter() {
+        if let Some(row) = row {
+            if collection_id.get() > 0 {
+                let collection_row =
+                    if let Some(collection) = self.database.write().collection_mut(collection_id) {
+                        Arc::new(
+                            collection
+                                .update(row, activity, term_begin, term_end, fields)
+                                .await,
+                        );
+                        Some(CollectionRow::new(collection_id, row))
+                    } else {
+                        None
+                    };
+                if let Some(ref collection_row) = collection_row {
+                    if let Depends::Overwrite(depends) = depends {
                         self.database
                             .write()
-                            .register_relation(&d.0, &d.1, collection_row.clone())
+                            .relation_mut()
+                            .delete_pends_by_collection_row(collection_row)
                             .await;
+                        for d in depends.into_iter() {
+                            self.database
+                                .write()
+                                .register_relation(&d.0, &d.1, collection_row.clone())
+                                .await;
+                        }
                     }
+                    rows.push(collection_row.clone());
+                    self.update_pends(collection_row, pends).await;
                 }
-                rows.push(collection_row.clone());
-                self.update_pends(collection_row, pends).await;
+            }
+        } else {
+            if collection_id.get() > 0 {
+                let collection_row =
+                    if let Some(collection) = self.database.write().collection_mut(collection_id) {
+                        Some(CollectionRow::new(
+                            collection_id,
+                            collection
+                                .insert(activity, term_begin, term_end, fields)
+                                .await,
+                        ))
+                    } else {
+                        None
+                    };
+                if let Some(ref collection_row) = collection_row {
+                    if let Depends::Overwrite(depends) = depends {
+                        for (depend_key, depend_row) in depends.into_iter() {
+                            self.database
+                                .write()
+                                .register_relation(depend_key, depend_row, collection_row.clone())
+                                .await;
+                        }
+                    }
+                    rows.push(collection_row.clone());
+                    self.update_pends(collection_row, pends).await;
+                }
             }
         }
         rows
@@ -505,16 +490,14 @@ impl Parser {
                                             }
                                         }
                                     }
-                                    let record = Record {
-                                        activity,
-                                        term_begin,
-                                        term_end,
-                                        fields,
-                                    };
                                     updates.push(if row == 0 {
-                                        SessionRecord::New {
+                                        SessionRecord::Update {
                                             collection_id,
-                                            record,
+                                            row: None,
+                                            activity,
+                                            term_begin,
+                                            term_end,
+                                            fields,
                                             depends: Depends::Overwrite(depends),
                                             pends,
                                         }
@@ -528,8 +511,11 @@ impl Parser {
                                         };
                                         SessionRecord::Update {
                                             collection_id,
-                                            row: unsafe { NonZeroU32::new_unchecked(row) },
-                                            record,
+                                            row: NonZeroU32::new(row),
+                                            activity,
+                                            term_begin,
+                                            term_end,
+                                            fields,
                                             depends: if inherit_depend_if_empty
                                                 && depends.len() == 0
                                             {

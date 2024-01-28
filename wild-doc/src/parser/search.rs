@@ -321,7 +321,7 @@ impl Parser {
                         "value_partial" => Some(search::Field::ValuePartial(value.into())),
                         _ => None,
                     }
-                    .map(|method| Condition::Field(name.into(), method))
+                    .map(|method| Condition::Field(name.as_ref().into(), method))
                 })
                 .and_then(|v| v)
         } else {
