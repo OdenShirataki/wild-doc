@@ -92,8 +92,9 @@ impl Parser {
                                                     field_mask
                                                         .into_iter()
                                                         .map(|field_name| {
-                                                            let field_name: FieldName =
-                                                                field_name.to_str().into();
+                                                            let field_name = FieldName::new(
+                                                                field_name.to_string(),
+                                                            );
                                                             if let Some(bytes) =
                                                                 entities.get(&field_name)
                                                             {
@@ -245,10 +246,10 @@ impl Parser {
                                                         let field_name = field_name.to_str();
                                                         let bytes = collection.field_bytes(
                                                             row,
-                                                            &field_name.as_ref().into(),
+                                                            &FieldName::new(field_name.as_ref().into()),
                                                         );
                                                         (
-                                                            field_name.into(),
+                                                            field_name.to_string(),
                                                             if let Ok(str) =
                                                                 std::str::from_utf8(bytes)
                                                             {

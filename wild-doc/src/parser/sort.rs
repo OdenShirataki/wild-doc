@@ -5,7 +5,8 @@ use std::{ops::Deref, sync::Arc};
 
 use anyhow::Result;
 use semilattice_database_session::{
-    CustomOrderKey, Order, SearchResult, SessionOrder, SessionOrderKey, SessionSearchResult,
+    CustomOrderKey, FieldName, Order, SearchResult, SessionOrder, SessionOrderKey,
+    SessionSearchResult,
 };
 use wild_doc_script::{Vars, WildDocValue};
 
@@ -60,7 +61,7 @@ fn make_order(result: &Arc<SearchResult>, sort: &str) -> Vec<Order<WdCustomSort>
             if let Some(order_key) = if field.starts_with("field.") {
                 field
                     .strip_prefix("field.")
-                    .map(|v| CustomOrderKey::Field(v.into()))
+                    .map(|v| CustomOrderKey::Field(FieldName::new(v.into())))
             } else if field.starts_with("join.") {
                 field
                     .strip_prefix("join.")
@@ -107,7 +108,7 @@ fn make_order_session(
             if let Some(order_key) = if field.starts_with("field.") {
                 field
                     .strip_prefix("field.")
-                    .map(|v| SessionOrderKey::Field(v.into()))
+                    .map(|v| SessionOrderKey::Field(FieldName::new(v.into())))
             } else if field.starts_with("join.") {
                 field
                     .strip_prefix("join.")

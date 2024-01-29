@@ -13,7 +13,7 @@ use hashbrown::HashMap;
 use maybe_xml::{token::Ty, Reader};
 use semilattice_database_session::{
     search::{self, Search, SearchJoin},
-    Activity, CollectionRow, Condition, Uuid,
+    Activity, CollectionRow, Condition, FieldName, Uuid,
 };
 use wild_doc_script::{Vars, WildDocValue};
 
@@ -321,7 +321,7 @@ impl Parser {
                         "value_partial" => Some(search::Field::ValuePartial(value.into())),
                         _ => None,
                     }
-                    .map(|method| Condition::Field(name.as_ref().into(), method))
+                    .map(|method| Condition::Field(FieldName::new(name.into()), method))
                 })
                 .and_then(|v| v)
         } else {

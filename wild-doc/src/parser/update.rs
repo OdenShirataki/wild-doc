@@ -104,7 +104,7 @@ impl Parser {
                             if collection_id.get() > 0 {
                                 self.database
                                     .write()
-                                    .delete_recursive(&CollectionRow::new(collection_id, row))
+                                    .delete(&CollectionRow::new(collection_id, row))
                                     .await;
                             }
                         }
@@ -388,7 +388,7 @@ impl Parser {
                                                             }
                                                         }
                                                         fields.insert(
-                                                            field_name.to_str().into(),
+                                                            FieldName::new(field_name.to_string()),
                                                             value,
                                                         );
                                                     }
