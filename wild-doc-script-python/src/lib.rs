@@ -66,7 +66,7 @@ fn wdv(_py: Python, key: String) -> PyResult<PyObject> {
         let stack: &Stack =
             unsafe { PyCapsule::import(py, CString::new("builtins.wdstack")?.as_ref())? };
 
-        if let Some(v) = stack.get(&key) {
+        if let Some(v) = stack.get(&Arc::new(key.into())) {
             return PyModule::from_code(
                 py,
                 r#"

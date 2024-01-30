@@ -23,12 +23,12 @@ impl WildDocScript for Var {
     async fn eval(&mut self, code: &str, stack: &Stack) -> Result<WildDocValue> {
         let mut splited = code.split(".");
         if let Some(root) = splited.next() {
-            if let Some(mut next_value) = stack.get(root) {
+            if let Some(mut next_value) = stack.get(&Arc::new(root.into())) {
                 loop {
                     if let Some(next) = splited.next() {
                         match next_value {
                             WildDocValue::Object(map) => {
-                                if let Some(v) = map.get(next) {
+                                if let Some(v) = map.get(&Arc::new(next.into())) {
                                     next_value = v;
                                 } else {
                                     break;

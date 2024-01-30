@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::Path};
+use std::{path::Path, sync::Arc};
 
 use anyhow::Result;
 use wild_doc_script::Vars;
@@ -11,21 +11,21 @@ impl Parser {
         attr: Vars,
         with_parse: bool,
     ) -> Result<Vec<u8>> {
-        if let Some(src) = attr.get("src") {
-            let src = src.to_str();
+        if let Some(src) = attr.get(&self.strings.src) {
+            let src = src.as_string();
             let (xml, filename) = self
                 .include_adaptor
                 .lock()
-                .include(Path::new(src.as_ref()))
+                .include(Path::new(src.as_str()))
                 .map_or_else(
                     || {
-                        let mut r = (None, Cow::Borrowed(""));
-                        if let Some(substitute) = attr.get("substitute") {
-                            let substitute = substitute.to_str();
+                        let mut r = (None, Arc::clone(&self.strings._blank));
+                        if let Some(substitute) = attr.get(&self.strings.substitute) {
+                            let substitute = substitute.as_string();
                             if let Some(xml) = self
                                 .include_adaptor
                                 .lock()
-                                .include(Path::new(substitute.as_ref()))
+                                .include(Path::new(substitute.as_str()))
                             {
                                 r = (Some(xml), substitute);
                             }

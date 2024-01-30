@@ -271,7 +271,7 @@ fn v(
             .to_rust_string_lossy(scope);
 
         let stack = unsafe { &*(v8::Local::<v8::External>::cast(stack).value() as *const Stack) };
-        if let Some(v) = stack.get(&key) {
+        if let Some(v) = stack.get(&Arc::new(key)) {
             if let Some(v) = wd2v8(v, scope) {
                 retval.set(v);
             }

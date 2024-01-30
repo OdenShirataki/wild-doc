@@ -34,29 +34,30 @@ impl error::Error for DependError {
     }
 }
 
-fn rows2val(commit_rows: Vec<CollectionRow>) -> WildDocValue {
-    WildDocValue::Array(
-        commit_rows
-            .into_iter()
-            .map(|v| {
-                WildDocValue::Object(
-                    [
-                        (
-                            "collection_id".to_owned(),
-                            serde_json::Number::from(v.collection_id().get()).into(),
-                        ),
-                        (
-                            "row".to_owned(),
-                            serde_json::Number::from(v.row().get()).into(),
-                        ),
-                    ]
-                    .into(),
-                )
-            })
-            .collect(),
-    )
-}
 impl Parser {
+    fn rows2val(&self, commit_rows: Vec<CollectionRow>) -> WildDocValue {
+        WildDocValue::Array(
+            commit_rows
+                .into_iter()
+                .map(|v| {
+                    WildDocValue::Object(
+                        [
+                            (
+                                Arc::clone(&self.strings.collection_id),
+                                serde_json::Number::from(v.collection_id().get()).into(),
+                            ),
+                            (
+                                Arc::clone(&self.strings.row),
+                                serde_json::Number::from(v.row().get()).into(),
+                            ),
+                        ]
+                        .into(),
+                    )
+                })
+                .collect(),
+        )
+    }
+
     pub async fn update(&mut self, xml: &[u8], pos: &mut usize, attr: Vars) -> Result<Vec<u8>> {
         let mut r = vec![];
         if let Ok(inner_xml) = self.parse(xml, pos).await {
@@ -70,7 +71,7 @@ impl Parser {
 
             if !self.sessions.last().is_some()
                 || attr
-                    .get("without_session")
+                    .get(&self.strings.without_session)
                     .and_then(|v| v.as_bool())
                     .map_or(false, |v| *v)
             {
@@ -117,7 +118,7 @@ impl Parser {
                         .write()
                         .update(&mut session_state.session, updates)
                         .await;
-                    if let Some(commit) = attr.get("commit") {
+                    if let Some(commit) = attr.get(&self.strings.commit) {
                         if commit.as_bool().map_or(false, |v| *v) {
                             commit_rows = self
                                 .database
@@ -131,15 +132,21 @@ impl Parser {
             if let Some((on_xml, on_vars)) = on {
                 let mut new_vars = Vars::new();
                 new_vars.insert(
-                    if let Some(var) = on_vars.get("var") {
-                        var.to_str().into()
+                    if let Some(var) = on_vars.get(&self.strings.var) {
+                        var.as_string()
                     } else {
-                        "update".to_owned()
+                        Arc::clone(&self.strings.update)
                     },
                     WildDocValue::Object(
                         [
-                            ("commit_rows".to_owned(), rows2val(commit_rows)),
-                            ("session_rows".to_owned(), rows2val(session_rows)),
+                            (
+                                Arc::clone(&self.strings.commit_rows),
+                                self.rows2val(commit_rows),
+                            ),
+                            (
+                                Arc::clone(&self.strings.session_rows),
+                                self.rows2val(session_rows),
+                            ),
                         ]
                         .into(),
                     ),
@@ -254,17 +261,17 @@ impl Parser {
                     } else {
                         None
                     };
-                if let Some(ref collection_row) = collection_row {
+                if let Some(collection_row) = collection_row {
                     if let Depends::Overwrite(depends) = depends {
                         for (depend_key, depend_row) in depends.into_iter() {
                             self.database
                                 .write()
-                                .register_relation(depend_key, depend_row, collection_row.clone())
+                                .register_relation(&depend_key, depend_row, collection_row.clone())
                                 .await;
                         }
                     }
                     rows.push(collection_row.clone());
-                    self.update_pends(collection_row, pends).await;
+                    self.update_pends(&collection_row, pends).await;
                 }
             }
         }
@@ -274,14 +281,16 @@ impl Parser {
     fn depend(
         &mut self,
         vars: &Vars,
-        depends: &mut Vec<(String, CollectionRow)>,
+        depends: &mut Vec<(Arc<String>, CollectionRow)>,
     ) -> Result<(), DependError> {
-        if let (Some(key), Some(collection), Some(row)) =
-            (vars.get("key"), vars.get("collection"), vars.get("row"))
-        {
+        if let (Some(key), Some(collection), Some(row)) = (
+            vars.get(&self.strings.key),
+            vars.get(&self.strings.collection),
+            vars.get(&self.strings.row),
+        ) {
             if let (Ok(row), Some(collection_id)) = (
-                row.to_str().parse::<NonZeroI64>(),
-                self.database.read().collection_id(&collection.to_str()),
+                row.as_string().parse::<NonZeroI64>(),
+                self.database.read().collection_id(&collection.as_string()),
             ) {
                 let in_session = row.get() < 0;
                 if in_session {
@@ -301,7 +310,7 @@ impl Parser {
                     }
                 }
                 depends.push((
-                    key.to_str().into(),
+                    key.as_string(),
                     if in_session {
                         CollectionRow::new(-collection_id, (-row).try_into().unwrap())
                     } else {
@@ -341,11 +350,11 @@ impl Parser {
                         }
                         b"collection" => {
                             let attr = self.vars_from_attibutes(st.attributes()).await;
-                            if let Some(collection_name) = attr.get("name") {
+                            if let Some(collection_name) = attr.get(&self.strings.name) {
                                 let collection_id = self
                                     .database
                                     .write()
-                                    .collection_id_or_create(&collection_name.to_str());
+                                    .collection_id_or_create(&collection_name.as_string());
 
                                 let mut pends = Vec::new();
                                 let mut depends = Vec::new();
@@ -363,7 +372,9 @@ impl Parser {
                                                     let begin = *pos;
                                                     let (inner, _) = xml_util::to_end(xml, pos);
 
-                                                    if let Some(field_name) = attr.get("name") {
+                                                    if let Some(field_name) =
+                                                        attr.get(&self.strings.name)
+                                                    {
                                                         let mut value = std::str::from_utf8(
                                                             &xml[begin..inner],
                                                         )?
@@ -375,7 +386,7 @@ impl Parser {
                                                         .into_bytes();
 
                                                         if let Some(base64_decode) =
-                                                            attr.get("base64")
+                                                            attr.get(&self.strings.base64)
                                                         {
                                                             if base64_decode
                                                                 .as_bool()
@@ -398,9 +409,9 @@ impl Parser {
                                                     let (pends_tmp, _on_xml) =
                                                         self.make_update_struct(xml, pos).await?;
 
-                                                    if let Some(key) = attr.get("key") {
+                                                    if let Some(key) = attr.get(&self.strings.key) {
                                                         pends.push(Pend {
-                                                            key: key.to_str().into(),
+                                                            key: key.as_string(),
                                                             records: pends_tmp,
                                                         });
                                                     }
@@ -438,8 +449,8 @@ impl Parser {
                                 }
 
                                 let row: i64 = attr
-                                    .get("row")
-                                    .and_then(|v| v.to_str().parse::<i64>().ok())
+                                    .get(&self.strings.row)
+                                    .and_then(|v| v.as_string().parse::<i64>().ok())
                                     .unwrap_or(0);
 
                                 let (collection_id, row) = if row < 0 {
@@ -448,7 +459,7 @@ impl Parser {
                                     (collection_id, row as u32)
                                 };
                                 if attr
-                                    .get("delete")
+                                    .get(&self.strings.delete)
                                     .and_then(|v| v.as_bool())
                                     .map_or(false, |v| *v)
                                 {
@@ -460,15 +471,17 @@ impl Parser {
                                     }
                                 } else {
                                     let mut activity = Activity::Active;
-                                    if let Some(str) = attr.get("activity") {
-                                        let str = str.to_str();
+                                    if let Some(str) = attr.get(&self.strings.activity) {
+                                        let str = str.as_string();
+                                        let str = str.as_str();
                                         if str == "inactive" || str == "0" {
                                             activity = Activity::Inactive;
                                         }
                                     }
                                     let mut term_begin = Term::Default;
-                                    if let Some(str) = attr.get("term_begin") {
-                                        let str = str.to_str();
+                                    if let Some(str) = attr.get(&self.strings.term_begin) {
+                                        let str = str.as_string();
+                                        let str = str.as_str();
                                         if str != "" {
                                             if let Ok(t) =
                                                 DateTime::parse_from_str(&str, "%Y-%m-%d %H:%M:%S")
@@ -479,8 +492,9 @@ impl Parser {
                                         }
                                     }
                                     let mut term_end = Term::Default;
-                                    if let Some(str) = attr.get("term_end") {
-                                        let str = str.to_str();
+                                    if let Some(str) = attr.get(&self.strings.term_end) {
+                                        let str = str.as_string();
+                                        let str = str.as_str();
                                         if str != "" {
                                             if let Ok(t) =
                                                 DateTime::parse_from_str(&str, "%Y-%m-%d %H:%M:%S")
@@ -503,7 +517,7 @@ impl Parser {
                                         }
                                     } else {
                                         let inherit_depend_if_empty = if let Some(str) =
-                                            attr.get("inherit_depend_if_empty")
+                                            attr.get(&self.strings.inherit_depend_if_empty)
                                         {
                                             str.as_bool().map_or(false, |v| *v)
                                         } else {

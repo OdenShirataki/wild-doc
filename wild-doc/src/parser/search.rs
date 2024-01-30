@@ -13,7 +13,7 @@ use hashbrown::HashMap;
 use maybe_xml::{token::Ty, Reader};
 use semilattice_database_session::{
     search::{self, Search, SearchJoin},
-    Activity, CollectionRow, Condition, FieldName, Uuid,
+    Activity, CollectionRow, Condition, Uuid,
 };
 use wild_doc_script::{Vars, WildDocValue};
 
@@ -23,13 +23,13 @@ use super::Parser;
 
 impl Parser {
     fn collection_id(&self, vars: &Vars) -> Option<NonZeroI32> {
-        if let Some(collection_name) = vars.get("collection") {
-            let collection_name = collection_name.to_str();
+        if let Some(collection_name) = vars.get(&self.strings.collection) {
+            let collection_name = collection_name.as_string();
             if let Some(collection_id) = self.database.read().collection_id(&collection_name) {
                 return Some(collection_id);
             }
-            if collection_name != "" {
-                if let Some(value) = vars.get("create_collection_if_not_exists") {
+            if collection_name.as_str() != "" {
+                if let Some(value) = vars.get(&self.strings.create_collection_if_not_exists) {
                     if value.as_bool().map_or(false, |v| *v) {
                         return Some(
                             self.database
@@ -53,10 +53,10 @@ impl Parser {
             let (condition, join, result_info) = self.make_conditions(xml, pos, &attr).await;
             if let Some(result_info) = result_info {
                 let mut new_vars = Vars::new();
-                if let Some(var) = result_info.0.get("var") {
+                if let Some(var) = result_info.0.get(&self.strings.var) {
                     let search = Search::new(collection_id, condition, join);
-                    let var = var.to_str();
-                    if var != "" {
+                    let var = var.as_string();
+                    if var.as_str() != "" {
                         let result = search.result(self.database.read().deref()).await;
                         let mut found_session = false;
                         for i in (0..self.sessions.len()).rev() {
@@ -65,15 +65,14 @@ impl Parser {
                                     found_session = true;
                                     let session_result = state.session.result_with(&result).await;
                                     new_vars.insert(
-                                        var.to_string(),
+                                        Arc::clone(&var),
                                         WildDocValue::SessionSearchResult(Arc::new(session_result)),
                                     );
                                 }
                             }
                         }
                         if !found_session {
-                            new_vars
-                                .insert(var.into(), WildDocValue::SearchResult(Arc::new(result)));
+                            new_vars.insert(var, WildDocValue::SearchResult(Arc::new(result)));
                         }
                     }
                 }
@@ -96,21 +95,23 @@ impl Parser {
         attr: &Vars,
     ) -> (
         Vec<Condition>,
-        HashMap<String, SearchJoin>,
+        HashMap<Arc<String>, SearchJoin>,
         Option<(Vars, &'a [u8])>,
     ) {
         let (mut conditions, join, result_info) = self.condition_loop(xml, pos).await;
 
-        if let Some(activity) = attr.get("activity") {
-            conditions.push(Condition::Activity(if activity.to_str() == "inactive" {
-                Activity::Inactive
-            } else {
-                Activity::Active
-            }));
+        if let Some(activity) = attr.get(&self.strings.activity) {
+            conditions.push(Condition::Activity(
+                if activity.as_string().as_str() == "inactive" {
+                    Activity::Inactive
+                } else {
+                    Activity::Active
+                },
+            ));
         }
-        if let Some(term) = attr.get("term") {
-            let term = term.to_str();
-            if term != "all" {
+        if let Some(term) = attr.get(&self.strings.term) {
+            let term = term.as_string();
+            if term.as_str() != "all" {
                 let term: Vec<_> = term.split('@').collect();
                 conditions.push(Condition::Term(if term.len() == 2 {
                     DateTime::parse_from_str(term[1], "%Y-%m-%d %H:%M:%S").map_or_else(
@@ -137,7 +138,7 @@ impl Parser {
         pos: &mut usize,
     ) -> (
         Vec<Condition>,
-        HashMap<String, SearchJoin>,
+        HashMap<Arc<String>, SearchJoin>,
         Option<(Vars, &'a [u8])>,
     ) {
         let mut join = HashMap::new();
@@ -189,9 +190,27 @@ impl Parser {
                     let attr = self.vars_from_attibutes(eet.attributes()).await;
                     let name = eet.name();
                     match name.local().as_bytes() {
-                        b"row" => futs.push(Self::condition_row(attr).boxed_local()),
-                        b"field" => futs.push(Self::condition_field(attr).boxed_local()),
-                        b"uuid" => futs.push(Self::condition_uuid(attr).boxed_local()),
+                        b"row" => futs.push(
+                            Self::condition_row(
+                                Arc::clone(&self.strings.method),
+                                Arc::clone(&self.strings.value),
+                                attr,
+                            )
+                            .boxed_local(),
+                        ),
+                        b"field" => futs.push(
+                            Self::condition_field(
+                                Arc::clone(&self.strings.name),
+                                Arc::clone(&self.strings.method),
+                                Arc::clone(&self.strings.value),
+                                attr,
+                            )
+                            .boxed_local(),
+                        ),
+                        b"uuid" => futs.push(
+                            Self::condition_uuid(Arc::clone(&self.strings.value), attr)
+                                .boxed_local(),
+                        ),
                         b"depend" => {
                             if let Some(c) = self.condition_depend(attr).await {
                                 result_conditions.push(c);
@@ -214,16 +233,19 @@ impl Parser {
     }
 
     async fn condition_depend(&self, vars: Vars) -> Option<Condition> {
-        if let (Some(row), Some(collection_name)) = (vars.get("row"), vars.get("collection")) {
-            let row = row.to_str();
-            let collection_name = collection_name.to_str();
-            if row != "" && collection_name != "" {
+        if let (Some(row), Some(collection_name)) = (
+            vars.get(&self.strings.row),
+            vars.get(&self.strings.collection),
+        ) {
+            let row = row.as_string();
+            let collection_name = collection_name.as_string();
+            if row.as_str() != "" && collection_name.as_str() != "" {
                 if let (Ok(row), Some(collection_id)) = (
                     row.parse::<NonZeroI64>(),
                     self.database.read().collection_id(&collection_name),
                 ) {
                     return Some(Condition::Depend(
-                        vars.get("key").map(|v| v.to_str().into()),
+                        vars.get(&self.strings.key).map(|v| v.as_string()),
                         if row.get() < 0 {
                             CollectionRow::new(-collection_id, (-row).try_into().unwrap())
                         } else {
@@ -236,12 +258,16 @@ impl Parser {
         None
     }
 
-    async fn condition_row(vars: Vars) -> Option<Condition> {
-        if let (Some(method), Some(value)) = (vars.get("method"), vars.get("value")) {
-            let value = value.to_str();
-            if value != "" {
-                let method = method.to_str();
-                match method.as_ref() {
+    async fn condition_row(
+        key_method: Arc<String>,
+        key_value: Arc<String>,
+        vars: Vars,
+    ) -> Option<Condition> {
+        if let (Some(method), Some(value)) = (vars.get(&key_method), vars.get(&key_value)) {
+            let value = value.as_string();
+            if value.as_str() != "" {
+                let method = method.as_string();
+                match method.as_str() {
                     "in" => {
                         let v: Vec<_> = value.split(',').flat_map(|s| s.parse::<isize>()).collect();
                         if v.len() > 0 {
@@ -276,10 +302,10 @@ impl Parser {
         None
     }
 
-    async fn condition_uuid(vars: Vars) -> Option<Condition> {
-        if let Some(value) = vars.get("value") {
-            let value = value.to_str();
-            (value != "")
+    async fn condition_uuid(key: Arc<String>, vars: Vars) -> Option<Condition> {
+        if let Some(value) = vars.get(&key) {
+            let value = value.as_string();
+            (value.as_str() != "")
                 .then(|| {
                     let v: Vec<_> = value
                         .split(',')
@@ -293,14 +319,21 @@ impl Parser {
         }
     }
 
-    async fn condition_field(vars: Vars) -> Option<Condition> {
-        if let (Some(name), Some(method), Some(value)) =
-            (vars.get("name"), vars.get("method"), vars.get("value"))
-        {
-            let name = name.to_str();
-            let method = method.to_str();
-            let value = value.to_str();
-            (name != "" && method != "" && value != "")
+    async fn condition_field(
+        key_name: Arc<String>,
+        key_method: Arc<String>,
+        key_value: Arc<String>,
+        vars: Vars,
+    ) -> Option<Condition> {
+        if let (Some(name), Some(method), Some(value)) = (
+            vars.get(&key_name),
+            vars.get(&key_method),
+            vars.get(&key_value),
+        ) {
+            let name = name.as_string();
+            let method = method.as_string();
+            let value = value.as_string();
+            (name.as_str() != "" && method.as_str() != "" && value.as_str() != "")
                 .then(|| {
                     let method_pair: Vec<_> = method.split('!').collect();
                     let len = method_pair.len();
@@ -309,7 +342,7 @@ impl Parser {
                         "match" => Some(search::Field::Match(value.to_string().into())),
                         "min" => Some(search::Field::Min(value.to_string().into())),
                         "max" => Some(search::Field::Max(value.to_string().into())),
-                        "partial" => Some(search::Field::Partial(value.into())),
+                        "partial" => Some(search::Field::Partial(value)),
                         "forward" => Some(search::Field::Forward(value.into())),
                         "backward" => Some(search::Field::Backward(value.into())),
                         "range" => {
@@ -321,7 +354,7 @@ impl Parser {
                         "value_partial" => Some(search::Field::ValuePartial(value.into())),
                         _ => None,
                     }
-                    .map(|method| Condition::Field(FieldName::new(name.into()), method))
+                    .map(|method| Condition::Field(name, method))
                 })
                 .and_then(|v| v)
         } else {
@@ -334,17 +367,17 @@ impl Parser {
         xml: &[u8],
         pos: &mut usize,
         attr: &Vars,
-        search_map: &mut HashMap<String, SearchJoin>,
+        search_map: &mut HashMap<Arc<String>, SearchJoin>,
     ) {
-        if let Some(name) = attr.get("name") {
-            let name = name.to_str();
-            if name != "" {
+        if let Some(name) = attr.get(&self.strings.name) {
+            let name = name.as_string();
+            if name.as_str() != "" {
                 if let Some(collection_id) = self.collection_id(attr) {
-                    let relation_key = attr.get("relation").map(|v| v.to_string());
+                    let relation_key = attr.get(&self.strings.relation).map(|v| v.as_string());
 
                     let (conditions, join, _result_info) = self.condition_loop(xml, pos).await;
                     search_map.insert(
-                        name.into(),
+                        name,
                         SearchJoin::new(collection_id, conditions, relation_key, join),
                     );
                 }

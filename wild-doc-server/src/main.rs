@@ -152,7 +152,7 @@ fn handler(mut stream: TcpStream, wd: Arc<Mutex<WildDocWrapper>>) -> Result<()> 
                 writer.write_all(&[0])?;
                 writer.write_all(&len.to_be_bytes())?;
                 writer.write_all(body)?;
-                if let Some(response) = r.options().get("response") {
+                if let Some(response) = r.options().get(&Arc::new("response".into())) {
                     if let Ok(json) = serde_json::to_string(response) {
                         writer.write_all(json.as_bytes())?;
                     } else {

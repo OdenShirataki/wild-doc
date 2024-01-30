@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use maybe_xml::token::prop::Attributes;
 use wild_doc_script::{Vars, WildDocValue};
 
@@ -16,7 +18,7 @@ impl Parser {
                     if let Some(value) = new_value {
                         if !value.is_null() {
                             r.push(b' ');
-                            r.extend(value.to_str().as_bytes());
+                            r.extend(value.as_string().as_bytes());
                         }
                     }
                 } else {
@@ -28,7 +30,7 @@ impl Parser {
                         } else {
                             Self::output_attribute_value(
                                 r,
-                                xml_util::escape_html(&value.to_str()).as_bytes(),
+                                xml_util::escape_html(&value.as_string()).as_bytes(),
                             );
                         }
                     } else {
@@ -67,19 +69,19 @@ impl Parser {
                                         &name.as_bytes()[..name.len() - (script_name.len() + 1)],
                                     )
                                 };
-                                r.insert(name.to_string(), v);
+                                r.insert(Arc::new(name.to_string()), v);
                             }
                         }
                     } else {
                         let value = value.as_str();
-                        r.insert(name.into(), {
+                        r.insert(Arc::new(name.into()), {
                             let value = xml_util::quot_unescape(value);
                             if let Ok(json) =
                                 serde_json::from_str::<serde_json::Value>(value.as_str())
                             {
                                 json.into()
                             } else {
-                                WildDocValue::String(value)
+                                WildDocValue::String(Arc::new(value))
                             }
                         });
                     }

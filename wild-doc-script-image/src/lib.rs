@@ -11,7 +11,7 @@ pub struct WdImage {}
 fn var2u32(value: &str, stack: &Stack) -> Option<u32> {
     if value.starts_with("$") {
         let value = unsafe { std::str::from_utf8_unchecked(&value.as_bytes()[1..]) };
-        if let Some(WildDocValue::Number(v)) = stack.get(value) {
+        if let Some(WildDocValue::Number(v)) = stack.get(&Arc::new(value.into())) {
             if let Some(v) = v.as_u64() {
                 return Some(v as u32);
             }
@@ -40,7 +40,7 @@ impl WildDocScript for WdImage {
     async fn eval(&mut self, code: &str, stack: &Stack) -> Result<WildDocValue> {
         let splited: Vec<&str> = code.split("?").collect();
         if let Some(image_var) = splited.get(0) {
-            if let Some(WildDocValue::Binary(image)) = stack.get(image_var) {
+            if let Some(WildDocValue::Binary(image)) = stack.get(&Arc::new(image_var.to_string())) {
                 if let Some(param) = splited.get(1) {
                     if let Ok(mut image) = image::load_from_memory(image) {
                         let mut w = None;
@@ -60,11 +60,14 @@ impl WildDocScript for WdImage {
                                     "m" => {
                                         if value.starts_with("$") {
                                             if let Some(WildDocValue::String(v)) =
-                                                stack.get(unsafe {
-                                                    std::str::from_utf8_unchecked(
-                                                        &value.as_bytes()[1..],
-                                                    )
-                                                })
+                                                stack.get(&Arc::new(
+                                                    unsafe {
+                                                        std::str::from_utf8_unchecked(
+                                                            &value.as_bytes()[1..],
+                                                        )
+                                                    }
+                                                    .into(),
+                                                ))
                                             {
                                                 mode = Some(v);
                                             }

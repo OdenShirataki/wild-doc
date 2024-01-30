@@ -22,10 +22,12 @@ impl Parser {
         attr: Vars,
     ) -> Result<Vec<u8>> {
         let mut vars = Vars::new();
-        if let (Some(WildDocValue::String(order)), Some(result), Some(WildDocValue::String(var))) =
-            (attr.get("order"), attr.get("result"), attr.get("var"))
-        {
-            if var != "" {
+        if let (Some(WildDocValue::String(order)), Some(result), Some(WildDocValue::String(var))) = (
+            attr.get(&self.strings.order),
+            attr.get(&self.strings.result),
+            attr.get(&self.strings.var),
+        ) {
+            if var.as_str() != "" {
                 match result {
                     WildDocValue::SearchResult(result) => {
                         let orders = make_order(result, order);
@@ -34,7 +36,7 @@ impl Parser {
                             .into_iter()
                             .map(|row| WildDocValue::Number(row.get().into()))
                             .collect();
-                        vars.insert(var.to_owned(), WildDocValue::Array(rows));
+                        vars.insert(Arc::clone(var), WildDocValue::Array(rows));
                     }
                     WildDocValue::SessionSearchResult(result) => {
                         let _orders = make_order_session(result, order);

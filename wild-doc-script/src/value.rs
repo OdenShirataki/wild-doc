@@ -2,21 +2,21 @@ pub use semilattice_database_session::{SearchResult, SessionSearchResult};
 
 use indexmap::IndexMap;
 use serde::Serialize;
-use std::{borrow::Cow, sync::Arc};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WildDocValue {
     Null,
     Bool(bool),
     Number(serde_json::Number),
-    String(String),
+    String(Arc<String>),
     Array(Vec<WildDocValue>),
     Object(Vars),
     Binary(Vec<u8>),
     SearchResult(Arc<SearchResult>),
     SessionSearchResult(Arc<SessionSearchResult>),
 }
-pub type Vars = IndexMap<String, WildDocValue>;
+pub type Vars = IndexMap<Arc<String>, WildDocValue>;
 
 impl Serialize for WildDocValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -43,13 +43,15 @@ impl From<serde_json::Value> for WildDocValue {
             serde_json::Value::Null => Self::Null,
             serde_json::Value::Bool(v) => Self::Bool(v),
             serde_json::Value::Number(v) => Self::Number(v),
-            serde_json::Value::String(v) => Self::String(v),
+            serde_json::Value::String(v) => Self::String(Arc::new(v)),
             serde_json::Value::Array(v) => {
                 Self::Array(v.into_iter().map(|v| Self::from(v)).collect())
             }
-            serde_json::Value::Object(v) => {
-                Self::Object(v.into_iter().map(|(k, v)| (k, Self::from(v))).collect())
-            }
+            serde_json::Value::Object(v) => Self::Object(
+                v.into_iter()
+                    .map(|(k, v)| (Arc::new(k), Self::from(v)))
+                    .collect(),
+            ),
         }
     }
 }
@@ -109,11 +111,11 @@ impl std::fmt::Display for WildDocValue {
 
 impl WildDocValue {
     #[inline(always)]
-    pub fn to_str(&self) -> Cow<str> {
+    pub fn as_string(&self) -> Arc<String> {
         match self {
-            Self::String(s) => Cow::Borrowed(s),
-            Self::Binary(value) => Cow::Borrowed(unsafe { std::str::from_utf8_unchecked(value) }),
-            _ => Cow::Owned(self.to_string()),
+            Self::String(s) => Arc::clone(s),
+            Self::Binary(value) => Arc::new(unsafe { std::str::from_utf8_unchecked(value) }.into()),
+            _ => Arc::new(self.to_string()),
         }
     }
 

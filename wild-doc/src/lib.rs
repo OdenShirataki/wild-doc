@@ -81,7 +81,7 @@ impl WildDoc {
             &self.cache_dir,
             Some(
                 [(
-                    "input".into(),
+                    Arc::new("input".into()),
                     serde_json::from_slice(input_json)
                         .unwrap_or(serde_json::json!({}))
                         .into(),
