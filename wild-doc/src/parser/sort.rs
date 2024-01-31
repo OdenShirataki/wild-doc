@@ -1,7 +1,7 @@
 mod custom_sort;
 mod custom_sort_session;
 
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use semilattice_database_session::{
@@ -32,7 +32,7 @@ impl Parser {
                     WildDocValue::SearchResult(result) => {
                         let orders = make_order(result, order);
                         let rows = result
-                            .sort(self.database.read().deref(), &orders)
+                            .sort(&*self.database.read(), &orders)
                             .into_iter()
                             .map(|row| WildDocValue::Number(row.get().into()))
                             .collect();

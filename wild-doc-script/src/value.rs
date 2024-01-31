@@ -31,7 +31,7 @@ impl Serialize for WildDocValue {
             Self::Array(v) => v.serialize(serializer),
             Self::Object(v) => v.serialize(serializer),
             Self::Binary(v) => v.serialize(serializer),
-            Self::SearchResult(_v) => "SearchResult".serialize(serializer), //v.deref().serialize(serializer),
+            Self::SearchResult(_v) => "SearchResult".serialize(serializer), //(*v).serialize(serializer),
             Self::SessionSearchResult(_v) => "SessionSearchResult".serialize(serializer),
         }
     }

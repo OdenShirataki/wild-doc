@@ -1,6 +1,5 @@
 use std::{
     num::{NonZeroI32, NonZeroI64},
-    ops::Deref,
     str::FromStr,
     sync::Arc,
 };
@@ -57,7 +56,7 @@ impl Parser {
                     let search = Search::new(collection_id, condition, join);
                     let var = var.as_string();
                     if var.as_str() != "" {
-                        let result = search.result(self.database.read().deref()).await;
+                        let result = search.result(&*self.database.read()).await;
                         let mut found_session = false;
                         for i in (0..self.sessions.len()).rev() {
                             if let Some(state) = self.sessions.get(i) {
