@@ -14,6 +14,8 @@ use self::{custom_sort::WdCustomSort, custom_sort_session::WdCustomSortSession};
 
 use super::Parser;
 
+use crate::r#const::*;
+
 impl Parser {
     pub(crate) async fn sort(
         &mut self,
@@ -22,11 +24,9 @@ impl Parser {
         attr: Vars,
     ) -> Result<Vec<u8>> {
         let mut vars = Vars::new();
-        if let (Some(WildDocValue::String(order)), Some(result), Some(WildDocValue::String(var))) = (
-            attr.get(&self.strings.order),
-            attr.get(&self.strings.result),
-            attr.get(&self.strings.var),
-        ) {
+        if let (Some(WildDocValue::String(order)), Some(result), Some(WildDocValue::String(var))) =
+            (attr.get(&*ORDER), attr.get(&*RESULT), attr.get(&*VAR))
+        {
             if var.as_str() != "" {
                 match result {
                     WildDocValue::SearchResult(result) => {

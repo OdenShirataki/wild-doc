@@ -26,7 +26,7 @@ use maybe_xml::{
 use semilattice_database_session::{Session, SessionDatabase};
 use wild_doc_script::{IncludeAdaptor, Stack, Vars, WildDocScript, WildDocValue};
 
-use crate::{script::Var, xml_util};
+use crate::{r#const::*, script::Var, xml_util};
 
 #[cfg(feature = "js")]
 use wild_doc_script_deno::Deno;
@@ -43,106 +43,6 @@ struct SessionState {
     clear_on_close: bool,
 }
 
-struct ConstStrings {
-    var: Arc<String>,
-    value: Arc<String>,
-    collection: Arc<String>,
-    src: Arc<String>,
-    substitute: Arc<String>,
-    r#in: Arc<String>,
-    key: Arc<String>,
-    r#continue: Arc<String>,
-    row: Arc<String>,
-    collection_id: Arc<String>,
-    fields: Arc<String>,
-    collection_name: Arc<String>,
-    serial: Arc<String>,
-    uuid: Arc<String>,
-    activity: Arc<String>,
-    term_begin: Arc<String>,
-    term_end: Arc<String>,
-    depends: Arc<String>,
-    field: Arc<String>,
-    last_updated: Arc<String>,
-    create_collection_if_not_exists: Arc<String>,
-    term: Arc<String>,
-    method: Arc<String>,
-    name: Arc<String>,
-    relation: Arc<String>,
-    commit_on_close: Arc<String>,
-    clear_on_close: Arc<String>,
-    expire: Arc<String>,
-    cursor: Arc<String>,
-    initialize: Arc<String>,
-    max: Arc<String>,
-    session_sequence_max: Arc<String>,
-    current: Arc<String>,
-    session_sequence_current: Arc<String>,
-    order: Arc<String>,
-    result: Arc<String>,
-    without_session: Arc<String>,
-    commit: Arc<String>,
-    update: Arc<String>,
-    commit_rows: Arc<String>,
-    session_rows: Arc<String>,
-    base64: Arc<String>,
-    delete: Arc<String>,
-    inherit_depend_if_empty: Arc<String>,
-    _blank: Arc<String>,
-}
-
-impl ConstStrings {
-    fn new() -> Self {
-        Self {
-            var: Arc::new("var".into()),
-            value: Arc::new("value".into()),
-            collection: Arc::new("collection".into()),
-            src: Arc::new("src".into()),
-            substitute: Arc::new("substitute".into()),
-            r#in: Arc::new("in".into()),
-            key: Arc::new("key".into()),
-            r#continue: Arc::new("continue".into()),
-            row: Arc::new("row".into()),
-            collection_id: Arc::new("collection_id".into()),
-            fields: Arc::new("fields".into()),
-            collection_name: Arc::new("collection_name".into()),
-            serial: Arc::new("serial".into()),
-            uuid: Arc::new("uuid".into()),
-            activity: Arc::new("activity".into()),
-            term_begin: Arc::new("term_begin".into()),
-            term_end: Arc::new("term_end".into()),
-            depends: Arc::new("depends".into()),
-            field: Arc::new("field".into()),
-            last_updated: Arc::new("last_updated".into()),
-            create_collection_if_not_exists: Arc::new("create_collection_if_not_exists".into()),
-            term: Arc::new("term".into()),
-            method: Arc::new("method".into()),
-            name: Arc::new("name".into()),
-            relation: Arc::new("relation".into()),
-            commit_on_close: Arc::new("commit_on_close".into()),
-            clear_on_close: Arc::new("clear_on_close".into()),
-            expire: Arc::new("expire".into()),
-            cursor: Arc::new("cursor".into()),
-            initialize: Arc::new("initialize".into()),
-            max: Arc::new("max".into()),
-            session_sequence_max: Arc::new("session_sequence_max".into()),
-            current: Arc::new("current".into()),
-            session_sequence_current: Arc::new("session_sequence_current".into()),
-            order: Arc::new("order".into()),
-            result: Arc::new("result".into()),
-            without_session: Arc::new("without_session".into()),
-            commit: Arc::new("commit".into()),
-            update: Arc::new("update".into()),
-            commit_rows: Arc::new("commit_rows".into()),
-            session_rows: Arc::new("session_rows".into()),
-            base64: Arc::new("base64".into()),
-            delete: Arc::new("delete".into()),
-            inherit_depend_if_empty: Arc::new("inherit_depend_if_empty".into()),
-            _blank: Arc::new("".into()),
-        }
-    }
-}
-
 pub struct Parser {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<SessionState>,
@@ -151,7 +51,6 @@ pub struct Parser {
     stack: Box<Stack>,
     result_options: Vars,
     include_stack: Vec<Arc<String>>,
-    strings: ConstStrings,
 }
 
 impl Parser {
@@ -212,7 +111,6 @@ impl Parser {
             stack,
             result_options: Vars::new(),
             include_stack: vec![],
-            strings: ConstStrings::new(),
         })
     }
 
@@ -227,21 +125,17 @@ impl Parser {
     ) -> Result<Option<Vec<u8>>> {
         match name {
             b"print" => {
-                return Ok(self
-                    .vars_from_attibutes(attributes)
-                    .await
-                    .get(&self.strings.value)
-                    .map(|v| match v {
+                return Ok(self.vars_from_attibutes(attributes).await.get(&*VALUE).map(
+                    |v| match v {
                         WildDocValue::String(s) => s.as_str().to_owned().into(),
                         WildDocValue::Binary(v) => v.to_vec(),
                         _ => v.as_string().as_bytes().into(),
-                    }));
+                    },
+                ));
             }
             b"result_option" => {
                 let attr = self.vars_from_attibutes(attributes).await;
-                if let (Some(var), Some(value)) =
-                    (attr.get(&self.strings.var), attr.get(&self.strings.value))
-                {
+                if let (Some(var), Some(value)) = (attr.get(&*VAR), attr.get(&*VALUE)) {
                     self.result_options.insert(var.as_string(), value.clone());
                 }
             }
@@ -249,7 +143,7 @@ impl Parser {
                 return Ok(self
                     .vars_from_attibutes(attributes)
                     .await
-                    .get(&self.strings.value)
+                    .get(&*VALUE)
                     .map(|v| xml_util::escape_html(&v.as_string()).into()));
             }
             b"include" => {
@@ -435,10 +329,8 @@ impl Parser {
                                 }
                                 b"if" => {
                                     let mut matched = false;
-                                    if let Some(value) = self
-                                        .vars_from_attibutes(st.attributes())
-                                        .await
-                                        .get(&self.strings.value)
+                                    if let Some(value) =
+                                        self.vars_from_attibutes(st.attributes()).await.get(&*VALUE)
                                     {
                                         if value.as_bool().map_or(false, |v| *v) {
                                             matched = true;

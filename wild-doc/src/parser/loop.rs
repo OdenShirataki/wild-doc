@@ -7,16 +7,17 @@ use wild_doc_script::Vars;
 
 use super::{Parser, WildDocValue};
 
+use crate::r#const::*;
+
 impl Parser {
     pub(super) async fn r#for(&mut self, attr: Vars, xml: &[u8]) -> Result<Vec<u8>> {
         let mut r = Vec::new();
-        if let (Some(var), Some(r#in)) = (attr.get(&self.strings.var), attr.get(&self.strings.r#in))
-        {
+        if let (Some(var), Some(r#in)) = (attr.get(&*VAR), attr.get(&*IN)) {
             let var = var.as_string();
             if var.as_str() != "" {
                 match r#in {
                     WildDocValue::Object(map) => {
-                        if let Some(key_name) = attr.get(&self.strings.key) {
+                        if let Some(key_name) = attr.get(&*KEY) {
                             for (key, value) in map.into_iter() {
                                 let mut new_vars = Vars::new();
                                 new_vars.insert(Arc::clone(&var), value.clone());
@@ -39,7 +40,7 @@ impl Parser {
                         }
                     }
                     WildDocValue::Array(vec) => {
-                        let key_name = attr.get(&self.strings.key);
+                        let key_name = attr.get(&*KEY);
                         if let Some(key_name) = key_name {
                             let mut key = 0;
                             for value in vec.into_iter() {
@@ -81,7 +82,7 @@ impl Parser {
             if self
                 .vars_from_attibutes(attributes)
                 .await
-                .get(&self.strings.r#continue)
+                .get(&*CONTINUE)
                 .and_then(|v| v.as_bool())
                 .map_or(false, |v| *v)
             {

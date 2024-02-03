@@ -2,7 +2,7 @@ use anyhow::Result;
 use maybe_xml::{token::Ty, Reader};
 use wild_doc_script::Vars;
 
-use crate::xml_util;
+use crate::{r#const::*, xml_util};
 
 use super::Parser;
 
@@ -15,7 +15,7 @@ impl Parser {
     ) -> Result<Vec<u8>> {
         let mut r = None;
 
-        let cmp_src = attr.get(&self.strings.value);
+        let cmp_src = attr.get(&*VALUE);
         let reader = Reader::from_str(unsafe { std::str::from_utf8_unchecked(xml) });
         while let Some(token) = reader.tokenize(pos) {
             match token.ty() {
@@ -24,7 +24,7 @@ impl Parser {
                     match name.as_bytes() {
                         b"wd:when" => {
                             if let Some(right) =
-                                self.vars_from_attibutes(st.attributes()).await.get(&self.strings.value)
+                                self.vars_from_attibutes(st.attributes()).await.get(&*VALUE)
                             {
                                 if let Some(cmp_src) = cmp_src {
                                     if cmp_src == right {

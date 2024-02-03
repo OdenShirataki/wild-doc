@@ -3,6 +3,8 @@ use std::{path::Path, sync::Arc};
 use anyhow::Result;
 use wild_doc_script::Vars;
 
+use crate::r#const::*;
+
 use super::Parser;
 
 impl Parser {
@@ -11,7 +13,7 @@ impl Parser {
         attr: Vars,
         with_parse: bool,
     ) -> Result<Vec<u8>> {
-        if let Some(src) = attr.get(&self.strings.src) {
+        if let Some(src) = attr.get(&*SRC) {
             let src = src.as_string();
             let (xml, filename) = self
                 .include_adaptor
@@ -19,8 +21,8 @@ impl Parser {
                 .include(Path::new(src.as_str()))
                 .map_or_else(
                     || {
-                        let mut r = (None, Arc::clone(&self.strings._blank));
-                        if let Some(substitute) = attr.get(&self.strings.substitute) {
+                        let mut r = (None, Arc::clone(&*_BLANK));
+                        if let Some(substitute) = attr.get(&*SUBSTITUTE) {
                             let substitute = substitute.as_string();
                             if let Some(xml) = self
                                 .include_adaptor

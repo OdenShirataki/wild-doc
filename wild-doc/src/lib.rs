@@ -2,6 +2,7 @@ mod include;
 mod parser;
 mod script;
 mod xml_util;
+mod r#const;
 
 pub use include::IncludeLocal;
 pub use semilattice_database_session::{

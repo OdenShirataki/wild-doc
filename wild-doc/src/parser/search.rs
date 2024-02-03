@@ -16,19 +16,19 @@ use semilattice_database_session::{
 };
 use wild_doc_script::{Vars, WildDocValue};
 
-use crate::xml_util;
+use crate::{r#const::*, xml_util};
 
 use super::Parser;
 
 impl Parser {
     fn collection_id(&self, vars: &Vars) -> Option<NonZeroI32> {
-        if let Some(collection_name) = vars.get(&self.strings.collection) {
+        if let Some(collection_name) = vars.get(&*COLLECTION) {
             let collection_name = collection_name.as_string();
             if let Some(collection_id) = self.database.read().collection_id(&collection_name) {
                 return Some(collection_id);
             }
             if collection_name.as_str() != "" {
-                if let Some(value) = vars.get(&self.strings.create_collection_if_not_exists) {
+                if let Some(value) = vars.get(&*CREATE_COLLECTION_IF_NOT_EXISTS) {
                     if value.as_bool().map_or(false, |v| *v) {
                         return Some(
                             self.database
@@ -52,7 +52,7 @@ impl Parser {
             let (condition, join, result_info) = self.make_conditions(xml, pos, &attr).await;
             if let Some(result_info) = result_info {
                 let mut new_vars = Vars::new();
-                if let Some(var) = result_info.0.get(&self.strings.var) {
+                if let Some(var) = result_info.0.get(&*VAR) {
                     let search = Search::new(collection_id, condition, join);
                     let var = var.as_string();
                     if var.as_str() != "" {
@@ -99,7 +99,7 @@ impl Parser {
     ) {
         let (mut conditions, join, result_info) = self.condition_loop(xml, pos).await;
 
-        if let Some(activity) = attr.get(&self.strings.activity) {
+        if let Some(activity) = attr.get(&*ACTIVITY) {
             conditions.push(Condition::Activity(
                 if activity.as_string().as_str() == "inactive" {
                     Activity::Inactive
@@ -108,7 +108,7 @@ impl Parser {
                 },
             ));
         }
-        if let Some(term) = attr.get(&self.strings.term) {
+        if let Some(term) = attr.get(&*TERM) {
             let term = term.as_string();
             if term.as_str() != "all" {
                 let term: Vec<_> = term.split('@').collect();
@@ -190,26 +190,21 @@ impl Parser {
                     let name = eet.name();
                     match name.local().as_bytes() {
                         b"row" => futs.push(
-                            Self::condition_row(
-                                Arc::clone(&self.strings.method),
-                                Arc::clone(&self.strings.value),
-                                attr,
-                            )
-                            .boxed_local(),
+                            Self::condition_row(Arc::clone(&*METHOD), Arc::clone(&*VALUE), attr)
+                                .boxed_local(),
                         ),
                         b"field" => futs.push(
                             Self::condition_field(
-                                Arc::clone(&self.strings.name),
-                                Arc::clone(&self.strings.method),
-                                Arc::clone(&self.strings.value),
+                                Arc::clone(&*NAME),
+                                Arc::clone(&*METHOD),
+                                Arc::clone(&*VALUE),
                                 attr,
                             )
                             .boxed_local(),
                         ),
-                        b"uuid" => futs.push(
-                            Self::condition_uuid(Arc::clone(&self.strings.value), attr)
-                                .boxed_local(),
-                        ),
+                        b"uuid" => {
+                            futs.push(Self::condition_uuid(Arc::clone(&*VALUE), attr).boxed_local())
+                        }
                         b"depend" => {
                             if let Some(c) = self.condition_depend(attr).await {
                                 result_conditions.push(c);
@@ -232,10 +227,7 @@ impl Parser {
     }
 
     async fn condition_depend(&self, vars: Vars) -> Option<Condition> {
-        if let (Some(row), Some(collection_name)) = (
-            vars.get(&self.strings.row),
-            vars.get(&self.strings.collection),
-        ) {
+        if let (Some(row), Some(collection_name)) = (vars.get(&*ROW), vars.get(&*COLLECTION)) {
             let row = row.as_string();
             let collection_name = collection_name.as_string();
             if row.as_str() != "" && collection_name.as_str() != "" {
@@ -244,7 +236,7 @@ impl Parser {
                     self.database.read().collection_id(&collection_name),
                 ) {
                     return Some(Condition::Depend(
-                        vars.get(&self.strings.key).map(|v| v.as_string()),
+                        vars.get(&*KEY).map(|v| v.as_string()),
                         if row.get() < 0 {
                             CollectionRow::new(-collection_id, (-row).try_into().unwrap())
                         } else {
@@ -368,11 +360,11 @@ impl Parser {
         attr: &Vars,
         search_map: &mut HashMap<Arc<String>, SearchJoin>,
     ) {
-        if let Some(name) = attr.get(&self.strings.name) {
+        if let Some(name) = attr.get(&*NAME) {
             let name = name.as_string();
             if name.as_str() != "" {
                 if let Some(collection_id) = self.collection_id(attr) {
-                    let relation_key = attr.get(&self.strings.relation).map(|v| v.as_string());
+                    let relation_key = attr.get(&*RELATION).map(|v| v.as_string());
 
                     let (conditions, join, _result_info) = self.condition_loop(xml, pos).await;
                     search_map.insert(
