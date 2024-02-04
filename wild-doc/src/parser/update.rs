@@ -17,7 +17,7 @@ use semilattice_database_session::{
 
 use wild_doc_script::{Vars, WildDocValue};
 
-use crate::{r#const::*,xml_util};
+use crate::{r#const::*, xml_util};
 
 use super::Parser;
 
@@ -234,7 +234,7 @@ impl Parser {
                         for d in depends.into_iter() {
                             self.database
                                 .write()
-                                .register_relation(&d.0, &d.1, collection_row.clone())
+                                .register_relation(&d.0, &d.1, collection_row)
                                 .await;
                         }
                     }
@@ -255,12 +255,12 @@ impl Parser {
                     } else {
                         None
                     };
-                if let Some(collection_row) = collection_row {
+                if let Some(ref collection_row) = collection_row {
                     if let Depends::Overwrite(depends) = depends {
                         for (depend_key, depend_row) in depends.into_iter() {
                             self.database
                                 .write()
-                                .register_relation(&depend_key, depend_row, collection_row.clone())
+                                .register_relation(&depend_key, depend_row, collection_row)
                                 .await;
                         }
                     }
