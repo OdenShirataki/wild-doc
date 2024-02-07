@@ -161,7 +161,7 @@ impl Parser {
 
                             inner.insert(
                                 Arc::clone(&*SERIAL),
-                                WildDocValue::Number(collection.serial(row).into()),
+                                WildDocValue::Number((*collection.serial(row)).into()),
                             );
 
                             if let Some(uuid) = collection.uuid_string(row) {
@@ -179,19 +179,19 @@ impl Parser {
                             if let Some(term_begin) = collection.term_begin(row) {
                                 inner.insert(
                                     Arc::clone(&*TERM_BEGIN),
-                                    WildDocValue::Number(term_begin.into()),
+                                    WildDocValue::Number((*term_begin).into()),
                                 );
                             }
                             if let Some(term_end) = collection.term_end(row) {
                                 inner.insert(
                                     Arc::clone(&*TERM_END),
-                                    WildDocValue::Number(term_end.into()),
+                                    WildDocValue::Number((*term_end).into()),
                                 );
                             }
                             if let Some(last_updated) = collection.last_updated(row) {
                                 inner.insert(
                                     Arc::clone(&*LAST_UPDATED),
-                                    WildDocValue::Number(last_updated.into()),
+                                    WildDocValue::Number((*last_updated).into()),
                                 );
                             }
                             inner.extend([
