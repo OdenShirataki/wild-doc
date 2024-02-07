@@ -2,7 +2,6 @@ use std::{
     fs::{File, OpenOptions},
     io::{BufWriter, Read, Write},
     path::PathBuf,
-    pin::Pin,
     rc::Rc,
     str,
 };
@@ -16,7 +15,7 @@ use deno_runtime::{
     deno_core::{
         self,
         error::{custom_error, generic_error},
-        ModuleSourceCode, RequestedModuleType, ResolutionKind,
+        ModuleLoadResponse, ModuleSourceCode, RequestedModuleType, ResolutionKind,
     },
     deno_fetch::{
         create_http_client,
@@ -57,91 +56,93 @@ impl ModuleLoader for WdModuleLoader {
         _maybe_referrer: Option<&ModuleSpecifier>,
         _is_dynamic: bool,
         _requested_module_type: RequestedModuleType,
-    ) -> Pin<Box<deno_core::ModuleSourceFuture>> {
+    ) -> ModuleLoadResponse {
         let module_specifier = module_specifier.clone();
         let mut module_cache_path = self.module_cache_dir.clone();
-        async move {
-            let code = String::from_utf8(if module_specifier.scheme().starts_with("http") {
-                if let Some(cache_filename) = url_to_filename(&module_specifier) {
-                    module_cache_path.push(cache_filename);
-                    if module_cache_path.exists() {
-                        let mut buf: Vec<u8> = vec![];
-                        if let Ok(mut file) = File::open(module_cache_path) {
-                            let _ = file.read_to_end(&mut buf);
-                        }
-                        buf
-                    } else {
-                        let url = module_specifier.to_string();
-                        let client = create_http_client(
-                            "wild-doc".into(),
-                            CreateHttpClientOptions::default(),
-                        )?;
-                        let resp = get_redirected_response(&client, url).await?;
-                        match resp.bytes().await {
-                            Ok(resp) => {
-                                if resp.len() > 0 {
-                                    if let Some(dir) = module_cache_path.parent() {
-                                        if let Ok(()) = std::fs::create_dir_all(dir) {
-                                            if let Ok(file) = OpenOptions::new()
-                                                .create(true)
-                                                .write(true)
-                                                .truncate(true)
-                                                .open(module_cache_path)
-                                            {
-                                                let _ = BufWriter::new(file).write_all(&resp);
+        ModuleLoadResponse::Async(
+            async move {
+                let code = String::from_utf8(if module_specifier.scheme().starts_with("http") {
+                    if let Some(cache_filename) = url_to_filename(&module_specifier) {
+                        module_cache_path.push(cache_filename);
+                        if module_cache_path.exists() {
+                            let mut buf: Vec<u8> = vec![];
+                            if let Ok(mut file) = File::open(module_cache_path) {
+                                let _ = file.read_to_end(&mut buf);
+                            }
+                            buf
+                        } else {
+                            let url = module_specifier.to_string();
+                            let client = create_http_client(
+                                "wild-doc".into(),
+                                CreateHttpClientOptions::default(),
+                            )?;
+                            let resp = get_redirected_response(&client, url).await?;
+                            match resp.bytes().await {
+                                Ok(resp) => {
+                                    if resp.len() > 0 {
+                                        if let Some(dir) = module_cache_path.parent() {
+                                            if let Ok(()) = std::fs::create_dir_all(dir) {
+                                                if let Ok(file) = OpenOptions::new()
+                                                    .create(true)
+                                                    .write(true)
+                                                    .truncate(true)
+                                                    .open(module_cache_path)
+                                                {
+                                                    let _ = BufWriter::new(file).write_all(&resp);
+                                                }
                                             }
                                         }
                                     }
+                                    resp.into()
                                 }
-                                resp.into()
-                            }
-                            Err(e) => {
-                                println!("{:?}", e);
-                                vec![]
+                                Err(e) => {
+                                    println!("{:?}", e);
+                                    vec![]
+                                }
                             }
                         }
-                    }
-                } else {
-                    vec![]
-                }
-            } else {
-                let path = module_specifier.to_file_path().map_err(|_| {
-                    deno_core::error::generic_error(format!(
-                        "Provided module specifier \"{}\" is not a file URL.",
-                        module_specifier
-                    ))
-                })?;
-                std::fs::read(path)?
-            })?;
-
-            let string_specifier = module_specifier.to_string();
-            Ok(ModuleSource::new(
-                if string_specifier.ends_with(".json") {
-                    ModuleType::Json
-                } else {
-                    ModuleType::JavaScript
-                },
-                ModuleSourceCode::String(
-                    if string_specifier.ends_with(".ts") {
-                        deno_ast::parse_module(deno_ast::ParseParams {
-                            specifier: string_specifier,
-                            text_info: deno_ast::SourceTextInfo::new(code.into()),
-                            media_type: deno_ast::MediaType::TypeScript,
-                            capture_tokens: true,
-                            scope_analysis: true,
-                            maybe_syntax: None,
-                        })?
-                        .transpile(&Default::default())?
-                        .text
                     } else {
-                        code
+                        vec![]
                     }
-                    .into(),
-                ),
-                &module_specifier,
-            ))
-        }
-        .boxed_local()
+                } else {
+                    let path = module_specifier.to_file_path().map_err(|_| {
+                        deno_core::error::generic_error(format!(
+                            "Provided module specifier \"{}\" is not a file URL.",
+                            module_specifier
+                        ))
+                    })?;
+                    std::fs::read(path)?
+                })?;
+
+                let string_specifier = module_specifier.to_string();
+                Ok(ModuleSource::new(
+                    if string_specifier.ends_with(".json") {
+                        ModuleType::Json
+                    } else {
+                        ModuleType::JavaScript
+                    },
+                    ModuleSourceCode::String(
+                        if string_specifier.ends_with(".ts") {
+                            deno_ast::parse_module(deno_ast::ParseParams {
+                                specifier: string_specifier,
+                                text_info: deno_ast::SourceTextInfo::new(code.into()),
+                                media_type: deno_ast::MediaType::TypeScript,
+                                capture_tokens: true,
+                                scope_analysis: true,
+                                maybe_syntax: None,
+                            })?
+                            .transpile(&Default::default())?
+                            .text
+                        } else {
+                            code
+                        }
+                        .into(),
+                    ),
+                    &module_specifier,
+                ))
+            }
+            .boxed_local(),
+        )
     }
 }
 

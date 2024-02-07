@@ -31,8 +31,8 @@ futures.workspace = true
 wild-doc-script.workspace = true
 
 ring = "0.17.7"
-deno_runtime = { version = "0.143.0" }
+deno_runtime = { version = "0.144.0" }
 deno_ast = { version = "0.32.1", features = ["transpiling"] }
 
 [build-dependencies]
-deno_runtime = "0.143.0"
+deno_runtime = "0.144.0"
