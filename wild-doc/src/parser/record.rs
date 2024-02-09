@@ -4,13 +4,14 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use semilattice_database_session::{Activity, CollectionRow, FieldName, Uuid};
-use wild_doc_script::{Vars, WildDocValue};
+use wild_doc_script::{
+    Activity, CollectionRow, FieldName, IncludeAdaptor, Uuid, Vars, WildDocValue,
+};
 
 use super::Parser;
 use crate::r#const::*;
 
-impl Parser {
+impl<I: IncludeAdaptor + Send> Parser<I> {
     pub(super) fn record(&self, vars: Vars) -> Vars {
         let mut r = Vars::new();
 
@@ -24,7 +25,7 @@ impl Parser {
                     self.database.read().collection_id(&collection.as_string()),
                     row.as_string().parse::<NonZeroI64>(),
                 ) {
-                    inner.insert(Arc::clone(&*ROW), WildDocValue::Number(row.get().into()));
+                    inner.insert(Arc::clone(&ROW), WildDocValue::Number(row.get().into()));
                     let mut find_session = false;
                     for i in (0..self.sessions.len()).rev() {
                         if let Some(temporary_collection) = self
@@ -36,25 +37,25 @@ impl Parser {
                             if let Some(entity) = temporary_collection.get(&row) {
                                 inner.extend([
                                     (
-                                        Arc::clone(&*UUID),
+                                        Arc::clone(&UUID),
                                         WildDocValue::String(Arc::new(
                                             Uuid::from_u128(entity.uuid()).to_string(),
                                         )),
                                     ),
                                     (
-                                        Arc::clone(&*ACTIVITY),
+                                        Arc::clone(&ACTIVITY),
                                         WildDocValue::Bool(entity.activity() == Activity::Active),
                                     ),
                                     (
-                                        Arc::clone(&*TERM_BEGIN),
+                                        Arc::clone(&TERM_BEGIN),
                                         WildDocValue::Number(entity.term_begin().into()),
                                     ),
                                     (
-                                        Arc::clone(&*TERM_END),
+                                        Arc::clone(&TERM_END),
                                         WildDocValue::Number(entity.term_end().into()),
                                     ),
                                     (
-                                        Arc::clone(&*DEPENDS),
+                                        Arc::clone(&DEPENDS),
                                         WildDocValue::Object(
                                             entity
                                                 .depends()
@@ -65,7 +66,7 @@ impl Parser {
                                                         WildDocValue::Object(
                                                             [
                                                                 (
-                                                                    Arc::clone(&*COLLECTION_ID),
+                                                                    Arc::clone(&COLLECTION_ID),
                                                                     WildDocValue::Number(
                                                                         d.collection_id()
                                                                             .get()
@@ -73,7 +74,7 @@ impl Parser {
                                                                     ),
                                                                 ),
                                                                 (
-                                                                    Arc::clone(&*ROW),
+                                                                    Arc::clone(&ROW),
                                                                     WildDocValue::Number(
                                                                         d.row().get().into(),
                                                                     ),
@@ -87,7 +88,7 @@ impl Parser {
                                         ),
                                     ),
                                     (
-                                        Arc::clone(&*FIELD),
+                                        Arc::clone(&FIELD),
                                         WildDocValue::Object(
                                             if let Some(field_mask) = vars.get(&*FIELDS) {
                                                 if let WildDocValue::Array(field_mask) = field_mask
@@ -160,43 +161,43 @@ impl Parser {
                             let row = unsafe { NonZeroU32::new_unchecked(row.get() as u32) };
 
                             inner.insert(
-                                Arc::clone(&*SERIAL),
+                                Arc::clone(&SERIAL),
                                 WildDocValue::Number((*collection.serial(row)).into()),
                             );
 
                             if let Some(uuid) = collection.uuid_string(row) {
                                 inner.insert(
-                                    Arc::clone(&*UUID),
+                                    Arc::clone(&UUID),
                                     WildDocValue::String(Arc::new(uuid)),
                                 );
                             }
                             if let Some(activity) = collection.activity(row) {
                                 inner.insert(
-                                    Arc::clone(&*ACTIVITY),
+                                    Arc::clone(&ACTIVITY),
                                     WildDocValue::Bool(activity == Activity::Active),
                                 );
                             };
                             if let Some(term_begin) = collection.term_begin(row) {
                                 inner.insert(
-                                    Arc::clone(&*TERM_BEGIN),
+                                    Arc::clone(&TERM_BEGIN),
                                     WildDocValue::Number((*term_begin).into()),
                                 );
                             }
                             if let Some(term_end) = collection.term_end(row) {
                                 inner.insert(
-                                    Arc::clone(&*TERM_END),
+                                    Arc::clone(&TERM_END),
                                     WildDocValue::Number((*term_end).into()),
                                 );
                             }
                             if let Some(last_updated) = collection.last_updated(row) {
                                 inner.insert(
-                                    Arc::clone(&*LAST_UPDATED),
+                                    Arc::clone(&LAST_UPDATED),
                                     WildDocValue::Number((*last_updated).into()),
                                 );
                             }
                             inner.extend([
                                 (
-                                    Arc::clone(&*DEPENDS),
+                                    Arc::clone(&DEPENDS),
                                     WildDocValue::Object(
                                         self.database
                                             .read()
@@ -212,7 +213,7 @@ impl Parser {
                                                             WildDocValue::Object(
                                                                 [
                                                                     (
-                                                                        Arc::clone(&*COLLECTION_ID),
+                                                                        Arc::clone(&COLLECTION_ID),
                                                                         WildDocValue::Number(
                                                                             collection_id
                                                                                 .get()
@@ -221,7 +222,7 @@ impl Parser {
                                                                     ),
                                                                     (
                                                                         Arc::clone(
-                                                                            &*COLLECTION_NAME,
+                                                                            &COLLECTION_NAME,
                                                                         ),
                                                                         WildDocValue::String(
                                                                             Arc::new(
@@ -232,7 +233,7 @@ impl Parser {
                                                                         ),
                                                                     ),
                                                                     (
-                                                                        Arc::clone(&*ROW),
+                                                                        Arc::clone(&ROW),
                                                                         WildDocValue::Number(
                                                                             d.row().get().into(),
                                                                         ),
@@ -249,7 +250,7 @@ impl Parser {
                                     ),
                                 ),
                                 (
-                                    Arc::clone(&*FIELD),
+                                    Arc::clone(&FIELD),
                                     WildDocValue::Object(
                                         if let Some(field_mask) = vars.get(&*FIELDS) {
                                             if let WildDocValue::Array(field_mask) = field_mask {

@@ -23,8 +23,9 @@ use maybe_xml::{
     },
     Reader,
 };
-use semilattice_database_session::{Session, SessionDatabase};
-use wild_doc_script::{IncludeAdaptor, Stack, Vars, WildDocScript, WildDocValue};
+use wild_doc_script::{
+    IncludeAdaptor, Session, SessionDatabase, Stack, Vars, WildDocScript, WildDocValue,
+};
 
 use crate::{r#const::*, script::Var, xml_util};
 
@@ -43,25 +44,25 @@ struct SessionState {
     clear_on_close: bool,
 }
 
-pub struct Parser {
+pub struct Parser<I: IncludeAdaptor + Send> {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<SessionState>,
-    scripts: HashMap<String, Box<dyn WildDocScript>>,
-    include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
+    scripts: HashMap<String, Box<dyn WildDocScript<I>>>,
+    include_adaptor: Arc<Mutex<I>>,
     stack: Box<Stack>,
     result_options: Vars,
     include_stack: Vec<Arc<String>>,
 }
 
-impl Parser {
+impl<I: IncludeAdaptor + Send> Parser<I> {
     pub fn new(
         database: Arc<RwLock<SessionDatabase>>,
-        include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
+        include_adaptor: Arc<Mutex<I>>,
         cache_dir: &Path,
         input: Option<Vars>,
     ) -> Result<Self> {
         let stack = Box::new(Stack::new(input));
-        let mut scripts: hashbrown::HashMap<String, Box<dyn WildDocScript>> =
+        let mut scripts: hashbrown::HashMap<String, Box<dyn WildDocScript<I>>> =
             hashbrown::HashMap::new();
 
         scripts.insert(

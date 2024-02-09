@@ -25,8 +25,8 @@ fn var2u32(value: &str, stack: &Stack) -> Option<u32> {
 }
 
 #[async_trait(?Send)]
-impl WildDocScript for WdImage {
-    fn new(_: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>, _: PathBuf, _: &Stack) -> Result<Self>
+impl<I: IncludeAdaptor + Send> WildDocScript<I> for WdImage {
+    fn new(_: Arc<Mutex<I>>, _: PathBuf, _: &Stack) -> Result<Self>
     where
         Self: Sized,
     {

@@ -8,8 +8,8 @@ use wild_doc_script::{async_trait, IncludeAdaptor, Stack, WildDocScript, WildDoc
 pub struct Var {}
 
 #[async_trait(?Send)]
-impl WildDocScript for Var {
-    fn new(_: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>, _: PathBuf, _: &Stack) -> Result<Self>
+impl<I: IncludeAdaptor + Send> WildDocScript<I> for Var {
+    fn new(_: Arc<Mutex<I>>, _: PathBuf, _: &Stack) -> Result<Self>
     where
         Self: Sized,
     {

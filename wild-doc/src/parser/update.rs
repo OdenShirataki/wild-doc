@@ -11,11 +11,10 @@ use chrono::DateTime;
 use hashbrown::HashMap;
 use maybe_xml::{token::Ty, Reader};
 
-use semilattice_database_session::{
-    Activity, CollectionRow, Depends, FieldName, Pend, SessionRecord, Term,
+use wild_doc_script::{
+    Activity, CollectionRow, Depends, FieldName, IncludeAdaptor, Pend, SessionRecord, Term, Vars,
+    WildDocValue,
 };
-
-use wild_doc_script::{Vars, WildDocValue};
 
 use crate::{r#const::*, xml_util};
 
@@ -34,7 +33,7 @@ impl error::Error for DependError {
     }
 }
 
-impl Parser {
+impl<I: IncludeAdaptor + Send> Parser<I> {
     fn rows2val(&self, commit_rows: Vec<CollectionRow>) -> WildDocValue {
         WildDocValue::Array(
             commit_rows
@@ -43,11 +42,11 @@ impl Parser {
                     WildDocValue::Object(
                         [
                             (
-                                Arc::clone(&*COLLECTION_ID),
+                                Arc::clone(&COLLECTION_ID),
                                 serde_json::Number::from(v.collection_id().get()).into(),
                             ),
                             (
-                                Arc::clone(&*ROW),
+                                Arc::clone(&ROW),
                                 serde_json::Number::from(v.row().get()).into(),
                             ),
                         ]
@@ -135,12 +134,12 @@ impl Parser {
                     if let Some(var) = on_vars.get(&*VAR) {
                         var.as_string()
                     } else {
-                        Arc::clone(&*UPDATE)
+                        Arc::clone(&UPDATE)
                     },
                     WildDocValue::Object(
                         [
-                            (Arc::clone(&*COMMIT_ROWS), self.rows2val(commit_rows)),
-                            (Arc::clone(&*SESSION_ROWS), self.rows2val(session_rows)),
+                            (Arc::clone(&COMMIT_ROWS), self.rows2val(commit_rows)),
+                            (Arc::clone(&SESSION_ROWS), self.rows2val(session_rows)),
                         ]
                         .into(),
                     ),

@@ -10,17 +10,16 @@ use chrono::DateTime;
 use futures::FutureExt;
 use hashbrown::HashMap;
 use maybe_xml::{token::Ty, Reader};
-use semilattice_database_session::{
+use wild_doc_script::{
     search::{self, Search, SearchJoin},
-    Activity, CollectionRow, Condition, Uuid,
+    Activity, CollectionRow, Condition, IncludeAdaptor, Uuid, Vars, WildDocValue,
 };
-use wild_doc_script::{Vars, WildDocValue};
 
 use crate::{r#const::*, xml_util};
 
 use super::Parser;
 
-impl Parser {
+impl<I: IncludeAdaptor + Send> Parser<I> {
     fn collection_id(&self, vars: &Vars) -> Option<NonZeroI32> {
         if let Some(collection_name) = vars.get(&*COLLECTION) {
             let collection_name = collection_name.as_string();
@@ -190,20 +189,20 @@ impl Parser {
                     let name = eet.name();
                     match name.local().as_bytes() {
                         b"row" => futs.push(
-                            Self::condition_row(Arc::clone(&*METHOD), Arc::clone(&*VALUE), attr)
+                            Self::condition_row(Arc::clone(&METHOD), Arc::clone(&VALUE), attr)
                                 .boxed_local(),
                         ),
                         b"field" => futs.push(
                             Self::condition_field(
-                                Arc::clone(&*NAME),
-                                Arc::clone(&*METHOD),
-                                Arc::clone(&*VALUE),
+                                Arc::clone(&NAME),
+                                Arc::clone(&METHOD),
+                                Arc::clone(&VALUE),
                                 attr,
                             )
                             .boxed_local(),
                         ),
                         b"uuid" => {
-                            futs.push(Self::condition_uuid(Arc::clone(&*VALUE), attr).boxed_local())
+                            futs.push(Self::condition_uuid(Arc::clone(&VALUE), attr).boxed_local())
                         }
                         b"depend" => {
                             if let Some(c) = self.condition_depend(attr).await {

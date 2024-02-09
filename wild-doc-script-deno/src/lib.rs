@@ -279,7 +279,7 @@ fn v(
     }
 }
 
-fn get_contents(
+fn get_contents<I: IncludeAdaptor + Send>(
     scope: &mut v8::HandleScope,
     args: v8::FunctionCallbackArguments,
     mut retval: v8::ReturnValue,
@@ -289,8 +289,7 @@ fn get_contents(
         .and_then(|v| v.run(scope))
     {
         let include_adaptor = unsafe {
-            &*(v8::Local::<v8::External>::cast(include_adaptor).value()
-                as *const Mutex<Box<dyn IncludeAdaptor + Send>>)
+            &*(v8::Local::<v8::External>::cast(include_adaptor).value() as *const Mutex<I>)
         };
         let filename = args
             .get(0)
@@ -306,12 +305,8 @@ fn get_contents(
 }
 
 #[async_trait(?Send)]
-impl WildDocScript for Deno {
-    fn new(
-        include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
-        cache_dir: PathBuf,
-        stack: &Stack,
-    ) -> Result<Self> {
+impl<I: IncludeAdaptor + Send> WildDocScript<I> for Deno {
+    fn new(include_adaptor: Arc<Mutex<I>>, cache_dir: PathBuf, stack: &Stack) -> Result<Self> {
         v8::V8::set_flags_from_string("--stack_size=10240");
         let mut worker = MainWorker::bootstrap_from_options(
             deno_core::resolve_url("wd://main").unwrap(),
@@ -344,7 +339,7 @@ impl WildDocScript for Deno {
             ) = (
                 v8::Local::new(scope, wd).to_object(scope),
                 v8::String::new(scope, "get_contents"),
-                v8::Function::new(scope, get_contents),
+                v8::Function::new(scope, get_contents::<I>),
                 v8::String::new(scope, "include_adaptor"),
                 v8::String::new(scope, "stack"),
                 v8::String::new(scope, "v"),
@@ -352,8 +347,7 @@ impl WildDocScript for Deno {
             ) {
                 let v8ext_include_adaptor = v8::External::new(
                     scope,
-                    include_adaptor.as_ref() as *const Mutex<Box<dyn IncludeAdaptor + Send>>
-                        as *mut c_void,
+                    include_adaptor.as_ref() as *const Mutex<I> as *mut c_void,
                 );
                 wd.set(
                     scope,

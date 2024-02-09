@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use wild_doc_script::{Vars, WildDocValue};
+use wild_doc_script::{IncludeAdaptor, Vars, WildDocValue};
 
 use super::{Parser, SessionState};
 
 use crate::r#const::*;
 
-impl Parser {
+impl<I: IncludeAdaptor + Send> Parser<I> {
     #[must_use]
     pub(super) fn sessions(&self, vars: Vars) -> Vars {
         let mut r = Vars::new();
@@ -40,7 +40,7 @@ impl Parser {
 
                 let expire = vars
                     .get(&*EXPIRE)
-                    .map_or_else(|| Arc::clone(&*_BLANK), |v| v.as_string());
+                    .map_or_else(|| Arc::clone(&_BLANK), |v| v.as_string());
                 let expire = if expire.len() > 0 {
                     expire.parse::<i64>().ok()
                 } else {
@@ -74,16 +74,16 @@ impl Parser {
     pub(super) fn session_sequence(&self, vars: Vars) -> Vars {
         let mut str_max = vars
             .get(&*MAX)
-            .map_or(Arc::clone(&*_BLANK), |v| v.as_string());
+            .map_or(Arc::clone(&_BLANK), |v| v.as_string());
         if str_max.as_str() == "" {
-            str_max = Arc::clone(&*SESSION_SEQUENCE_MAX);
+            str_max = Arc::clone(&SESSION_SEQUENCE_MAX);
         }
 
         let mut str_current = vars
             .get(&*CURRENT)
-            .map_or(Arc::clone(&*_BLANK), |v| v.as_string());
+            .map_or(Arc::clone(&_BLANK), |v| v.as_string());
         if str_current.as_str() == "" {
-            str_current = Arc::clone(&*SESSION_SEQUENCE_CURRENT);
+            str_current = Arc::clone(&SESSION_SEQUENCE_CURRENT);
         }
 
         let mut r = Vars::new();

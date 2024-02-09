@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use maybe_xml::token::prop::Attributes;
-use wild_doc_script::{Vars, WildDocValue};
+use wild_doc_script::{IncludeAdaptor, Vars, WildDocValue};
 
 use crate::xml_util;
 
 use super::Parser;
 
-impl Parser {
+impl<I: IncludeAdaptor + Send> Parser<I> {
     pub(super) async fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes<'_>) {
         for attr in attributes.into_iter() {
             let name = attr.name().as_str();

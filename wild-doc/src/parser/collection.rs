@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use wild_doc_script::{Vars, WildDocValue};
+use wild_doc_script::{IncludeAdaptor, Vars, WildDocValue};
 
 use super::Parser;
 
 use crate::r#const::*;
 
-impl Parser {
+impl<I: IncludeAdaptor + Send> Parser<I> {
     #[must_use]
     pub(super) fn collections(&self, vars: Vars) -> Vars {
         let mut r = Vars::new();

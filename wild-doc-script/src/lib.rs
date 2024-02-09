@@ -9,18 +9,20 @@ pub use async_trait::async_trait;
 pub use include::IncludeAdaptor;
 pub use serde_json;
 pub use stack::Stack;
-pub use value::{SearchResult, SessionSearchResult, Vars, WildDocValue};
+pub use value::{SessionSearchResult, Vars, WildDocValue};
+
+pub use semilattice_database_session::{
+    search, Activity, CollectionRow, Condition, CustomOrderKey, CustomSort, DataOption, Depends,
+    FieldName, Order, Pend, SearchResult, Session, SessionCustomOrder, SessionDatabase,
+    SessionOrder, SessionOrderKey, SessionRecord, Term, Uuid,
+};
 
 use anyhow::Result;
 use parking_lot::Mutex;
 
 #[async_trait(?Send)]
-pub trait WildDocScript {
-    fn new(
-        include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
-        cache_dir: PathBuf,
-        stack: &Stack,
-    ) -> Result<Self>
+pub trait WildDocScript<I: IncludeAdaptor + Send> {
+    fn new(include_adaptor: Arc<Mutex<I>>, cache_dir: PathBuf, stack: &Stack) -> Result<Self>
     where
         Self: Sized;
     async fn evaluate_module(&mut self, file_name: &str, src: &str, stack: &Stack) -> Result<()>;

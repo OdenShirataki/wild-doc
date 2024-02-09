@@ -4,11 +4,10 @@ mod custom_sort_session;
 use std::sync::Arc;
 
 use anyhow::Result;
-use semilattice_database_session::{
-    CustomOrderKey, FieldName, Order, SearchResult, SessionOrder, SessionOrderKey,
-    SessionSearchResult,
+use wild_doc_script::{
+    CustomOrderKey, FieldName, IncludeAdaptor, Order, SearchResult, SessionOrder, SessionOrderKey,
+    SessionSearchResult, Vars, WildDocValue,
 };
-use wild_doc_script::{Vars, WildDocValue};
 
 use self::{custom_sort::WdCustomSort, custom_sort_session::WdCustomSortSession};
 
@@ -16,7 +15,7 @@ use super::Parser;
 
 use crate::r#const::*;
 
-impl Parser {
+impl<I: IncludeAdaptor + Send> Parser<I> {
     pub(crate) async fn sort(
         &mut self,
         xml: &[u8],

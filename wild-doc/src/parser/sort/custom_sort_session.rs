@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, num::NonZeroI64, sync::Arc};
 
-use semilattice_database_session::{SessionCustomOrder, SessionSearchResult};
+use wild_doc_script::{SessionCustomOrder, SessionSearchResult};
 
 pub struct WdCustomSortSession {
     pub(super) result: Arc<SessionSearchResult>,

@@ -1,12 +1,12 @@
 use anyhow::Result;
 use maybe_xml::{token::Ty, Reader};
-use wild_doc_script::Vars;
+use wild_doc_script::{IncludeAdaptor, Vars};
 
 use crate::{r#const::*, xml_util};
 
 use super::Parser;
 
-impl Parser {
+impl<I: IncludeAdaptor + Send> Parser<I> {
     pub(super) async fn case(
         &mut self,
         xml: &[u8],

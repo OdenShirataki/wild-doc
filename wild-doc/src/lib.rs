@@ -1,13 +1,12 @@
+mod r#const;
 mod include;
 mod parser;
 mod script;
 mod xml_util;
-mod r#const;
 
 pub use include::IncludeLocal;
-pub use semilattice_database_session::{
-    search, Activity, CollectionRow, Condition, DataOption, FieldName, SearchResult,
-    SessionDatabase, Term,
+pub use wild_doc_script::{
+    search, Activity, CollectionRow, DataOption, FieldName, SessionDatabase, Term,
 };
 
 use std::{
@@ -37,15 +36,15 @@ impl WildDocResult {
     }
 }
 
-pub struct WildDoc {
+pub struct WildDoc<I: IncludeAdaptor + Send> {
     database: Arc<RwLock<SessionDatabase>>,
-    default_include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
+    default_include_adaptor: Arc<Mutex<I>>,
     cache_dir: PathBuf,
 }
-impl WildDoc {
+impl<DI: IncludeAdaptor + Send> WildDoc<DI> {
     pub fn new<P: AsRef<Path>>(
         dir: P,
-        default_include_adaptor: Box<dyn IncludeAdaptor + Send>,
+        default_include_adaptor: DI,
         collection_settings: Option<HashMap<String, DataOption>>,
         relation_allocation_lot: u32,
     ) -> Self {
@@ -70,11 +69,11 @@ impl WildDoc {
         &self.database
     }
 
-    fn run_inner(
+    fn run_inner<I: IncludeAdaptor + Send>(
         &mut self,
         xml: &[u8],
         input_json: &[u8],
-        include_adaptor: Arc<Mutex<Box<dyn IncludeAdaptor + Send>>>,
+        include_adaptor: Arc<Mutex<I>>,
     ) -> Result<WildDocResult> {
         let mut parser = Parser::new(
             Arc::clone(&self.database),
@@ -107,11 +106,11 @@ impl WildDoc {
         self.run_inner(xml, input_json, Arc::clone(&self.default_include_adaptor))
     }
 
-    pub fn run_with_include_adaptor(
+    pub fn run_with_include_adaptor<I: IncludeAdaptor + Send>(
         &mut self,
         xml: &[u8],
         input_json: &[u8],
-        include_adaptor: Box<dyn IncludeAdaptor + Send>,
+        include_adaptor: I,
     ) -> Result<WildDocResult> {
         self.run_inner(xml, input_json, Arc::new(Mutex::new(include_adaptor)))
     }

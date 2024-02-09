@@ -1,6 +1,6 @@
 [package]
 name = "wild-doc"
-version = "0.108.4"
+version = "0.109.0"
 edition = "2021"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
@@ -36,8 +36,6 @@ indexmap.workspace = true
 anyhow.workspace = true
 futures.workspace = true
 
-semilattice-database-session.workspace = true
-
 wild-doc-script.workspace = true
 
 chrono = "0.4.31"
@@ -46,6 +44,7 @@ maybe_xml = "0.10.1"
 async-recursion = "1.0.5"
 tokio = "1.35.1"
 once_cell = "1.19.0"
+arcstr = "1.1.5"
 
 [dependencies.wild-doc-script-deno]
 version = "0.20"

@@ -1,13 +1,13 @@
 use std::{path::Path, sync::Arc};
 
 use anyhow::Result;
-use wild_doc_script::Vars;
+use wild_doc_script::{IncludeAdaptor, Vars};
 
 use crate::r#const::*;
 
 use super::Parser;
 
-impl Parser {
+impl<I: IncludeAdaptor + Send> Parser<I> {
     pub(super) async fn get_include_content(
         &mut self,
         attr: Vars,
@@ -21,7 +21,7 @@ impl Parser {
                 .include(Path::new(src.as_str()))
                 .map_or_else(
                     || {
-                        let mut r = (None, Arc::clone(&*_BLANK));
+                        let mut r = (None, Arc::clone(&_BLANK));
                         if let Some(substitute) = attr.get(&*SUBSTITUTE) {
                             let substitute = substitute.as_string();
                             if let Some(xml) = self
