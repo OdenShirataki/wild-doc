@@ -124,7 +124,7 @@ impl ModuleLoader for WdModuleLoader {
                     ModuleSourceCode::String(
                         if string_specifier.ends_with(".ts") {
                             deno_ast::parse_module(deno_ast::ParseParams {
-                                specifier: string_specifier,
+                                specifier: module_specifier.clone(),
                                 text_info: deno_ast::SourceTextInfo::new(code.into()),
                                 media_type: deno_ast::MediaType::TypeScript,
                                 capture_tokens: true,
