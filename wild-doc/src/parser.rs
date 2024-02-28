@@ -418,7 +418,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
         for (key, value) in vars.into_iter() {
             if key.starts_with("wd-tag:name") {
                 name = value.as_string();
-            } else if key.starts_with("wd-attr:replace") {
+            } else if key.starts_with("wd:attr") {
                 let attr = xml_util::quot_unescape(&value.as_string());
                 if attr.len() > 0 {
                     html_attr.push(b' ');

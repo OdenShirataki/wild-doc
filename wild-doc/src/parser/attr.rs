@@ -14,7 +14,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
             if let Some(value) = attr.value() {
                 let value = value.as_str();
                 let (new_name, new_value) = self.attibute_var_or_script(name, value).await;
-                if new_name == "wd-attr:replace" {
+                if new_name == "wd:attr" {
                     if let Some(value) = new_value {
                         if !value.is_null() {
                             r.push(b' ');

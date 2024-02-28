@@ -23,4 +23,4 @@ async-trait = "0.1.74"
 futures = "0.3.29"
 
 wild-doc-script = { version = "0.31.0", path = "wild-doc-script" }
-wild-doc = { version = "0.109", path = "wild-doc" }
+wild-doc = { version = "0.110", path = "wild-doc" }
