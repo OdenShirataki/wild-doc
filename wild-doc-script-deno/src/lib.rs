@@ -305,9 +305,10 @@ impl<I: IncludeAdaptor + Send> WildDocScript<I> for Deno {
             PermissionsContainer::allow_all(),
             WorkerOptions {
                 module_loader: WdModuleLoader::new(cache_dir),
-                startup_snapshot: Some(deno_core::Snapshot::Static(include_bytes!(
-                    "../runtime.bin"
-                ))),
+                startup_snapshot: Some(deno_core::Snapshot::Static(include_bytes!(concat!(
+                    env!("OUT_DIR"),
+                    "/runtime.bin"
+                )))),
                 ..Default::default()
             },
         );
