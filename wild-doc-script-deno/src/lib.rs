@@ -8,7 +8,7 @@ use std::{
 };
 
 use deno_runtime::{
-    deno_core::{self, anyhow::Result, serde_v8, ModuleSpecifier},
+    deno_core::{self, ModuleSpecifier, anyhow::Result, serde_v8},
     deno_napi::v8::{self, HandleScope},
     permissions::PermissionsContainer,
     worker::{MainWorker, WorkerOptions},
@@ -16,8 +16,8 @@ use deno_runtime::{
 
 use parking_lot::Mutex;
 use wild_doc_script::{
-    async_trait, serde_json, IncludeAdaptor, SearchResult, SessionSearchResult, Stack, Vars,
-    WildDocScript, WildDocValue,
+    IncludeAdaptor, SearchResult, SessionSearchResult, Stack, Vars, WildDocScript, WildDocValue,
+    async_trait, serde_json,
 };
 
 use module_loader::WdModuleLoader;
@@ -40,7 +40,7 @@ fn session_result2v8obj<'s>(
         let pkey = v8::Private::for_api(scope, v8str_inner.into());
         let v8ext_inner =
             v8::External::new(scope, result as *const SessionSearchResult as *mut c_void);
-        r.set_private(scope, pkey.into(), v8ext_inner.into());
+        r.set_private(scope, pkey, v8ext_inner.into());
 
         r.set_accessor(
             scope,
@@ -59,11 +59,9 @@ fn session_result2v8obj<'s>(
                         };
                         let rows = inner.rows();
                         let v8rows = v8::Array::new(scope, rows.len() as i32);
-                        let mut index = 0;
-                        for i in rows {
+                        for (index, i) in rows.iter().enumerate() {
                             let v8num = v8::BigInt::new_from_i64(scope, i.get());
-                            v8rows.set_index(scope, index, v8num.into());
-                            index += 1;
+                            v8rows.set_index(scope, index as u32, v8num.into());
                         }
                         rv.set(v8rows.into());
                     }
@@ -120,7 +118,7 @@ fn result2v8obj<'s>(
     ) {
         let pkey = v8::Private::for_api(scope, v8str_inner.into());
         let v8ext_inner = v8::External::new(scope, result as *const SearchResult as *mut c_void);
-        r.set_private(scope, pkey.into(), v8ext_inner.into());
+        r.set_private(scope, pkey, v8ext_inner.into());
 
         r.set_accessor(
             scope,
@@ -138,11 +136,9 @@ fn result2v8obj<'s>(
                         };
                         let rows = inner.rows();
                         let v8rows = v8::Array::new(scope, rows.len() as i32);
-                        let mut index = 0;
-                        for i in rows {
+                        for (index, i) in rows.iter().enumerate() {
                             let v8num = v8::Integer::new_from_unsigned(scope, i.get());
-                            v8rows.set_index(scope, index, v8num.into());
-                            index += 1;
+                            v8rows.set_index(scope, index as u32, v8num.into());
                         }
                         rv.set(v8rows.into());
                     }
@@ -189,36 +185,32 @@ fn wdmap2v8obj<'s>(wdv: &Vars, scope: &'s mut HandleScope) -> v8::Local<'s, v8::
     let root = v8::Object::new(scope);
     let mut obj_vars: Vec<(v8::Local<v8::Object>, &Vars)> = vec![(root, wdv)];
 
-    loop {
-        if let Some((current_obj, current_values)) = obj_vars.pop() {
-            for (key, value) in current_values.into_iter() {
-                if let Some(v8_key) = v8::String::new(scope, key) {
-                    match value {
-                        WildDocValue::Binary(v) => {
-                            let ab = v8::ArrayBuffer::with_backing_store(
-                                scope,
-                                &v8::ArrayBuffer::new_backing_store_from_vec(v.to_owned())
-                                    .make_shared(),
-                            );
-                            if let Some(v) = v8::Uint8Array::new(scope, ab, 0, ab.byte_length()) {
-                                current_obj.set(scope, v8_key.into(), v.into());
-                            }
+    while let Some((current_obj, current_values)) = obj_vars.pop() {
+        for (key, value) in current_values.into_iter() {
+            if let Some(v8_key) = v8::String::new(scope, key) {
+                match value {
+                    WildDocValue::Binary(v) => {
+                        let ab = v8::ArrayBuffer::with_backing_store(
+                            scope,
+                            &v8::ArrayBuffer::new_backing_store_from_vec(v.to_owned())
+                                .make_shared(),
+                        );
+                        if let Some(v) = v8::Uint8Array::new(scope, ab, 0, ab.byte_length()) {
+                            current_obj.set(scope, v8_key.into(), v.into());
                         }
-                        WildDocValue::Object(map) => {
-                            let new_obj = v8::Object::new(scope);
-                            obj_vars.push((new_obj, map));
-                            current_obj.set(scope, v8_key.into(), new_obj.into());
-                        }
-                        _ => {
-                            if let Ok(v) = serde_v8::to_v8(scope, value) {
-                                current_obj.set(scope, v8_key.into(), v.into());
-                            }
+                    }
+                    WildDocValue::Object(map) => {
+                        let new_obj = v8::Object::new(scope);
+                        obj_vars.push((new_obj, map));
+                        current_obj.set(scope, v8_key.into(), new_obj.into());
+                    }
+                    _ => {
+                        if let Ok(v) = serde_v8::to_v8(scope, value) {
+                            current_obj.set(scope, v8_key.into(), v);
                         }
                     }
                 }
             }
-        } else {
-            break;
         }
     }
 
@@ -247,7 +239,7 @@ fn wd2v8<'s>(wdv: &WildDocValue, scope: &'s mut HandleScope) -> Option<v8::Local
         }
         _ => {
             if let Ok(r) = serde_v8::to_v8(scope, wdv) {
-                return Some(r.into());
+                return Some(r);
             }
         }
     }
@@ -298,7 +290,7 @@ fn get_contents<I: IncludeAdaptor + Send>(
             .to_rust_string_lossy(scope);
         if let Some(contents) = include_adaptor.lock().include(Path::new(filename.as_str())) {
             if let Ok(r) = serde_v8::to_v8(scope, contents) {
-                retval.set(r.into());
+                retval.set(r);
             }
         }
     }

@@ -8,19 +8,17 @@ use std::{
 
 use deno_ast;
 use deno_core::{
-    error::AnyError, futures::future::FutureExt, ModuleLoader, ModuleSource, ModuleSpecifier,
-    ModuleType,
+    ModuleLoader, ModuleSource, ModuleSpecifier, ModuleType, error::AnyError,
+    futures::future::FutureExt,
 };
 use deno_runtime::{
     deno_core::{
-        self,
+        self, ModuleLoadResponse, ModuleSourceCode, RequestedModuleType, ResolutionKind,
         error::{custom_error, generic_error},
-        ModuleLoadResponse, ModuleSourceCode, RequestedModuleType, ResolutionKind,
     },
     deno_fetch::{
-        create_http_client,
-        reqwest::{self, header::LOCATION, Response, Url},
-        CreateHttpClientOptions,
+        CreateHttpClientOptions, create_http_client,
+        reqwest::{self, Response, Url, header::LOCATION},
     },
 };
 use ring::digest::{Context, SHA256};
@@ -72,14 +70,12 @@ impl ModuleLoader for WdModuleLoader {
                             buf
                         } else {
                             let url = module_specifier.to_string();
-                            let client = create_http_client(
-                                "wild-doc".into(),
-                                CreateHttpClientOptions::default(),
-                            )?;
+                            let client =
+                                create_http_client("wild-doc", CreateHttpClientOptions::default())?;
                             let resp = get_redirected_response(&client, url).await?;
                             match resp.bytes().await {
                                 Ok(resp) => {
-                                    if resp.len() > 0 {
+                                    if !resp.is_empty() {
                                         if let Some(dir) = module_cache_path.parent() {
                                             if let Ok(()) = std::fs::create_dir_all(dir) {
                                                 if let Ok(file) = OpenOptions::new()
@@ -253,7 +249,7 @@ pub fn checksum_gen(v: &[impl AsRef<[u8]>]) -> String {
     let digest = ctx.finish();
     let out: Vec<_> = digest
         .as_ref()
-        .into_iter()
+        .iter()
         .map(|byte| format!("{:02x}", byte))
         .collect();
     out.join("")

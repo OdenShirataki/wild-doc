@@ -1,3 +1,12 @@
+// Locks of the database are held across awaits of the database's own
+// operations, which never take the same lock again, and each run uses a
+// current thread runtime, so this cannot deadlock.
+#![allow(clippy::await_holding_lock)]
+
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
 mod r#const;
 mod include;
 mod parser;
@@ -6,7 +15,7 @@ mod xml_util;
 
 pub use include::IncludeLocal;
 pub use wild_doc_script::{
-    search, Activity, CollectionRow, DataOption, FieldName, SessionDatabase, Term,
+    Activity, CollectionRow, DataOption, FieldName, SessionDatabase, Term, search,
 };
 
 use std::{

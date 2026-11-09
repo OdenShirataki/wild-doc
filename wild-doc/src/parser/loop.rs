@@ -43,7 +43,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                         let key_name = attr.get(&*KEY);
                         if let Some(key_name) = key_name {
                             let mut key = 0;
-                            for value in vec.into_iter() {
+                            for value in vec.iter() {
                                 key += 1;
                                 let mut new_vars = Vars::new();
                                 new_vars.insert(Arc::clone(&var), value.clone());
@@ -55,7 +55,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                 self.stack.pop();
                             }
                         } else {
-                            for value in vec.into_iter() {
+                            for value in vec.iter() {
                                 let mut new_vars = Vars::new();
                                 new_vars.insert(Arc::clone(&var), value.clone());
                                 let mut pos = 0;
@@ -84,7 +84,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                 .await
                 .get(&*CONTINUE)
                 .and_then(|v| v.as_bool())
-                .map_or(false, |v| *v)
+                .is_some_and(|v| *v)
             {
                 let mut pos = 0;
                 r.extend(self.parse(xml, &mut pos).await?);

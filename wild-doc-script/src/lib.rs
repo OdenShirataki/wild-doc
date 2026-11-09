@@ -12,14 +12,15 @@ pub use stack::Stack;
 pub use value::{SessionSearchResult, Vars, WildDocValue};
 
 pub use semilattice_database_session::{
-    search, Activity, CollectionRow, Condition, CustomOrderKey, CustomSort, DataOption, Depends,
-    FieldName, Order, Pend, SearchResult, Session, SessionCustomOrder, SessionDatabase,
-    SessionOrder, SessionOrderKey, SessionRecord, Term, Uuid,
+    Activity, CollectionRow, Condition, CustomOrderKey, CustomSort, DataOption, Depends, FieldName,
+    Order, Pend, SearchResult, Session, SessionCustomOrder, SessionDatabase, SessionOrder,
+    SessionOrderKey, SessionRecord, Term, Uuid, search,
 };
 
 use anyhow::Result;
 use parking_lot::Mutex;
 
+#[allow(clippy::double_must_use)]
 #[async_trait(?Send)]
 pub trait WildDocScript<I: IncludeAdaptor + Send> {
     fn new(include_adaptor: Arc<Mutex<I>>, cache_dir: PathBuf, stack: &Stack) -> Result<Self>

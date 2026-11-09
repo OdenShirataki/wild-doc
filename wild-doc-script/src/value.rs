@@ -44,9 +44,7 @@ impl From<serde_json::Value> for WildDocValue {
             serde_json::Value::Bool(v) => Self::Bool(v),
             serde_json::Value::Number(v) => Self::Number(v),
             serde_json::Value::String(v) => Self::String(Arc::new(v)),
-            serde_json::Value::Array(v) => {
-                Self::Array(v.into_iter().map(|v| Self::from(v)).collect())
-            }
+            serde_json::Value::Array(v) => Self::Array(v.into_iter().map(Self::from).collect()),
             serde_json::Value::Object(v) => Self::Object(
                 v.into_iter()
                     .map(|(k, v)| (Arc::new(k), Self::from(v)))
@@ -73,7 +71,7 @@ impl std::fmt::Display for WildDocValue {
             Self::String(v) => v.fmt(f),
             Self::Array(v) => {
                 write!(f, "[")?;
-                let mut iter = v.into_iter();
+                let mut iter = v.iter();
                 if let Some(i) = iter.next() {
                     i.fmt(f)?;
                 }
@@ -114,25 +112,19 @@ impl WildDocValue {
     pub fn as_string(&self) -> Arc<String> {
         match self {
             Self::String(s) => Arc::clone(s),
-            Self::Binary(value) => Arc::new(unsafe { std::str::from_utf8_unchecked(value) }.into()),
+            Self::Binary(value) => Arc::new(String::from_utf8_lossy(value).into_owned()),
             _ => Arc::new(self.to_string()),
         }
     }
 
     #[inline(always)]
     pub fn is_object(&self) -> bool {
-        match self {
-            Self::Object(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Object(_))
     }
 
     #[inline(always)]
     pub fn is_null(&self) -> bool {
-        match self {
-            Self::Null => true,
-            _ => false,
-        }
+        matches!(self, Self::Null)
     }
 
     #[inline(always)]

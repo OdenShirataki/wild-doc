@@ -17,7 +17,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
             let var = var.as_string();
             if var.as_str() != "" {
                 let sessions = self.database.read().sessions();
-                r.insert(var.into(), json!(sessions).into());
+                r.insert(var, json!(sessions).into());
             }
         }
         r
@@ -31,17 +31,17 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                 let commit_on_close = vars
                     .get(&*COMMIT_ON_CLOSE)
                     .and_then(|v| v.as_bool())
-                    .map_or(false, |v| *v);
+                    .is_some_and(|v| *v);
 
                 let clear_on_close = vars
                     .get(&*CLEAR_ON_CLOSE)
                     .and_then(|v| v.as_bool())
-                    .map_or(false, |v| *v);
+                    .is_some_and(|v| *v);
 
                 let expire = vars
                     .get(&*EXPIRE)
                     .map_or_else(|| Arc::clone(&_BLANK), |v| v.as_string());
-                let expire = if expire.len() > 0 {
+                let expire = if !expire.is_empty() {
                     expire.parse::<i64>().ok()
                 } else {
                     None
@@ -56,7 +56,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                     }
                 }
                 if let Some(initialize) = vars.get(&*INITIALIZE) {
-                    if initialize.as_bool().map_or(false, |v| *v) {
+                    if initialize.as_bool().is_some_and(|v| *v) {
                         self.database.read().session_restart(&mut session, expire);
                     }
                 }
@@ -89,11 +89,8 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
         let mut r = Vars::new();
         if let Some(session_state) = self.sessions.last() {
             if let Some(cursor) = session_state.session.sequence_cursor() {
-                r.insert(str_max.into(), WildDocValue::Number(cursor.max.into()));
-                r.insert(
-                    str_current.into(),
-                    WildDocValue::Number(cursor.current.into()),
-                );
+                r.insert(str_max, WildDocValue::Number(cursor.max.into()));
+                r.insert(str_current, WildDocValue::Number(cursor.current.into()));
             }
         }
         r

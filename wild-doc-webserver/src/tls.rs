@@ -1,10 +1,10 @@
 use core::task::{Context, Poll};
-use futures_util::{ready, Future};
+use futures_util::{Future, ready};
 use hyper::server::{
     accept::Accept,
     conn::{AddrIncoming, AddrStream},
 };
-use rustls::{server::ResolvesServerCertUsingSni, sign::RsaSigningKey, ServerConfig};
+use rustls::{ServerConfig, server::ResolvesServerCertUsingSni, sign::RsaSigningKey};
 use std::{io, pin::Pin, sync::Arc};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
@@ -103,7 +103,7 @@ impl Accept for TlsAcceptor {
 }
 
 pub(super) fn error(err: String) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, err)
+    io::Error::other(err)
 }
 
 pub(super) fn add_certificate_to_resolver(
@@ -124,7 +124,7 @@ pub(super) fn add_certificate_to_resolver(
                 ),
             ),
         )
-        .expect(&("Invalid certificate for ".to_owned() + hostname));
+        .unwrap_or_else(|_| panic!("{}", ("Invalid certificate for ".to_owned() + hostname)));
 }
 
 pub(super) fn load_certs(filename: &str) -> io::Result<Vec<rustls::Certificate>> {

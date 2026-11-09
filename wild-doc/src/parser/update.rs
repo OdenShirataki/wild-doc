@@ -4,12 +4,11 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{anyhow, Result};
-use async_recursion::async_recursion;
-use base64::{engine::general_purpose, Engine};
+use anyhow::{Result, anyhow};
+use base64::{Engine, engine::general_purpose};
 use chrono::DateTime;
 use hashbrown::HashMap;
-use maybe_xml::{token::Ty, Reader};
+use maybe_xml::{Reader, token::Ty};
 
 use wild_doc_script::{
     Activity, CollectionRow, Depends, FieldName, IncludeAdaptor, Pend, SessionRecord, Term, Vars,
@@ -72,7 +71,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                 || attr
                     .get(&*WITHOUT_SESSION)
                     .and_then(|v| v.as_bool())
-                    .map_or(false, |v| *v)
+                    .is_some_and(|v| *v)
             {
                 for record in updates.into_iter() {
                     match record {
@@ -118,7 +117,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                         .update(&mut session_state.session, updates)
                         .await;
                     if let Some(commit) = attr.get(&*COMMIT) {
-                        if commit.as_bool().map_or(false, |v| *v) {
+                        if commit.as_bool().is_some_and(|v| *v) {
                             commit_rows = self
                                 .database
                                 .write()
@@ -153,7 +152,6 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
         Ok(r)
     }
 
-    #[async_recursion(?Send)]
     async fn update_pends(&self, depend: &CollectionRow, pends: Vec<Pend>) -> Vec<CollectionRow> {
         let mut rows = vec![];
         for pend in pends.into_iter() {
@@ -171,7 +169,8 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                         pends,
                     } => {
                         rows.extend(
-                            self.record_update(
+                            // record_update calls update_pends, so box this call.
+                            Box::pin(self.record_update(
                                 collection_id,
                                 row,
                                 activity,
@@ -187,7 +186,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                     },
                                 ),
                                 pends,
-                            )
+                            ))
                             .await,
                         );
                     }
@@ -198,6 +197,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
         rows
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn record_update(
         &self,
         collection_id: NonZeroI32,
@@ -214,11 +214,10 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
             if collection_id.get() > 0 {
                 let collection_row =
                     if let Some(collection) = self.database.write().collection_mut(collection_id) {
-                        Arc::new(
-                            collection
-                                .update(row, activity, term_begin, term_end, fields)
-                                .await,
-                        );
+                        let _: () = collection
+                            .update(row, activity, term_begin, term_end, fields)
+                            .await;
+                        Arc::new(());
                         Some(CollectionRow::new(collection_id, row))
                     } else {
                         None
@@ -230,7 +229,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                             .relation_mut()
                             .delete_pends_by_collection_row(collection_row)
                             .await;
-                        for d in depends.into_iter() {
+                        for d in depends.iter() {
                             self.database
                                 .write()
                                 .register_relation(&d.0, &d.1, collection_row)
@@ -256,15 +255,15 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                     };
                 if let Some(ref collection_row) = collection_row {
                     if let Depends::Overwrite(depends) = depends {
-                        for (depend_key, depend_row) in depends.into_iter() {
+                        for (depend_key, depend_row) in depends.iter() {
                             self.database
                                 .write()
-                                .register_relation(&depend_key, depend_row, collection_row)
+                                .register_relation(depend_key, depend_row, collection_row)
                                 .await;
                         }
                     }
                     rows.push(collection_row.clone());
-                    self.update_pends(&collection_row, pends).await;
+                    self.update_pends(collection_row, pends).await;
                 }
             }
         }
@@ -314,7 +313,6 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
         Err(DependError)
     }
 
-    #[async_recursion(?Send)]
     async fn make_update_struct<'a, 'b>(
         &mut self,
         xml: &'a [u8],
@@ -326,7 +324,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
         let mut updates = Vec::new();
         let mut on = None;
 
-        let reader = Reader::from_str(unsafe { std::str::from_utf8_unchecked(xml) });
+        let reader = Reader::from_str(std::str::from_utf8(xml)?);
         while let Some(token) = reader.tokenize(pos) {
             match token.ty() {
                 Ty::StartTag(st) => {
@@ -379,7 +377,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                                         {
                                                             if base64_decode
                                                                 .as_bool()
-                                                                .map_or(false, |v| *v)
+                                                                .is_some_and(|v| *v)
                                                             {
                                                                 value =
                                                                 general_purpose::STANDARD_NO_PAD
@@ -396,7 +394,8 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                                 b"pends" => {
                                                     //TODO: proc for _on_xml?
                                                     let (pends_tmp, _on_xml) =
-                                                        self.make_update_struct(xml, pos).await?;
+                                                        Box::pin(self.make_update_struct(xml, pos))
+                                                            .await?;
 
                                                     if let Some(key) = attr.get(&*KEY) {
                                                         pends.push(Pend {
@@ -410,14 +409,11 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                         }
                                         Ty::EmptyElementTag(eet) => {
                                             let name = eet.name();
-                                            match name.as_bytes() {
-                                                b"depend" => {
-                                                    let attr = self
-                                                        .vars_from_attibutes(eet.attributes())
-                                                        .await;
-                                                    self.depend(&attr, &mut depends)?;
-                                                }
-                                                _ => {}
+                                            if name.as_bytes() == b"depend" {
+                                                let attr = self
+                                                    .vars_from_attibutes(eet.attributes())
+                                                    .await;
+                                                self.depend(&attr, &mut depends)?;
                                             }
                                         }
                                         Ty::EndTag(et) => {
@@ -442,21 +438,21 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                     .and_then(|v| v.as_string().parse::<i64>().ok())
                                     .unwrap_or(0);
 
-                                let (collection_id, row) = if row < 0 {
-                                    (-collection_id, (-row) as u32)
+                                let collection_id = if row < 0 {
+                                    -collection_id
                                 } else {
-                                    (collection_id, row as u32)
+                                    collection_id
+                                };
+                                let Ok(row) = u32::try_from(row.unsigned_abs()) else {
+                                    return Err(anyhow!("invalid row"));
                                 };
                                 if attr
                                     .get(&*DELETE)
                                     .and_then(|v| v.as_bool())
-                                    .map_or(false, |v| *v)
+                                    .is_some_and(|v| *v)
                                 {
-                                    if row != 0 {
-                                        updates.push(SessionRecord::Delete {
-                                            collection_id,
-                                            row: unsafe { NonZeroU32::new_unchecked(row) },
-                                        });
+                                    if let Some(row) = NonZeroU32::new(row) {
+                                        updates.push(SessionRecord::Delete { collection_id, row });
                                     }
                                 } else {
                                     let mut activity = Activity::Active;
@@ -471,9 +467,9 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                     if let Some(str) = attr.get(&*TERM_BEGIN) {
                                         let str = str.as_string();
                                         let str = str.as_str();
-                                        if str != "" {
+                                        if !str.is_empty() {
                                             if let Ok(t) =
-                                                DateTime::parse_from_str(&str, "%Y-%m-%d %H:%M:%S")
+                                                DateTime::parse_from_str(str, "%Y-%m-%d %H:%M:%S")
                                                     .map(|v| v.timestamp())
                                             {
                                                 term_begin = Term::Overwrite(t as u64)
@@ -484,9 +480,9 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                     if let Some(str) = attr.get(&*TERM_END) {
                                         let str = str.as_string();
                                         let str = str.as_str();
-                                        if str != "" {
+                                        if !str.is_empty() {
                                             if let Ok(t) =
-                                                DateTime::parse_from_str(&str, "%Y-%m-%d %H:%M:%S")
+                                                DateTime::parse_from_str(str, "%Y-%m-%d %H:%M:%S")
                                                     .map(|v| v.timestamp())
                                             {
                                                 term_end = Term::Overwrite(t as u64)
@@ -508,7 +504,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                         let inherit_depend_if_empty = if let Some(str) =
                                             attr.get(&*INHERIT_DEPEND_IF_EMPTY)
                                         {
-                                            str.as_bool().map_or(false, |v| *v)
+                                            str.as_bool().is_some_and(|v| *v)
                                         } else {
                                             false
                                         };
@@ -520,7 +516,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                             term_end,
                                             fields,
                                             depends: if inherit_depend_if_empty
-                                                && depends.len() == 0
+                                                && depends.is_empty()
                                             {
                                                 Depends::Default
                                             } else {

@@ -47,7 +47,7 @@ impl WildDocClient {
     pub fn exec(&mut self, xml: &str, input_json: &str) -> std::io::Result<WildDocResult> {
         let mut include_cache = HashMap::new();
 
-        if input_json.len() > 0 {
+        if !input_json.is_empty() {
             self.sock.write_all(input_json.as_bytes())?;
         }
         self.sock.write_all(&[0])?;
@@ -85,7 +85,7 @@ impl WildDocClient {
 
                                 let len = include_xml.len() as u64;
                                 self.sock.write_all(&len.to_be_bytes())?;
-                                self.sock.write_all(&include_xml)?;
+                                self.sock.write_all(include_xml)?;
                             }
                         }
                     }
@@ -105,15 +105,21 @@ impl WildDocClient {
         reader.read_exact(&mut len)?;
         let len = u64::from_be_bytes(len) as usize;
 
-        let mut recv_body = Vec::<u8>::with_capacity(len);
-        unsafe {
-            recv_body.set_len(len);
+        // read only what actually arrives, instead of trusting the length.
+        let mut recv_body = Vec::new();
+        reader
+            .by_ref()
+            .take(len as u64)
+            .read_to_end(&mut recv_body)?;
+        if recv_body.len() != len {
+            return Err(std::io::ErrorKind::UnexpectedEof.into());
         }
-        reader.read_exact(recv_body.as_mut_slice())?;
 
         let mut recv_options = Vec::new();
         reader.read_until(0, &mut recv_options)?;
-        recv_options.remove(recv_options.len() - 1);
+        if recv_options.last() == Some(&0) {
+            recv_options.pop();
+        }
 
         Ok(WildDocResult {
             body: recv_body,
@@ -241,6 +247,6 @@ mod tests {
                 </ul>
             </wd:result>
         "#,"").unwrap();
-        println!("{}", std::str::from_utf8(&r.body()).unwrap());
+        println!("{}", std::str::from_utf8(r.body()).unwrap());
     }
 }

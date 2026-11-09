@@ -5,14 +5,13 @@ use std::{
 };
 
 use anyhow::Result;
-use async_recursion::async_recursion;
 use chrono::DateTime;
 use futures::FutureExt;
 use hashbrown::HashMap;
-use maybe_xml::{token::Ty, Reader};
+use maybe_xml::{Reader, token::Ty};
 use wild_doc_script::{
-    search::{self, Search, SearchJoin},
     Activity, CollectionRow, Condition, IncludeAdaptor, Uuid, Vars, WildDocValue,
+    search::{self, Search, SearchJoin},
 };
 
 use crate::{r#const::*, xml_util};
@@ -28,7 +27,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
             }
             if collection_name.as_str() != "" {
                 if let Some(value) = vars.get(&*CREATE_COLLECTION_IF_NOT_EXISTS) {
-                    if value.as_bool().map_or(false, |v| *v) {
+                    if value.as_bool().is_some_and(|v| *v) {
                         return Some(
                             self.database
                                 .write()
@@ -55,7 +54,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                     let search = Search::new(collection_id, condition, join);
                     let var = var.as_string();
                     if var.as_str() != "" {
-                        let result = search.result(&*self.database.read()).await;
+                        let result = search.result(&self.database.read()).await;
                         let mut found_session = false;
                         for i in (0..self.sessions.len()).rev() {
                             if let Some(state) = self.sessions.get(i) {
@@ -129,7 +128,6 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
         (conditions, join, result_info)
     }
 
-    #[async_recursion(?Send)]
     async fn condition_loop<'a>(
         &mut self,
         xml: &'a [u8],
@@ -146,27 +144,28 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
         let mut futs = vec![];
 
         let mut deps = 0;
-        let reader = Reader::from_str(unsafe { std::str::from_utf8_unchecked(xml) });
+        let reader = Reader::from_str(crate::xml_util::valid_utf8_prefix(xml));
 
         while let Some(token) = reader.tokenize(pos) {
             match token.ty() {
                 Ty::StartTag(st) => {
                     deps += 1;
                     let name = st.name();
-                    if let None = name.namespace_prefix() {
+                    if name.namespace_prefix().is_none() {
                         match name.local().as_bytes() {
                             b"narrow" => {
                                 if let Ok(inner_xml) = self.parse(xml, pos).await.as_mut() {
                                     let mut _pos = 0;
                                     let (cond, _, _) =
-                                        self.condition_loop(&inner_xml, &mut _pos).await;
+                                        Box::pin(self.condition_loop(inner_xml, &mut _pos)).await;
                                     result_conditions.push(Condition::Narrow(cond));
                                 }
                             }
                             b"wide" => {
                                 if let Ok(inner_xml) = self.parse(xml, pos).await {
                                     let _pos = 0;
-                                    let (cond, _, _) = self.condition_loop(&inner_xml, pos).await;
+                                    let (cond, _, _) =
+                                        Box::pin(self.condition_loop(&inner_xml, pos)).await;
                                     result_conditions.push(Condition::Wide(cond));
                                 }
                             }
@@ -260,7 +259,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                 match method.as_str() {
                     "in" => {
                         let v: Vec<_> = value.split(',').flat_map(|s| s.parse::<isize>()).collect();
-                        if v.len() > 0 {
+                        if !v.is_empty() {
                             return Some(Condition::Row(search::Number::In(v)));
                         }
                     }
@@ -299,9 +298,9 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                 .then(|| {
                     let v: Vec<_> = value
                         .split(',')
-                        .flat_map(|s| Uuid::from_str(&s).map(|uuid| uuid.as_u128()))
+                        .flat_map(|s| Uuid::from_str(s).map(|uuid| uuid.as_u128()))
                         .collect();
-                    (v.len() > 0).then(|| Condition::Uuid(v))
+                    (!v.is_empty()).then_some(Condition::Uuid(v))
                 })
                 .and_then(|v| v)
         } else {
@@ -333,15 +332,15 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                         "min" => Some(search::Field::Min(value.to_string().into())),
                         "max" => Some(search::Field::Max(value.to_string().into())),
                         "partial" => Some(search::Field::Partial(value)),
-                        "forward" => Some(search::Field::Forward(value.into())),
-                        "backward" => Some(search::Field::Backward(value.into())),
+                        "forward" => Some(search::Field::Forward(value)),
+                        "backward" => Some(search::Field::Backward(value)),
                         "range" => {
                             let s: Vec<_> = value.split("..").collect();
                             (s.len() == 2).then(|| search::Field::Range(s[0].into(), s[1].into()))
                         }
-                        "value_forward" => Some(search::Field::ValueForward(value.into())),
-                        "value_backward" => Some(search::Field::ValueBackward(value.into())),
-                        "value_partial" => Some(search::Field::ValuePartial(value.into())),
+                        "value_forward" => Some(search::Field::ValueForward(value)),
+                        "value_backward" => Some(search::Field::ValueBackward(value)),
+                        "value_partial" => Some(search::Field::ValuePartial(value)),
                         _ => None,
                     }
                     .map(|method| Condition::Field(name, method))
@@ -365,7 +364,8 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                 if let Some(collection_id) = self.collection_id(attr) {
                     let relation_key = attr.get(&*RELATION).map(|v| v.as_string());
 
-                    let (conditions, join, _result_info) = self.condition_loop(xml, pos).await;
+                    let (conditions, join, _result_info) =
+                        Box::pin(self.condition_loop(xml, pos)).await;
                     search_map.insert(
                         name,
                         SearchJoin::new(collection_id, conditions, relation_key, join),

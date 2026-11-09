@@ -1,7 +1,8 @@
 [package]
 name = "wild-doc-script"
-version = "0.31.0"
-edition = "2021"
+version = "0.32.0"
+edition = "2024"
+rust-version = "1.85"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
 
@@ -29,4 +30,4 @@ indexmap.workspace = true
 parking_lot.workspace = true
 async-trait.workspace = true
 
-semilattice-database-session = { version = "0.48.0" }
+semilattice-database-session = { version = "0.49.0", path = "../../semilattice-database/semilattice-database-session" }

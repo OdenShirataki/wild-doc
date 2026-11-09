@@ -1,9 +1,9 @@
-use once_cell::sync::Lazy;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
+// static, not const: a const LazyLock is created again on every use.
 macro_rules! def {
-    ($var:ident,$val:expr) => {
-        pub const $var: Lazy<Arc<String>> = Lazy::new(|| Arc::new($val.into()));
+    ($var:ident,$val:expr_2021) => {
+        pub static $var: LazyLock<Arc<String>> = LazyLock::new(|| Arc::new($val.into()));
     };
 }
 

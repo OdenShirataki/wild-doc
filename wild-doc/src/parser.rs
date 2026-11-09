@@ -12,16 +12,15 @@ mod update;
 use std::{path::Path, sync::Arc};
 
 use anyhow::Result;
-use async_recursion::async_recursion;
 use hashbrown::HashMap;
 use parking_lot::{Mutex, RwLock};
 
 use maybe_xml::{
-    token::{
-        prop::{Attributes, TagName},
-        Ty,
-    },
     Reader,
+    token::{
+        Ty,
+        prop::{Attributes, TagName},
+    },
 };
 use wild_doc_script::{
     IncludeAdaptor, Session, SessionDatabase, Stack, Vars, WildDocScript, WildDocValue,
@@ -170,16 +169,24 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
 
     fn is_wd_tag(name: &TagName) -> bool {
         name.namespace_prefix()
-            .map_or(false, |v| v.as_bytes() == b"wd")
+            .is_some_and(|v| v.as_bytes() == b"wd")
     }
 
-    #[async_recursion(?Send)]
-    pub async fn parse(&mut self, xml: &[u8], pos: &mut usize) -> Result<Vec<u8>> {
+    /// Parses the xml. Tags call this recursively, so the future is boxed.
+    pub fn parse<'a>(
+        &'a mut self,
+        xml: &'a [u8],
+        pos: &'a mut usize,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<u8>>> + 'a>> {
+        Box::pin(self.parse_inner(xml, pos))
+    }
+
+    async fn parse_inner(&mut self, xml: &[u8], pos: &mut usize) -> Result<Vec<u8>> {
         let mut r: Vec<u8> = Vec::new();
 
         let mut deps = 0;
         let mut pos_before = 0;
-        let reader = Reader::from_str(unsafe { std::str::from_utf8_unchecked(xml) });
+        let reader = Reader::from_str(std::str::from_utf8(xml)?);
 
         while let Some(token) = reader.tokenize(pos) {
             match token.ty() {
@@ -187,16 +194,13 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                     if let Some(i) = pi.instructions() {
                         let target = pi.target();
                         if let Some(script) = self.scripts.get_mut(target.as_str()) {
-                            if let Err(e) = script
+                            script
                                 .evaluate_module(
                                     self.include_stack.last().map_or("", |v| v),
                                     i.as_str(),
                                     &self.stack,
                                 )
-                                .await
-                            {
-                                return Err(e);
-                            }
+                                .await?;
                         } else {
                             r.extend(i.as_bytes());
                         }
@@ -247,24 +251,27 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                             match name.local().as_bytes() {
                                 b"session" => {
                                     let attr = self.vars_from_attibutes(st.attributes()).await;
-                                    if let Some(session) = self.session(attr) {
-                                        self.sessions.push(session);
-                                        r.extend(self.parse(xml, pos).await?);
-                                        if let Some(ref mut session_state) = self.sessions.pop() {
-                                            if session_state.commit_on_close {
-                                                self.database
-                                                    .write()
-                                                    .commit(&mut session_state.session)
-                                                    .await;
-                                            } else if session_state.clear_on_close {
-                                                let _ = self
-                                                    .database
-                                                    .write()
-                                                    .session_clear(&mut session_state.session);
+                                    match self.session(attr) {
+                                        Some(session) => {
+                                            self.sessions.push(session);
+                                            r.extend(self.parse(xml, pos).await?);
+                                            if let Some(ref mut session_state) = self.sessions.pop()
+                                            {
+                                                if session_state.commit_on_close {
+                                                    self.database
+                                                        .write()
+                                                        .commit(&mut session_state.session)
+                                                        .await;
+                                                } else if session_state.clear_on_close {
+                                                    self.database
+                                                        .write()
+                                                        .session_clear(&mut session_state.session);
+                                                }
                                             }
                                         }
-                                    } else {
-                                        r.extend(self.parse(xml, pos).await?);
+                                        _ => {
+                                            r.extend(self.parse(xml, pos).await?);
+                                        }
                                     }
                                 }
                                 b"session_sequence_cursor" => {
@@ -333,12 +340,12 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                     if let Some(value) =
                                         self.vars_from_attibutes(st.attributes()).await.get(&*VALUE)
                                     {
-                                        if value.as_bool().map_or(false, |v| *v) {
+                                        if value.as_bool().is_some_and(|v| *v) {
                                             matched = true;
                                             r.extend(self.parse(xml, pos).await?);
                                         }
                                     }
-                                    if matched == false {
+                                    if !matched {
                                         xml_util::to_end(xml, pos);
                                     }
                                 }
@@ -420,7 +427,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                 name = value.as_string();
             } else if key.starts_with("wd:attr") {
                 let attr = xml_util::quot_unescape(&value.as_string());
-                if attr.len() > 0 {
+                if !attr.is_empty() {
                     html_attr.push(b' ');
                     html_attr.extend(attr.as_bytes());
                 }

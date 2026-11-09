@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use anyhow::Result;
 
 use parking_lot::Mutex;
-use wild_doc_script::{async_trait, IncludeAdaptor, Stack, WildDocScript, WildDocValue};
+use wild_doc_script::{IncludeAdaptor, Stack, WildDocScript, WildDocValue, async_trait};
 
 pub struct Var {}
 
@@ -58,7 +58,7 @@ impl<I: IncludeAdaptor + Send> WildDocScript<I> for Var {
                                         return Ok(WildDocValue::Array(
                                             result
                                                 .rows()
-                                                .into_iter()
+                                                .iter()
                                                 .map(|v| WildDocValue::Number(v.get().into()))
                                                 .collect(),
                                         ));
@@ -77,7 +77,7 @@ impl<I: IncludeAdaptor + Send> WildDocScript<I> for Var {
                                         return Ok(WildDocValue::Array(
                                             result
                                                 .rows()
-                                                .into_iter()
+                                                .iter()
                                                 .map(|v| WildDocValue::Number(v.get().into()))
                                                 .collect(),
                                         ));

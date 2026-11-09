@@ -1,5 +1,5 @@
 use anyhow::Result;
-use maybe_xml::{token::Ty, Reader};
+use maybe_xml::{Reader, token::Ty};
 use wild_doc_script::{IncludeAdaptor, Vars};
 
 use crate::{r#const::*, xml_util};
@@ -16,7 +16,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
         let mut r = None;
 
         let cmp_src = attr.get(&*VALUE);
-        let reader = Reader::from_str(unsafe { std::str::from_utf8_unchecked(xml) });
+        let reader = Reader::from_str(std::str::from_utf8(xml)?);
         while let Some(token) = reader.tokenize(pos) {
             match token.ty() {
                 Ty::StartTag(st) => {
@@ -46,10 +46,8 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                         _ => {}
                     }
                 }
-                Ty::EndTag(t) => {
-                    if t.name().as_str() == "wd:case" {
-                        break;
-                    }
+                Ty::EndTag(t) if t.name().as_str() == "wd:case" => {
+                    break;
                 }
                 _ => {}
             }

@@ -1,7 +1,8 @@
 [package]
 name = "wild-doc-script-image"
-version = "0.0.7"
-edition = "2021"
+version = "0.0.8"
+edition = "2024"
+rust-version = "1.85"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
 
@@ -27,3 +28,6 @@ hashbrown.workspace = true
 wild-doc-script.workspace = true
 
 image = { version = "0.24.7", features = ["webp-encoder"] }
+
+[dev-dependencies]
+futures.workspace = true

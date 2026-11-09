@@ -22,5 +22,5 @@ indexmap = { version = "2.1.1", features = ["serde"] }
 async-trait = "0.1.74"
 futures = "0.3.29"
 
-wild-doc-script = { version = "0.31.0", path = "wild-doc-script" }
-wild-doc = { version = "0.110", path = "wild-doc" }
+wild-doc-script = { version = "0.32.0", path = "wild-doc-script" }
+wild-doc = { version = "0.111", path = "wild-doc" }

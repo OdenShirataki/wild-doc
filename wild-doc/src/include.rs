@@ -27,11 +27,11 @@ impl IncludeAdaptor for IncludeLocal {
             file_path.push(path);
             if let Ok(mut f) = std::fs::File::open(file_path) {
                 let mut contents = Vec::new();
-                if let Ok(_) = f.read_to_end(&mut contents) {
+                if f.read_to_end(&mut contents).is_ok() {
                     self.cache.insert(path.to_owned(), Arc::new(contents));
                 }
             }
         }
-        self.cache.get(path).map(|v| v.clone())
+        self.cache.get(path).cloned()
     }
 }

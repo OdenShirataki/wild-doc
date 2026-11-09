@@ -1,7 +1,8 @@
 [package]
 name = "wild-doc-script-deno"
-version = "0.20.12"
-edition = "2021"
+version = "0.21.0"
+edition = "2024"
+rust-version = "1.85"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
 

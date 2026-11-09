@@ -59,7 +59,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                         WildDocValue::Object(
                                             entity
                                                 .depends()
-                                                .into_iter()
+                                                .iter()
                                                 .map(|d| {
                                                     (
                                                         Arc::clone(d.key()),
@@ -95,15 +95,13 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                                 {
                                                     let entities = entity.fields();
                                                     field_mask
-                                                        .into_iter()
-                                                        .map(|field_name| {
+                                                        .iter()
+                                                        .filter_map(|field_name| {
                                                             let field_name = FieldName::new(
                                                                 field_name.to_string(),
                                                             );
-                                                            if let Some(bytes) =
-                                                                entities.get(&field_name)
-                                                            {
-                                                                Some((
+                                                            entities.get(&field_name).map(|bytes| {
+                                                                (
                                                                     field_name,
                                                                     if let Ok(str) =
                                                                         std::str::from_utf8(bytes)
@@ -116,12 +114,9 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                                                             bytes.to_owned(),
                                                                         )
                                                                     },
-                                                                ))
-                                                            } else {
-                                                                None
-                                                            }
+                                                                )
+                                                            })
                                                         })
-                                                        .flatten()
                                                         .collect()
                                                 } else {
                                                     IndexMap::new()
@@ -156,14 +151,16 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                         }
                     }
 
-                    if !find_session && row.get() > 0 {
+                    // rows of the main data are positive and fit in u32.
+                    let data_row = u32::try_from(row.get()).ok().and_then(NonZeroU32::new);
+                    if let (false, Some(row)) = (find_session, data_row) {
                         if let Some(collection) = self.database.read().collection(collection_id) {
-                            let row = unsafe { NonZeroU32::new_unchecked(row.get() as u32) };
-
-                            inner.insert(
-                                Arc::clone(&SERIAL),
-                                WildDocValue::Number((*collection.serial(row)).into()),
-                            );
+                            if let Some(serial) = collection.serial(row) {
+                                inner.insert(
+                                    Arc::clone(&SERIAL),
+                                    WildDocValue::Number((*serial).into()),
+                                );
+                            }
 
                             if let Some(uuid) = collection.uuid_string(row) {
                                 inner.insert(
@@ -204,7 +201,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                             .relation()
                                             .depends(None, &CollectionRow::new(collection_id, row))
                                             .into_iter()
-                                            .map(|d| {
+                                            .filter_map(|d| {
                                                 let collection_id = d.collection_id();
                                                 self.database.read().collection(collection_id).map(
                                                     |collection| {
@@ -245,7 +242,6 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                                     },
                                                 )
                                             })
-                                            .flatten()
                                             .collect(),
                                     ),
                                 ),
@@ -255,7 +251,7 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                         if let Some(field_mask) = vars.get(&*FIELDS) {
                                             if let WildDocValue::Array(field_mask) = field_mask {
                                                 field_mask
-                                                    .into_iter()
+                                                    .iter()
                                                     .map(|field_name| {
                                                         let field_name = field_name.as_string();
                                                         let bytes = collection

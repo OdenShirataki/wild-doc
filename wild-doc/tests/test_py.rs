@@ -19,4 +19,15 @@ def get_200():
 ?><wd:print value:py="get_200()" />"#;
     let r = wd.run(xml, b"").unwrap();
     println!("{}", std::str::from_utf8(r.body()).unwrap());
+    assert_eq!(r.body(), b"200");
+
+    // v() reads variables of wild-doc from Python.
+    let xml = br#"<wd:print value:py="v('input')['name'] + '!'" />"#;
+    let r = wd.run(xml, br#"{"name":"Noah"}"#).unwrap();
+    assert_eq!(r.body(), b"Noah!");
+
+    // an unknown variable is an empty dict.
+    let xml = br#"<wd:print value:py="len(v('nothing'))" />"#;
+    let r = wd.run(xml, b"").unwrap();
+    assert_eq!(r.body(), b"0");
 }

@@ -1,8 +1,8 @@
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use bytes::Bytes;
 use futures::stream::once;
 use hyper::{
-    header::HeaderName, http::HeaderValue, Body, HeaderMap, Method, Request, Response, StatusCode,
+    Body, HeaderMap, Method, Request, Response, StatusCode, header::HeaderName, http::HeaderValue,
 };
 use multer::Multipart;
 use serde_json::Value;
@@ -17,24 +17,78 @@ use std::{
 
 use wild_doc_client_lib::WildDocClient;
 
+/// Returns true if `path` only consists of normal names, so that joining it to
+/// a directory cannot point outside of that directory.
+fn is_plain_relative_path(path: &str) -> bool {
+    !path.contains(':')
+        && Path::new(path)
+            .components()
+            .all(|c| matches!(c, std::path::Component::Normal(_)))
+}
+
 fn get_static_filename(document_root: &Path, hostname: &str, path: &str) -> Option<PathBuf> {
-    if path.ends_with("/index.html") != true {
-        let mut filename = document_root.to_path_buf();
-        filename.push(hostname);
-        filename.push("static");
-        let mut path = path.to_owned();
-        path.remove(0);
-        filename.push(&path);
-        if path.ends_with("/") {
-            filename.push("index.html");
+    if path.ends_with("/index.html") {
+        return None;
+    }
+    let path = path.strip_prefix('/').unwrap_or(path);
+    // the host name and the path come from the request, so they must not
+    // point outside of the document root.
+    if hostname.is_empty()
+        || hostname.contains(['/', '\\'])
+        || !is_plain_relative_path(hostname)
+        || !(path.is_empty() || is_plain_relative_path(path))
+    {
+        return None;
+    }
+    let mut filename = document_root.to_path_buf();
+    filename.push(hostname);
+    filename.push("static");
+    filename.push(path);
+    if path.is_empty() || path.ends_with('/') {
+        filename.push("index.html");
+    }
+    filename.is_file().then_some(filename)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::get_static_filename;
+
+    #[test]
+    fn static_file_stays_in_document_root() {
+        let root = std::env::temp_dir().join("wild-doc-webserver-static-test");
+        let dir = root.join("localhost").join("static").join("css");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.css"), "a").unwrap();
+        std::fs::write(
+            root.join("localhost").join("static").join("index.html"),
+            "i",
+        )
+        .unwrap();
+        std::fs::write(root.join("secret.txt"), "s").unwrap();
+
+        assert!(get_static_filename(&root, "localhost", "/css/a.css").is_some());
+        assert!(get_static_filename(&root, "localhost", "/").is_some());
+        assert!(get_static_filename(&root, "localhost", "/css/").is_none());
+
+        for path in [
+            "/../../secret.txt",
+            "/css/../../../secret.txt",
+            "/..\\..\\secret.txt",
+            "/C:/Windows/win.ini",
+            "//etc/passwd",
+        ] {
+            assert!(
+                get_static_filename(&root, "localhost", path).is_none(),
+                "{path}"
+            );
         }
-        if filename.exists() {
-            Some(filename)
-        } else {
-            None
+        for host in ["..", ".", "", "../localhost", "a/b", "a\\b", "C:"] {
+            assert!(
+                get_static_filename(&root, host, "/css/a.css").is_none(),
+                "{host}"
+            );
         }
-    } else {
-        None
     }
 }
 
@@ -86,7 +140,7 @@ pub(super) async fn request(
         .map(|(k, v)| (k.to_string(), v.to_str().unwrap().to_owned()))
         .collect();
     if let Some(host) = headers.get("host") {
-        if let Some(host) = host.split(":").collect::<Vec<_>>().get(0) {
+        if let Some(host) = host.split(":").collect::<Vec<_>>().first() {
             let host = host.to_string();
             let uri_path = req.uri().path().to_owned();
             if let Some(static_file) = get_static_filename(&document_dir, &host, &uri_path) {
@@ -117,8 +171,8 @@ pub(super) async fn request(
                 }
 
                 let mut files = vec![];
-                let params_all = match req.method() {
-                    &Method::GET => {
+                let params_all = match *req.method() {
+                    Method::GET => {
                         if let Ok(headers) = serde_json::to_string(&headers) {
                             if let Ok(headers) = serde_json::from_str(&headers) {
                                 params_all.insert("headers".to_owned(), headers);
@@ -126,7 +180,7 @@ pub(super) async fn request(
                         }
                         Some(params_all)
                     }
-                    &Method::POST => {
+                    Method::POST => {
                         let content_type = headers.get("content-type").unwrap();
                         let body = hyper::body::to_bytes(req.into_body()).await?;
 
@@ -146,13 +200,13 @@ pub(super) async fn request(
                                         if let (Some(file_name), Some(content_type)) =
                                             (field.file_name(), field.content_type())
                                         {
-                                            if params.len() > 0 {
+                                            if !params.is_empty() {
                                                 params += "&";
                                             }
                                             let key = boundary.to_owned()
                                                 + "-"
                                                 + &files.len().to_string();
-                                            params += &urlencoding::encode(name).into_owned();
+                                            params += &urlencoding::encode(name);
                                             params += "=";
                                             params += &key;
                                             files.push(UploadFileWrapper {
@@ -167,18 +221,18 @@ pub(super) async fn request(
                                             });
                                         } else {
                                             if let Ok(v) = std::str::from_utf8(&chunk) {
-                                                if params.len() > 0 {
+                                                if !params.is_empty() {
                                                     params += "&";
                                                 }
-                                                params += &urlencoding::encode(name).into_owned();
+                                                params += &urlencoding::encode(name);
                                                 params += "=";
-                                                params += &urlencoding::encode(v).into_owned();
+                                                params += &urlencoding::encode(v);
                                             }
                                         }
                                     }
                                 }
                             }
-                            if params.len() > 0 {
+                            if !params.is_empty() {
                                 params_all.insert("post".to_owned(), parse_qs(params.as_bytes()));
                             }
                         }
@@ -223,23 +277,23 @@ pub(super) async fn request(
                                         }
                                     }
                                     let mut response_headers = HeaderMap::new();
-                                    if let Some(headers) = result_options.get("headers") {
-                                        if let serde_json::Value::Object(headers) = headers {
-                                            for (k, v) in headers {
-                                                if let Some(v) = v.as_str() {
-                                                    if let (Ok(k), Ok(v)) = (
-                                                        HeaderName::from_bytes(k.as_bytes()),
-                                                        HeaderValue::from_str(v),
-                                                    ) {
-                                                        response_headers.insert(k, v);
-                                                    }
-                                                } else {
-                                                    if let (Ok(k), Ok(v)) = (
-                                                        HeaderName::from_bytes(k.as_bytes()),
-                                                        HeaderValue::from_str(&v.to_string()),
-                                                    ) {
-                                                        response_headers.insert(k, v);
-                                                    }
+                                    if let Some(serde_json::Value::Object(headers)) =
+                                        result_options.get("headers")
+                                    {
+                                        for (k, v) in headers {
+                                            if let Some(v) = v.as_str() {
+                                                if let (Ok(k), Ok(v)) = (
+                                                    HeaderName::from_bytes(k.as_bytes()),
+                                                    HeaderValue::from_str(v),
+                                                ) {
+                                                    response_headers.insert(k, v);
+                                                }
+                                            } else {
+                                                if let (Ok(k), Ok(v)) = (
+                                                    HeaderName::from_bytes(k.as_bytes()),
+                                                    HeaderValue::from_str(&v.to_string()),
+                                                ) {
+                                                    response_headers.insert(k, v);
                                                 }
                                             }
                                         }

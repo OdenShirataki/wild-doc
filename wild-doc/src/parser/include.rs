@@ -37,9 +37,9 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                     |xml| (Some(xml), src),
                 );
             if let Some(xml) = xml {
-                if xml.len() > 0 {
+                if !xml.is_empty() {
                     return Ok(if with_parse {
-                        self.include_stack.push(filename.into());
+                        self.include_stack.push(filename);
                         let mut pos = 0;
                         let r = self.parse(xml.as_slice(), &mut pos).await?;
                         self.include_stack.pop();

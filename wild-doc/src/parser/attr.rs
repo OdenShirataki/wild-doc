@@ -64,11 +64,8 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                     if let Some(script_name) = Self::script_name(name) {
                         if let Some(script) = self.scripts.get_mut(script_name) {
                             if let Ok(v) = script.eval(value.as_str(), &self.stack).await {
-                                let name = unsafe {
-                                    std::str::from_utf8_unchecked(
-                                        &name.as_bytes()[..name.len() - (script_name.len() + 1)],
-                                    )
-                                };
+                                // strip ":<script_name>" from the end of the name.
+                                let name = &name[..name.len() - (script_name.len() + 1)];
                                 r.insert(Arc::new(name.to_string()), v);
                             }
                         }
@@ -76,12 +73,9 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                         let value = value.as_str();
                         r.insert(Arc::new(name.into()), {
                             let value = xml_util::quot_unescape(value);
-                            if let Ok(json) =
-                                serde_json::from_str::<serde_json::Value>(value.as_str())
-                            {
-                                json.into()
-                            } else {
-                                WildDocValue::String(Arc::new(value))
+                            match serde_json::from_str::<serde_json::Value>(value.as_str()) {
+                                Ok(json) => json.into(),
+                                _ => WildDocValue::String(Arc::new(value)),
                             }
                         });
                     }
@@ -105,11 +99,8 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
     ) -> (&'a str, Option<WildDocValue>) {
         if let Some(script_name) = Self::script_name(name) {
             (
-                unsafe {
-                    std::str::from_utf8_unchecked(
-                        &name.as_bytes()[..name.len() - (script_name.len() + 1)],
-                    )
-                },
+                // strip ":<script_name>" from the end of the name.
+                &name[..name.len() - (script_name.len() + 1)],
                 if let Some(script) = self.scripts.get_mut(script_name) {
                     script
                         .eval(&xml_util::quot_unescape(value), &self.stack)

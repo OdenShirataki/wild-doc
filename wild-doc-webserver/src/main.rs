@@ -1,8 +1,8 @@
 use futures_util::future::join;
 use hyper::{
+    Server,
     server::conn::{AddrIncoming, Http},
     service::{make_service_fn, service_fn},
-    Server,
 };
 use once_cell::sync::Lazy;
 use rustls::server::ResolvesServerCertUsingSni;
@@ -36,7 +36,7 @@ static SETTING: Lazy<std::sync::Mutex<HashMap<String, String>>> = Lazy::new(|| {
     let mut m = HashMap::new();
     if let Ok(mut f) = std::fs::File::open("./wild-doc-webserver.toml") {
         let mut toml = String::new();
-        if let Ok(_) = f.read_to_string(&mut toml) {
+        if f.read_to_string(&mut toml).is_ok() {
             let config: Result<Config, toml::de::Error> = toml::from_str(&toml);
             if let Ok(config) = config {
                 if let Some(config) = config.wilddoc {

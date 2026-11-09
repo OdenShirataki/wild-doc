@@ -1,9 +1,9 @@
-use maybe_xml::{token::Ty, Reader};
+use maybe_xml::{Reader, token::Ty};
 
 pub(crate) fn to_end(xml: &[u8], pos: &mut usize) -> (usize, usize) {
     let mut pos_before = *pos;
     let mut deps = 0;
-    let reader = Reader::from_str(unsafe { std::str::from_utf8_unchecked(xml) });
+    let reader = Reader::from_str(crate::xml_util::valid_utf8_prefix(xml));
     while let Some(token) = reader.tokenize(pos) {
         match token.ty() {
             Ty::StartTag(_) => {
@@ -35,4 +35,13 @@ pub(crate) fn escape_html(s: &str) -> String {
     s.replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
+}
+
+/// Returns the longest prefix of `xml` that is valid UTF-8. Byte positions
+/// stay the same as in `xml`, which a lossy conversion would not keep.
+pub(crate) fn valid_utf8_prefix(xml: &[u8]) -> &str {
+    match std::str::from_utf8(xml) {
+        Ok(s) => s,
+        Err(e) => std::str::from_utf8(&xml[..e.valid_up_to()]).unwrap_or_default(),
+    }
 }

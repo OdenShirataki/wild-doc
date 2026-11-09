@@ -11,7 +11,7 @@ if std::path::Path::new(dir).exists(){
 }
 std::fs::create_dir_all(dir).unwrap();
 
-let mut wd = WildDoc::new(dir, Box::new(IncludeLocal::new("./include/")), None);
+let mut wd = WildDoc::new(dir, IncludeLocal::new("./include/"), None, 1);
 
 let update_xml = br#"<wd:session name="account"><wd:update commit="true">
     <collection name="account">
@@ -270,10 +270,14 @@ BODY
 
 ### rust
 ```rust
-let r=wd.run(br#"<wd:var body_path="body.xml">
+# use wild_doc::*;
+# let dir = std::env::temp_dir().join("wild-doc-readme-include");
+# std::fs::create_dir_all(&dir).unwrap();
+# let mut wd = WildDoc::new(&dir, IncludeLocal::new("./include/"), None, 1);
+let r = wd.run(br#"<wd:var body_path="body.xml">
     <wd:include src="layout.xml" />
-<wd:var>"#,b"");
-    println!("{}",r);
+</wd:var>"#, b"").unwrap();
+println!("{}", std::str::from_utf8(r.body()).unwrap());
 ```
 
 ### output
@@ -296,8 +300,8 @@ wild-doc = { version = "x" , path = "../wild-doc" ,features=[ "js","py" ] }
 ```
 
 ### code
-```rust
-//use WebAPI
+```rust,ignore
+// needs the "py" feature.
 let r=wd.run(br#"<?py
 hoge=100
 def get_200():
