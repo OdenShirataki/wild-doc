@@ -31,20 +31,20 @@ struct ConfigServer {
     relation_reserve_unit: Option<u32>,
 }
 
-struct WildDocWrapper<DI: IncludeAdaptor + Send> {
+struct WildDocWrapper<DI: IncludeAdaptor + Send + 'static> {
     inner: WildDoc<DI>,
 }
-unsafe impl<DI: IncludeAdaptor + Send> Sync for WildDocWrapper<DI> {}
-unsafe impl<DI: IncludeAdaptor + Send> Send for WildDocWrapper<DI> {}
+unsafe impl<DI: IncludeAdaptor + Send + 'static> Sync for WildDocWrapper<DI> {}
+unsafe impl<DI: IncludeAdaptor + Send + 'static> Send for WildDocWrapper<DI> {}
 
-impl<DI: IncludeAdaptor + Send> Deref for WildDocWrapper<DI> {
+impl<DI: IncludeAdaptor + Send + 'static> Deref for WildDocWrapper<DI> {
     type Target = WildDoc<DI>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
-impl<DI: IncludeAdaptor + Send> DerefMut for WildDocWrapper<DI> {
+impl<DI: IncludeAdaptor + Send + 'static> DerefMut for WildDocWrapper<DI> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
@@ -144,7 +144,7 @@ fn is_valid_dbname(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
-fn handler<DI: IncludeAdaptor + Send>(
+fn handler<DI: IncludeAdaptor + Send + 'static>(
     mut stream: TcpStream,
     wd: Arc<Mutex<WildDocWrapper<DI>>>,
 ) -> Result<()> {

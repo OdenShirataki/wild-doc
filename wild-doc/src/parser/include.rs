@@ -7,7 +7,7 @@ use crate::r#const::*;
 
 use super::Parser;
 
-impl<I: IncludeAdaptor + Send> Parser<I> {
+impl<I: IncludeAdaptor + Send + 'static> Parser<I> {
     pub(super) async fn get_include_content(
         &mut self,
         attr: Vars,
@@ -36,18 +36,18 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                     },
                     |xml| (Some(xml), src),
                 );
-            if let Some(xml) = xml {
-                if !xml.is_empty() {
-                    return Ok(if with_parse {
-                        self.include_stack.push(filename);
-                        let mut pos = 0;
-                        let r = self.parse(xml.as_slice(), &mut pos).await?;
-                        self.include_stack.pop();
-                        r
-                    } else {
-                        xml.as_ref().clone()
-                    });
-                }
+            if let Some(xml) = xml
+                && !xml.is_empty()
+            {
+                return Ok(if with_parse {
+                    self.include_stack.push(filename);
+                    let mut pos = 0;
+                    let r = self.parse(xml.as_slice(), &mut pos).await?;
+                    self.include_stack.pop();
+                    r
+                } else {
+                    xml.as_ref().clone()
+                });
             }
         }
         Ok(b"".to_vec())

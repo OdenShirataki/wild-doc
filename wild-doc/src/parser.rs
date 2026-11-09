@@ -43,7 +43,7 @@ struct SessionState {
     clear_on_close: bool,
 }
 
-pub struct Parser<I: IncludeAdaptor + Send> {
+pub struct Parser<I: IncludeAdaptor + Send + 'static> {
     database: Arc<RwLock<SessionDatabase>>,
     sessions: Vec<SessionState>,
     scripts: HashMap<String, Box<dyn WildDocScript<I>>>,
@@ -53,7 +53,7 @@ pub struct Parser<I: IncludeAdaptor + Send> {
     include_stack: Vec<Arc<String>>,
 }
 
-impl<I: IncludeAdaptor + Send> Parser<I> {
+impl<I: IncludeAdaptor + Send + 'static> Parser<I> {
     pub fn new(
         database: Arc<RwLock<SessionDatabase>>,
         include_adaptor: Arc<Mutex<I>>,
@@ -339,11 +339,10 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                     let mut matched = false;
                                     if let Some(value) =
                                         self.vars_from_attibutes(st.attributes()).await.get(&*VALUE)
+                                        && value.as_bool().is_some_and(|v| *v)
                                     {
-                                        if value.as_bool().is_some_and(|v| *v) {
-                                            matched = true;
-                                            r.extend(self.parse(xml, pos).await?);
-                                        }
+                                        matched = true;
+                                        r.extend(self.parse(xml, pos).await?);
                                     }
                                     if !matched {
                                         xml_util::to_end(xml, pos);

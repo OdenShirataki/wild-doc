@@ -18,23 +18,22 @@ use crate::{r#const::*, xml_util};
 
 use super::Parser;
 
-impl<I: IncludeAdaptor + Send> Parser<I> {
+impl<I: IncludeAdaptor + Send + 'static> Parser<I> {
     fn collection_id(&self, vars: &Vars) -> Option<NonZeroI32> {
         if let Some(collection_name) = vars.get(&*COLLECTION) {
             let collection_name = collection_name.as_string();
             if let Some(collection_id) = self.database.read().collection_id(&collection_name) {
                 return Some(collection_id);
             }
-            if collection_name.as_str() != "" {
-                if let Some(value) = vars.get(&*CREATE_COLLECTION_IF_NOT_EXISTS) {
-                    if value.as_bool().is_some_and(|v| *v) {
-                        return Some(
-                            self.database
-                                .write()
-                                .collection_id_or_create(&collection_name),
-                        );
-                    }
-                }
+            if collection_name.as_str() != ""
+                && let Some(value) = vars.get(&*CREATE_COLLECTION_IF_NOT_EXISTS)
+                && value.as_bool().is_some_and(|v| *v)
+            {
+                return Some(
+                    self.database
+                        .write()
+                        .collection_id_or_create(&collection_name),
+                );
             }
         }
         None
@@ -57,15 +56,15 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                         let result = search.result(&self.database.read()).await;
                         let mut found_session = false;
                         for i in (0..self.sessions.len()).rev() {
-                            if let Some(state) = self.sessions.get(i) {
-                                if state.session.temporary_collection(collection_id).is_some() {
-                                    found_session = true;
-                                    let session_result = state.session.result_with(&result).await;
-                                    new_vars.insert(
-                                        Arc::clone(&var),
-                                        WildDocValue::SessionSearchResult(Arc::new(session_result)),
-                                    );
-                                }
+                            if let Some(state) = self.sessions.get(i)
+                                && state.session.temporary_collection(collection_id).is_some()
+                            {
+                                found_session = true;
+                                let session_result = state.session.result_with(&result).await;
+                                new_vars.insert(
+                                    Arc::clone(&var),
+                                    WildDocValue::SessionSearchResult(Arc::new(session_result)),
+                                );
                             }
                         }
                         if !found_session {
@@ -152,7 +151,12 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                     deps += 1;
                     let name = st.name();
                     if name.namespace_prefix().is_none() {
-                        match name.local().as_bytes() {
+                        let local = name.local().as_bytes();
+                        // these read their own end tag, so it is not counted below.
+                        if matches!(local, b"narrow" | b"wide" | b"join" | b"result") {
+                            deps -= 1;
+                        }
+                        match local {
                             b"narrow" => {
                                 if let Ok(inner_xml) = self.parse(xml, pos).await.as_mut() {
                                     let mut _pos = 0;
@@ -163,9 +167,9 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                             }
                             b"wide" => {
                                 if let Ok(inner_xml) = self.parse(xml, pos).await {
-                                    let _pos = 0;
+                                    let mut _pos = 0;
                                     let (cond, _, _) =
-                                        Box::pin(self.condition_loop(&inner_xml, pos)).await;
+                                        Box::pin(self.condition_loop(&inner_xml, &mut _pos)).await;
                                     result_conditions.push(Condition::Wide(cond));
                                 }
                             }
@@ -228,20 +232,21 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
         if let (Some(row), Some(collection_name)) = (vars.get(&*ROW), vars.get(&*COLLECTION)) {
             let row = row.as_string();
             let collection_name = collection_name.as_string();
-            if row.as_str() != "" && collection_name.as_str() != "" {
-                if let (Ok(row), Some(collection_id)) = (
+            if row.as_str() != ""
+                && collection_name.as_str() != ""
+                && let (Ok(row), Some(collection_id)) = (
                     row.parse::<NonZeroI64>(),
                     self.database.read().collection_id(&collection_name),
-                ) {
-                    return Some(Condition::Depend(
-                        vars.get(&*KEY).map(|v| v.as_string()),
-                        if row.get() < 0 {
-                            CollectionRow::new(-collection_id, (-row).try_into().unwrap())
-                        } else {
-                            CollectionRow::new(collection_id, row.try_into().unwrap())
-                        },
-                    ));
-                }
+                )
+            {
+                return Some(Condition::Depend(
+                    vars.get(&*KEY).map(|v| v.as_string()),
+                    if row.get() < 0 {
+                        CollectionRow::new(-collection_id, (-row).try_into().unwrap())
+                    } else {
+                        CollectionRow::new(collection_id, row.try_into().unwrap())
+                    },
+                ));
             }
         }
         None
@@ -275,12 +280,12 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                     }
                     "range" => {
                         let s: Vec<_> = value.split("..").collect();
-                        if s.len() == 2 {
-                            if let (Ok(min), Ok(max)) = (s[0].parse::<u32>(), s[1].parse::<u32>()) {
-                                return Some(Condition::Row(search::Number::Range(
-                                    (min as isize)..=(max as isize),
-                                )));
-                            }
+                        if s.len() == 2
+                            && let (Ok(min), Ok(max)) = (s[0].parse::<u32>(), s[1].parse::<u32>())
+                        {
+                            return Some(Condition::Row(search::Number::Range(
+                                (min as isize)..=(max as isize),
+                            )));
                         }
                     }
                     _ => {}
@@ -358,19 +363,19 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
         attr: &Vars,
         search_map: &mut HashMap<Arc<String>, SearchJoin>,
     ) {
+        // read up to the end of the join element even if it is not used, so
+        // that the caller does not see its end tag.
+        let (conditions, join, _result_info) = Box::pin(self.condition_loop(xml, pos)).await;
         if let Some(name) = attr.get(&*NAME) {
             let name = name.as_string();
-            if name.as_str() != "" {
-                if let Some(collection_id) = self.collection_id(attr) {
-                    let relation_key = attr.get(&*RELATION).map(|v| v.as_string());
-
-                    let (conditions, join, _result_info) =
-                        Box::pin(self.condition_loop(xml, pos)).await;
-                    search_map.insert(
-                        name,
-                        SearchJoin::new(collection_id, conditions, relation_key, join),
-                    );
-                }
+            if name.as_str() != ""
+                && let Some(collection_id) = self.collection_id(attr)
+            {
+                let relation_key = attr.get(&*RELATION).map(|v| v.as_string());
+                search_map.insert(
+                    name,
+                    SearchJoin::new(collection_id, conditions, relation_key, join),
+                );
             }
         }
     }

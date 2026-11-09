@@ -7,7 +7,7 @@ use crate::xml_util;
 
 use super::Parser;
 
-impl<I: IncludeAdaptor + Send> Parser<I> {
+impl<I: IncludeAdaptor + Send + 'static> Parser<I> {
     pub(super) async fn output_attributes(&mut self, r: &mut Vec<u8>, attributes: Attributes<'_>) {
         for attr in attributes.into_iter() {
             let name = attr.name().as_str();
@@ -15,11 +15,11 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                 let value = value.as_str();
                 let (new_name, new_value) = self.attibute_var_or_script(name, value).await;
                 if new_name == "wd:attr" {
-                    if let Some(value) = new_value {
-                        if !value.is_null() {
-                            r.push(b' ');
-                            r.extend(value.as_string().as_bytes());
-                        }
+                    if let Some(value) = new_value
+                        && !value.is_null()
+                    {
+                        r.push(b' ');
+                        r.extend(value.as_string().as_bytes());
                     }
                 } else {
                     r.push(b' ');
@@ -62,12 +62,12 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                 if let Some(value) = attr.value() {
                     let name = attr.name().as_str();
                     if let Some(script_name) = Self::script_name(name) {
-                        if let Some(script) = self.scripts.get_mut(script_name) {
-                            if let Ok(v) = script.eval(value.as_str(), &self.stack).await {
-                                // strip ":<script_name>" from the end of the name.
-                                let name = &name[..name.len() - (script_name.len() + 1)];
-                                r.insert(Arc::new(name.to_string()), v);
-                            }
+                        if let Some(script) = self.scripts.get_mut(script_name)
+                            && let Ok(v) = script.eval(value.as_str(), &self.stack).await
+                        {
+                            // strip ":<script_name>" from the end of the name.
+                            let name = &name[..name.len() - (script_name.len() + 1)];
+                            r.insert(Arc::new(name.to_string()), v);
                         }
                     } else {
                         let value = value.as_str();

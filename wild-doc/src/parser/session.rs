@@ -8,7 +8,7 @@ use super::{Parser, SessionState};
 
 use crate::r#const::*;
 
-impl<I: IncludeAdaptor + Send> Parser<I> {
+impl<I: IncludeAdaptor + Send + 'static> Parser<I> {
     #[must_use]
     pub(super) fn sessions(&self, vars: Vars) -> Vars {
         let mut r = Vars::new();
@@ -49,16 +49,16 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                 let mut session = self.database.read().session(&session_name, expire);
                 if let Some(cursor) = vars.get(&*CURSOR) {
                     let cursor = cursor.as_string();
-                    if cursor.as_str() != "" {
-                        if let Ok(cursor) = cursor.parse::<usize>() {
-                            session.set_sequence_cursor(cursor)
-                        }
+                    if cursor.as_str() != ""
+                        && let Ok(cursor) = cursor.parse::<usize>()
+                    {
+                        session.set_sequence_cursor(cursor)
                     }
                 }
-                if let Some(initialize) = vars.get(&*INITIALIZE) {
-                    if initialize.as_bool().is_some_and(|v| *v) {
-                        self.database.read().session_restart(&mut session, expire);
-                    }
+                if let Some(initialize) = vars.get(&*INITIALIZE)
+                    && initialize.as_bool().is_some_and(|v| *v)
+                {
+                    self.database.read().session_restart(&mut session, expire);
                 }
                 return Some(SessionState {
                     session,
@@ -87,11 +87,11 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
         }
 
         let mut r = Vars::new();
-        if let Some(session_state) = self.sessions.last() {
-            if let Some(cursor) = session_state.session.sequence_cursor() {
-                r.insert(str_max, WildDocValue::Number(cursor.max.into()));
-                r.insert(str_current, WildDocValue::Number(cursor.current.into()));
-            }
+        if let Some(session_state) = self.sessions.last()
+            && let Some(cursor) = session_state.session.sequence_cursor()
+        {
+            r.insert(str_max, WildDocValue::Number(cursor.max.into()));
+            r.insert(str_current, WildDocValue::Number(cursor.current.into()));
         }
         r
     }

@@ -15,7 +15,7 @@ use super::Parser;
 
 use crate::r#const::*;
 
-impl<I: IncludeAdaptor + Send> Parser<I> {
+impl<I: IncludeAdaptor + Send + 'static> Parser<I> {
     pub(crate) async fn sort(
         &mut self,
         xml: &[u8],
@@ -25,23 +25,22 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
         let mut vars = Vars::new();
         if let (Some(WildDocValue::String(order)), Some(result), Some(WildDocValue::String(var))) =
             (attr.get(&*ORDER), attr.get(&*RESULT), attr.get(&*VAR))
+            && var.as_str() != ""
         {
-            if var.as_str() != "" {
-                match result {
-                    WildDocValue::SearchResult(result) => {
-                        let orders = self.make_order(result, order);
-                        let rows = result
-                            .sort(&self.database.read(), &orders)
-                            .into_iter()
-                            .map(|row| WildDocValue::Number(row.get().into()))
-                            .collect();
-                        vars.insert(Arc::clone(var), WildDocValue::Array(rows));
-                    }
-                    WildDocValue::SessionSearchResult(result) => {
-                        let _orders = make_order_session(result, order);
-                    }
-                    _ => {}
+            match result {
+                WildDocValue::SearchResult(result) => {
+                    let orders = self.make_order(result, order);
+                    let rows = result
+                        .sort(&self.database.read(), &orders)
+                        .into_iter()
+                        .map(|row| WildDocValue::Number(row.get().into()))
+                        .collect();
+                    vars.insert(Arc::clone(var), WildDocValue::Array(rows));
                 }
+                WildDocValue::SessionSearchResult(result) => {
+                    let _orders = make_order_session(result, order);
+                }
+                _ => {}
             }
         }
         self.stack.push(vars);

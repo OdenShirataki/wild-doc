@@ -1,8 +1,8 @@
 [package]
 name = "wild-doc-script-deno"
-version = "0.21.0"
+version = "0.22.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
 
@@ -32,8 +32,17 @@ futures.workspace = true
 wild-doc-script.workspace = true
 
 ring = "0.17.7"
-deno_runtime = { version = "0.147.0" }
-deno_ast = { version = "0.34.0", features = ["transpiling"] }
+# "transpile" lets the runtime transpile its own TypeScript sources.
+deno_runtime = { version = "0.268.0", features = ["transpile"] }
+# deno_runtime leaves the choice of the JavaScript engine to the embedder.
+deno_core = { version = "0.413.0", default-features = false, features = ["v8", "v8_use_custom_libcxx", "reactor-tokio"] }
+deno_ast = { version = "0.53.3", features = ["transpiling"] }
+deno_error = "=0.7.1"
+deno_resolver = { version = "0.91.0", features = ["sync"] }
+sys_traits = { version = "0.1.28", features = ["real"] }
+reqwest = "0.13"
 
 [build-dependencies]
-deno_runtime = "0.147.0"
+# build.rs creates the V8 snapshot of the runtime.
+deno_runtime = { version = "0.268.0", features = ["snapshot"] }
+deno_core = { version = "0.413.0", default-features = false, features = ["v8", "v8_use_custom_libcxx", "reactor-tokio"] }

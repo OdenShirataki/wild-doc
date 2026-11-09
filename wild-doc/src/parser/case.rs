@@ -6,7 +6,7 @@ use crate::{r#const::*, xml_util};
 
 use super::Parser;
 
-impl<I: IncludeAdaptor + Send> Parser<I> {
+impl<I: IncludeAdaptor + Send + 'static> Parser<I> {
     pub(super) async fn case(
         &mut self,
         xml: &[u8],
@@ -25,12 +25,10 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                         b"wd:when" => {
                             if let Some(right) =
                                 self.vars_from_attibutes(st.attributes()).await.get(&*VALUE)
+                                && let Some(cmp_src) = cmp_src
+                                && cmp_src == right
                             {
-                                if let Some(cmp_src) = cmp_src {
-                                    if cmp_src == right {
-                                        r = Some(self.parse(xml, pos).await?);
-                                    }
-                                }
+                                r = Some(self.parse(xml, pos).await?);
                             }
                             if r.is_none() {
                                 xml_util::to_end(xml, pos);

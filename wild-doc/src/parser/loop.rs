@@ -9,7 +9,7 @@ use super::{Parser, WildDocValue};
 
 use crate::r#const::*;
 
-impl<I: IncludeAdaptor + Send> Parser<I> {
+impl<I: IncludeAdaptor + Send + 'static> Parser<I> {
     pub(super) async fn r#for(&mut self, attr: Vars, xml: &[u8]) -> Result<Vec<u8>> {
         let mut r = Vec::new();
         if let (Some(var), Some(r#in)) = (attr.get(&*VAR), attr.get(&*IN)) {

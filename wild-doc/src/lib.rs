@@ -45,12 +45,12 @@ impl WildDocResult {
     }
 }
 
-pub struct WildDoc<I: IncludeAdaptor + Send> {
+pub struct WildDoc<I: IncludeAdaptor + Send + 'static> {
     database: Arc<RwLock<SessionDatabase>>,
     default_include_adaptor: Arc<Mutex<I>>,
     cache_dir: PathBuf,
 }
-impl<DI: IncludeAdaptor + Send> WildDoc<DI> {
+impl<DI: IncludeAdaptor + Send + 'static> WildDoc<DI> {
     pub fn new<P: AsRef<Path>>(
         dir: P,
         default_include_adaptor: DI,
@@ -78,12 +78,20 @@ impl<DI: IncludeAdaptor + Send> WildDoc<DI> {
         &self.database
     }
 
-    fn run_inner<I: IncludeAdaptor + Send>(
+    fn run_inner<I: IncludeAdaptor + Send + 'static>(
         &mut self,
         xml: &[u8],
         input_json: &[u8],
         include_adaptor: Arc<Mutex<I>>,
     ) -> Result<WildDocResult> {
+        // Script engines (deno) must be created inside the runtime. The parser
+        // is declared after the runtime, so it is dropped first.
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .max_blocking_threads(32)
+            .build()?;
+        let _guard = runtime.enter();
+
         let mut parser = Parser::new(
             Arc::clone(&self.database),
             include_adaptor,
@@ -100,11 +108,7 @@ impl<DI: IncludeAdaptor + Send> WildDoc<DI> {
         )?;
 
         let mut pos = 0;
-        let body = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .max_blocking_threads(32)
-            .build()?
-            .block_on(parser.parse(xml, &mut pos))?;
+        let body = runtime.block_on(parser.parse(xml, &mut pos))?;
 
         let options = parser.result_options().clone();
 
@@ -115,7 +119,7 @@ impl<DI: IncludeAdaptor + Send> WildDoc<DI> {
         self.run_inner(xml, input_json, Arc::clone(&self.default_include_adaptor))
     }
 
-    pub fn run_with_include_adaptor<I: IncludeAdaptor + Send>(
+    pub fn run_with_include_adaptor<I: IncludeAdaptor + Send + 'static>(
         &mut self,
         xml: &[u8],
         input_json: &[u8],

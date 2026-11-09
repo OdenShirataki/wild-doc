@@ -1,8 +1,8 @@
 [package]
 name = "wild-doc"
-version = "0.111.0"
+version = "0.112.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 
 authors = ["Oden Shirataki <oden.srtk@gmail.com>"]
 
@@ -46,7 +46,7 @@ tokio = { version = "1.35.1", features = ["rt"] }
 arcstr = "1.1.5"
 
 [dependencies.wild-doc-script-deno]
-version = "0.21"
+version = "0.22"
 path = "../wild-doc-script-deno"
 optional = true
 

@@ -11,7 +11,7 @@ use wild_doc_script::{
 use super::Parser;
 use crate::r#const::*;
 
-impl<I: IncludeAdaptor + Send> Parser<I> {
+impl<I: IncludeAdaptor + Send + 'static> Parser<I> {
     pub(super) fn record(&self, vars: Vars) -> Vars {
         let mut r = Vars::new();
 
@@ -153,135 +153,101 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
 
                     // rows of the main data are positive and fit in u32.
                     let data_row = u32::try_from(row.get()).ok().and_then(NonZeroU32::new);
-                    if let (false, Some(row)) = (find_session, data_row) {
-                        if let Some(collection) = self.database.read().collection(collection_id) {
-                            if let Some(serial) = collection.serial(row) {
-                                inner.insert(
-                                    Arc::clone(&SERIAL),
-                                    WildDocValue::Number((*serial).into()),
-                                );
-                            }
+                    if let (false, Some(row)) = (find_session, data_row)
+                        && let Some(collection) = self.database.read().collection(collection_id)
+                    {
+                        if let Some(serial) = collection.serial(row) {
+                            inner.insert(
+                                Arc::clone(&SERIAL),
+                                WildDocValue::Number((*serial).into()),
+                            );
+                        }
 
-                            if let Some(uuid) = collection.uuid_string(row) {
-                                inner.insert(
-                                    Arc::clone(&UUID),
-                                    WildDocValue::String(Arc::new(uuid)),
-                                );
-                            }
-                            if let Some(activity) = collection.activity(row) {
-                                inner.insert(
-                                    Arc::clone(&ACTIVITY),
-                                    WildDocValue::Bool(activity == Activity::Active),
-                                );
-                            };
-                            if let Some(term_begin) = collection.term_begin(row) {
-                                inner.insert(
-                                    Arc::clone(&TERM_BEGIN),
-                                    WildDocValue::Number((*term_begin).into()),
-                                );
-                            }
-                            if let Some(term_end) = collection.term_end(row) {
-                                inner.insert(
-                                    Arc::clone(&TERM_END),
-                                    WildDocValue::Number((*term_end).into()),
-                                );
-                            }
-                            if let Some(last_updated) = collection.last_updated(row) {
-                                inner.insert(
-                                    Arc::clone(&LAST_UPDATED),
-                                    WildDocValue::Number((*last_updated).into()),
-                                );
-                            }
-                            inner.extend([
-                                (
-                                    Arc::clone(&DEPENDS),
-                                    WildDocValue::Object(
-                                        self.database
-                                            .read()
-                                            .relation()
-                                            .depends(None, &CollectionRow::new(collection_id, row))
-                                            .into_iter()
-                                            .filter_map(|d| {
-                                                let collection_id = d.collection_id();
-                                                self.database.read().collection(collection_id).map(
-                                                    |collection| {
-                                                        (
-                                                            Arc::clone(d.key()),
-                                                            WildDocValue::Object(
-                                                                [
-                                                                    (
-                                                                        Arc::clone(&COLLECTION_ID),
-                                                                        WildDocValue::Number(
-                                                                            collection_id
-                                                                                .get()
-                                                                                .into(),
-                                                                        ),
-                                                                    ),
-                                                                    (
-                                                                        Arc::clone(
-                                                                            &COLLECTION_NAME,
-                                                                        ),
-                                                                        WildDocValue::String(
-                                                                            Arc::new(
-                                                                                collection
-                                                                                    .name()
-                                                                                    .into(),
-                                                                            ),
-                                                                        ),
-                                                                    ),
-                                                                    (
-                                                                        Arc::clone(&ROW),
-                                                                        WildDocValue::Number(
-                                                                            d.row().get().into(),
-                                                                        ),
-                                                                    ),
-                                                                ]
-                                                                .into(),
-                                                            ),
-                                                        )
-                                                    },
-                                                )
-                                            })
-                                            .collect(),
-                                    ),
-                                ),
-                                (
-                                    Arc::clone(&FIELD),
-                                    WildDocValue::Object(
-                                        if let Some(field_mask) = vars.get(&*FIELDS) {
-                                            if let WildDocValue::Array(field_mask) = field_mask {
-                                                field_mask
-                                                    .iter()
-                                                    .map(|field_name| {
-                                                        let field_name = field_name.as_string();
-                                                        let bytes = collection
-                                                            .field_bytes(row, &field_name);
-                                                        (
-                                                            field_name,
-                                                            if let Ok(str) =
-                                                                std::str::from_utf8(bytes)
-                                                            {
-                                                                WildDocValue::String(Arc::new(
-                                                                    str.into(),
-                                                                ))
-                                                            } else {
-                                                                WildDocValue::Binary(bytes.into())
-                                                            },
-                                                        )
-                                                    })
-                                                    .collect()
-                                            } else {
-                                                IndexMap::new()
-                                            }
-                                        } else {
-                                            collection
-                                                .fields()
-                                                .into_iter()
-                                                .map(|(field_name, _)| {
-                                                    let bytes =
-                                                        collection.field_bytes(row, field_name);
+                        if let Some(uuid) = collection.uuid_string(row) {
+                            inner.insert(Arc::clone(&UUID), WildDocValue::String(Arc::new(uuid)));
+                        }
+                        if let Some(activity) = collection.activity(row) {
+                            inner.insert(
+                                Arc::clone(&ACTIVITY),
+                                WildDocValue::Bool(activity == Activity::Active),
+                            );
+                        };
+                        if let Some(term_begin) = collection.term_begin(row) {
+                            inner.insert(
+                                Arc::clone(&TERM_BEGIN),
+                                WildDocValue::Number((*term_begin).into()),
+                            );
+                        }
+                        if let Some(term_end) = collection.term_end(row) {
+                            inner.insert(
+                                Arc::clone(&TERM_END),
+                                WildDocValue::Number((*term_end).into()),
+                            );
+                        }
+                        if let Some(last_updated) = collection.last_updated(row) {
+                            inner.insert(
+                                Arc::clone(&LAST_UPDATED),
+                                WildDocValue::Number((*last_updated).into()),
+                            );
+                        }
+                        inner.extend([
+                            (
+                                Arc::clone(&DEPENDS),
+                                WildDocValue::Object(
+                                    self.database
+                                        .read()
+                                        .relation()
+                                        .depends(None, &CollectionRow::new(collection_id, row))
+                                        .into_iter()
+                                        .filter_map(|d| {
+                                            let collection_id = d.collection_id();
+                                            self.database.read().collection(collection_id).map(
+                                                |collection| {
                                                     (
-                                                        Arc::clone(field_name),
+                                                        Arc::clone(d.key()),
+                                                        WildDocValue::Object(
+                                                            [
+                                                                (
+                                                                    Arc::clone(&COLLECTION_ID),
+                                                                    WildDocValue::Number(
+                                                                        collection_id.get().into(),
+                                                                    ),
+                                                                ),
+                                                                (
+                                                                    Arc::clone(&COLLECTION_NAME),
+                                                                    WildDocValue::String(Arc::new(
+                                                                        collection.name().into(),
+                                                                    )),
+                                                                ),
+                                                                (
+                                                                    Arc::clone(&ROW),
+                                                                    WildDocValue::Number(
+                                                                        d.row().get().into(),
+                                                                    ),
+                                                                ),
+                                                            ]
+                                                            .into(),
+                                                        ),
+                                                    )
+                                                },
+                                            )
+                                        })
+                                        .collect(),
+                                ),
+                            ),
+                            (
+                                Arc::clone(&FIELD),
+                                WildDocValue::Object(
+                                    if let Some(field_mask) = vars.get(&*FIELDS) {
+                                        if let WildDocValue::Array(field_mask) = field_mask {
+                                            field_mask
+                                                .iter()
+                                                .map(|field_name| {
+                                                    let field_name = field_name.as_string();
+                                                    let bytes =
+                                                        collection.field_bytes(row, &field_name);
+                                                    (
+                                                        field_name,
                                                         if let Ok(str) = std::str::from_utf8(bytes)
                                                         {
                                                             WildDocValue::String(Arc::new(
@@ -293,11 +259,29 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                                     )
                                                 })
                                                 .collect()
-                                        },
-                                    ),
+                                        } else {
+                                            IndexMap::new()
+                                        }
+                                    } else {
+                                        collection
+                                            .fields()
+                                            .into_iter()
+                                            .map(|(field_name, _)| {
+                                                let bytes = collection.field_bytes(row, field_name);
+                                                (
+                                                    Arc::clone(field_name),
+                                                    if let Ok(str) = std::str::from_utf8(bytes) {
+                                                        WildDocValue::String(Arc::new(str.into()))
+                                                    } else {
+                                                        WildDocValue::Binary(bytes.into())
+                                                    },
+                                                )
+                                            })
+                                            .collect()
+                                    },
                                 ),
-                            ]);
-                        }
+                            ),
+                        ]);
                     }
                 }
                 r.insert(var, WildDocValue::Object(inner));

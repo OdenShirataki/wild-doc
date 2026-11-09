@@ -32,7 +32,7 @@ impl error::Error for DependError {
     }
 }
 
-impl<I: IncludeAdaptor + Send> Parser<I> {
+impl<I: IncludeAdaptor + Send + 'static> Parser<I> {
     fn rows2val(&self, commit_rows: Vec<CollectionRow>) -> WildDocValue {
         WildDocValue::Array(
             commit_rows
@@ -116,14 +116,14 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                         .write()
                         .update(&mut session_state.session, updates)
                         .await;
-                    if let Some(commit) = attr.get(&*COMMIT) {
-                        if commit.as_bool().is_some_and(|v| *v) {
-                            commit_rows = self
-                                .database
-                                .write()
-                                .commit(&mut session_state.session)
-                                .await;
-                        }
+                    if let Some(commit) = attr.get(&*COMMIT)
+                        && commit.as_bool().is_some_and(|v| *v)
+                    {
+                        commit_rows = self
+                            .database
+                            .write()
+                            .commit(&mut session_state.session)
+                            .await;
                     }
                 }
             }
@@ -277,38 +277,36 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
     ) -> Result<(), DependError> {
         if let (Some(key), Some(collection), Some(row)) =
             (vars.get(&*KEY), vars.get(&*COLLECTION), vars.get(&*ROW))
-        {
-            if let (Ok(row), Some(collection_id)) = (
+            && let (Ok(row), Some(collection_id)) = (
                 row.as_string().parse::<NonZeroI64>(),
                 self.database.read().collection_id(&collection.as_string()),
-            ) {
-                let in_session = row.get() < 0;
-                if in_session {
-                    let mut valid = false;
-                    if let Some(session_state) = self.sessions.pop() {
-                        if let Some(temporary_collection) =
-                            session_state.session.temporary_collection(collection_id)
-                        {
-                            if temporary_collection.get(&row).is_some() {
-                                valid = true;
-                            }
-                        }
-                        self.sessions.push(session_state);
+            )
+        {
+            let in_session = row.get() < 0;
+            if in_session {
+                let mut valid = false;
+                if let Some(session_state) = self.sessions.pop() {
+                    if let Some(temporary_collection) =
+                        session_state.session.temporary_collection(collection_id)
+                        && temporary_collection.get(&row).is_some()
+                    {
+                        valid = true;
                     }
-                    if !valid {
-                        return Err(DependError);
-                    }
+                    self.sessions.push(session_state);
                 }
-                depends.push((
-                    key.as_string(),
-                    if in_session {
-                        CollectionRow::new(-collection_id, (-row).try_into().unwrap())
-                    } else {
-                        CollectionRow::new(collection_id, row.try_into().unwrap())
-                    },
-                ));
-                return Ok(());
+                if !valid {
+                    return Err(DependError);
+                }
             }
+            depends.push((
+                key.as_string(),
+                if in_session {
+                    CollectionRow::new(-collection_id, (-row).try_into().unwrap())
+                } else {
+                    CollectionRow::new(collection_id, row.try_into().unwrap())
+                },
+            ));
+            return Ok(());
         }
         Err(DependError)
     }
@@ -374,16 +372,14 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
 
                                                         if let Some(base64_decode) =
                                                             attr.get(&*BASE64)
-                                                        {
-                                                            if base64_decode
+                                                            && base64_decode
                                                                 .as_bool()
                                                                 .is_some_and(|v| *v)
-                                                            {
-                                                                value =
+                                                        {
+                                                            value =
                                                                 general_purpose::STANDARD_NO_PAD
                                                                     .decode(value)
                                                                     .unwrap();
-                                                            }
                                                         }
                                                         fields.insert(
                                                             FieldName::new(field_name.to_string()),
@@ -467,26 +463,24 @@ impl<I: IncludeAdaptor + Send> Parser<I> {
                                     if let Some(str) = attr.get(&*TERM_BEGIN) {
                                         let str = str.as_string();
                                         let str = str.as_str();
-                                        if !str.is_empty() {
-                                            if let Ok(t) =
+                                        if !str.is_empty()
+                                            && let Ok(t) =
                                                 DateTime::parse_from_str(str, "%Y-%m-%d %H:%M:%S")
                                                     .map(|v| v.timestamp())
-                                            {
-                                                term_begin = Term::Overwrite(t as u64)
-                                            }
+                                        {
+                                            term_begin = Term::Overwrite(t as u64)
                                         }
                                     }
                                     let mut term_end = Term::Default;
                                     if let Some(str) = attr.get(&*TERM_END) {
                                         let str = str.as_string();
                                         let str = str.as_str();
-                                        if !str.is_empty() {
-                                            if let Ok(t) =
+                                        if !str.is_empty()
+                                            && let Ok(t) =
                                                 DateTime::parse_from_str(str, "%Y-%m-%d %H:%M:%S")
                                                     .map(|v| v.timestamp())
-                                            {
-                                                term_end = Term::Overwrite(t as u64)
-                                            }
+                                        {
+                                            term_end = Term::Overwrite(t as u64)
                                         }
                                     }
                                     updates.push(if row == 0 {

@@ -6,7 +6,7 @@ use super::Parser;
 
 use crate::r#const::*;
 
-impl<I: IncludeAdaptor + Send> Parser<I> {
+impl<I: IncludeAdaptor + Send + 'static> Parser<I> {
     #[must_use]
     pub(super) fn collections(&self, vars: Vars) -> Vars {
         let mut r = Vars::new();

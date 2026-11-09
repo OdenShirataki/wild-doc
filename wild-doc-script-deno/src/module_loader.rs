@@ -1,34 +1,20 @@
-use std::{
-    fs::{File, OpenOptions},
-    io::{BufWriter, Read, Write},
-    path::PathBuf,
-    rc::Rc,
-    str,
-};
+use std::path::PathBuf;
 
-use deno_ast;
-use deno_core::{
-    ModuleLoader, ModuleSource, ModuleSpecifier, ModuleType, error::AnyError,
-    futures::future::FutureExt,
-};
-use deno_runtime::{
-    deno_core::{
-        self, ModuleLoadResponse, ModuleSourceCode, RequestedModuleType, ResolutionKind,
-        error::{custom_error, generic_error},
-    },
-    deno_fetch::{
-        CreateHttpClientOptions, create_http_client,
-        reqwest::{self, Response, Url, header::LOCATION},
-    },
+use deno_error::JsErrorBox;
+use deno_runtime::deno_core::{
+    ModuleLoadOptions, ModuleLoadReferrer, ModuleLoadResponse, ModuleLoader, ModuleResolveResponse,
+    ModuleSource, ModuleSourceCode, ModuleSpecifier, ModuleType, ResolutionKind,
+    futures::FutureExt, resolve_import, url::Url,
 };
 use ring::digest::{Context, SHA256};
 
 pub struct WdModuleLoader {
     module_cache_dir: PathBuf,
 }
+
 impl WdModuleLoader {
-    pub fn new(module_cache_dir: PathBuf) -> Rc<Self> {
-        Rc::new(Self { module_cache_dir })
+    pub fn new(module_cache_dir: PathBuf) -> Self {
+        Self { module_cache_dir }
     }
 }
 
@@ -38,103 +24,52 @@ impl ModuleLoader for WdModuleLoader {
         specifier: &str,
         referrer: &str,
         _kind: ResolutionKind,
-    ) -> Result<ModuleSpecifier, AnyError> {
+    ) -> ModuleResolveResponse {
         if specifier.starts_with("wd://") {
-            ModuleSpecifier::parse(specifier).map_err(|err| err.into())
+            ModuleSpecifier::parse(specifier).map_err(JsErrorBox::from_err)
         } else {
-            let referrer = deno_runtime::deno_core::resolve_url(referrer)?;
-            deno_runtime::deno_core::resolve_import(specifier, referrer.as_str())
-                .map_err(|err| err.into())
+            resolve_import(specifier, referrer).map_err(JsErrorBox::from_err)
         }
     }
 
     fn load(
         &self,
         module_specifier: &ModuleSpecifier,
-        _maybe_referrer: Option<&ModuleSpecifier>,
-        _is_dynamic: bool,
-        _requested_module_type: RequestedModuleType,
+        _maybe_referrer: Option<&ModuleLoadReferrer>,
+        _options: ModuleLoadOptions,
     ) -> ModuleLoadResponse {
         let module_specifier = module_specifier.clone();
-        let mut module_cache_path = self.module_cache_dir.clone();
+        let module_cache_dir = self.module_cache_dir.clone();
         ModuleLoadResponse::Async(
             async move {
-                let code = String::from_utf8(if module_specifier.scheme().starts_with("http") {
-                    if let Some(cache_filename) = url_to_filename(&module_specifier) {
-                        module_cache_path.push(cache_filename);
-                        if module_cache_path.exists() {
-                            let mut buf: Vec<u8> = vec![];
-                            if let Ok(mut file) = File::open(module_cache_path) {
-                                let _ = file.read_to_end(&mut buf);
-                            }
-                            buf
-                        } else {
-                            let url = module_specifier.to_string();
-                            let client =
-                                create_http_client("wild-doc", CreateHttpClientOptions::default())?;
-                            let resp = get_redirected_response(&client, url).await?;
-                            match resp.bytes().await {
-                                Ok(resp) => {
-                                    if !resp.is_empty() {
-                                        if let Some(dir) = module_cache_path.parent() {
-                                            if let Ok(()) = std::fs::create_dir_all(dir) {
-                                                if let Ok(file) = OpenOptions::new()
-                                                    .create(true)
-                                                    .write(true)
-                                                    .truncate(true)
-                                                    .open(module_cache_path)
-                                                {
-                                                    let _ = BufWriter::new(file).write_all(&resp);
-                                                }
-                                            }
-                                        }
-                                    }
-                                    resp.into()
-                                }
-                                Err(e) => {
-                                    println!("{:?}", e);
-                                    vec![]
-                                }
-                            }
-                        }
-                    } else {
-                        vec![]
-                    }
+                let code = if module_specifier.scheme().starts_with("http") {
+                    load_remote(&module_specifier, module_cache_dir).await?
                 } else {
                     let path = module_specifier.to_file_path().map_err(|_| {
-                        deno_core::error::generic_error(format!(
-                            "Provided module specifier \"{}\" is not a file URL.",
-                            module_specifier
+                        JsErrorBox::generic(format!(
+                            "Provided module specifier \"{module_specifier}\" is not a file URL."
                         ))
                     })?;
-                    std::fs::read(path)?
-                })?;
+                    std::fs::read(path).map_err(JsErrorBox::from_err)?
+                };
+                let code =
+                    String::from_utf8(code).map_err(|e| JsErrorBox::generic(e.to_string()))?;
 
-                let string_specifier = module_specifier.to_string();
+                let specifier = module_specifier.as_str();
+                let code = if specifier.ends_with(".ts") {
+                    transpile(&module_specifier, code)?
+                } else {
+                    code
+                };
                 Ok(ModuleSource::new(
-                    if string_specifier.ends_with(".json") {
+                    if specifier.ends_with(".json") {
                         ModuleType::Json
                     } else {
                         ModuleType::JavaScript
                     },
-                    ModuleSourceCode::String(
-                        if string_specifier.ends_with(".ts") {
-                            deno_ast::parse_module(deno_ast::ParseParams {
-                                specifier: module_specifier.clone(),
-                                text_info: deno_ast::SourceTextInfo::new(code.into()),
-                                media_type: deno_ast::MediaType::TypeScript,
-                                capture_tokens: true,
-                                scope_analysis: true,
-                                maybe_syntax: None,
-                            })?
-                            .transpile(&Default::default())?
-                            .text
-                        } else {
-                            code
-                        }
-                        .into(),
-                    ),
+                    ModuleSourceCode::String(code.into()),
                     &module_specifier,
+                    None,
                 ))
             }
             .boxed_local(),
@@ -142,66 +77,53 @@ impl ModuleLoader for WdModuleLoader {
     }
 }
 
-fn resolve_url_from_location(base_url: &Url, location: &str) -> Url {
-    if location.starts_with("http://") || location.starts_with("https://") {
-        // absolute uri
-        Url::parse(location).expect("provided redirect url should be a valid url")
-    } else if location.starts_with("//") {
-        // "//" authority path-abempty
-        Url::parse(&format!("{}:{}", base_url.scheme(), location))
-            .expect("provided redirect url should be a valid url")
-    } else if location.starts_with('/') {
-        // path-absolute
-        base_url
-            .join(location)
-            .expect("provided redirect url should be a valid url")
-    } else {
-        // assuming path-noscheme | path-empty
-        let base_url_path_str = base_url.path().to_owned();
-        // Pop last part or url (after last slash)
-        let segs: Vec<_> = base_url_path_str.rsplitn(2, '/').collect();
-        let new_path = format!("{}/{}", segs.last().unwrap_or(&""), location);
-        base_url
-            .join(&new_path)
-            .expect("provided redirect url should be a valid url")
+/// Loads a remote module, using the module cache directory.
+async fn load_remote(url: &Url, mut cache_path: PathBuf) -> Result<Vec<u8>, JsErrorBox> {
+    let cache_filename = url_to_filename(url)
+        .ok_or_else(|| JsErrorBox::generic(format!("Can not cache the module \"{url}\".")))?;
+    cache_path.push(cache_filename);
+    if let Ok(code) = std::fs::read(&cache_path) {
+        return Ok(code);
     }
+
+    // reqwest follows redirects.
+    let response = reqwest::get(url.as_str())
+        .await
+        .and_then(|response| response.error_for_status())
+        .map_err(|e| JsErrorBox::generic(e.to_string()))?;
+    let code = response
+        .bytes()
+        .await
+        .map_err(|e| JsErrorBox::generic(e.to_string()))?
+        .to_vec();
+    if !code.is_empty()
+        && let Some(dir) = cache_path.parent()
+        && std::fs::create_dir_all(dir).is_ok()
+    {
+        let _ = std::fs::write(&cache_path, &code);
+    }
+    Ok(code)
 }
-fn resolve_redirect_from_response(request_url: &Url, response: &Response) -> Result<Url, AnyError> {
-    debug_assert!(response.status().is_redirection());
-    if let Some(location) = response.headers().get(LOCATION) {
-        let location_string = location.to_str().unwrap();
-        let new_url = resolve_url_from_location(request_url, location_string);
-        Ok(new_url)
-    } else {
-        Err(generic_error(format!(
-            "Redirection from '{}' did not provide location header",
-            request_url
-        )))
-    }
-}
-async fn get_redirected_response<U: reqwest::IntoUrl>(
-    client: &reqwest::Client,
-    url: U,
-) -> Result<Response, AnyError> {
-    let mut url = url.into_url()?;
-    let mut response = client.get(url.clone()).send().await?;
-    let status = response.status();
-    if status.is_redirection() {
-        for _ in 0..5 {
-            let new_url = resolve_redirect_from_response(&url, &response)?;
-            let new_response = client.get(new_url.clone()).send().await?;
-            let status = new_response.status();
-            if status.is_redirection() {
-                response = new_response;
-                url = new_url;
-            } else {
-                return Ok(new_response);
-            }
-        }
-        Err(custom_error("Http", "Too many redirects."))
-    } else {
-        Ok(response)
-    }
+
+fn transpile(specifier: &ModuleSpecifier, code: String) -> Result<String, JsErrorBox> {
+    let parsed = deno_ast::parse_module(deno_ast::ParseParams {
+        specifier: specifier.clone(),
+        text: code.into(),
+        media_type: deno_ast::MediaType::TypeScript,
+        capture_tokens: false,
+        scope_analysis: false,
+        maybe_syntax: None,
+    })
+    .map_err(|e| JsErrorBox::generic(e.to_string()))?;
+    Ok(parsed
+        .transpile(
+            &Default::default(),
+            &Default::default(),
+            &Default::default(),
+        )
+        .map_err(|e| JsErrorBox::generic(e.to_string()))?
+        .into_source()
+        .text)
 }
 
 fn url_to_filename(url: &Url) -> Option<PathBuf> {
@@ -212,8 +134,7 @@ fn url_to_filename(url: &Url) -> Option<PathBuf> {
         rest_str.push('?');
         rest_str.push_str(query);
     }
-    let hashed_filename = checksum_gen(&[rest_str.as_bytes()]);
-    cache_filename.push(hashed_filename);
+    cache_filename.push(checksum_gen(&[rest_str.as_bytes()]));
     Some(cache_filename)
 }
 
@@ -225,32 +146,31 @@ fn base_url_to_filename(url: &Url) -> Option<PathBuf> {
 
     match scheme {
         "http" | "https" => {
-            let host = url.host_str().unwrap();
+            let host = url.host_str()?;
             let host_port = match url.port() {
-                Some(port) => format!("{}_PORT{}", host, port),
+                Some(port) => format!("{host}_PORT{port}"),
                 None => host.to_string(),
             };
             out.push(host_port);
         }
         "data" | "blob" => (),
         scheme => {
-            eprintln!("Don't know how to create cache name for scheme: {}", scheme);
+            eprintln!("Don't know how to create cache name for scheme: {scheme}");
             return None;
         }
     };
 
     Some(out)
 }
+
 pub fn checksum_gen(v: &[impl AsRef<[u8]>]) -> String {
     let mut ctx = Context::new(&SHA256);
     for src in v {
         ctx.update(src.as_ref());
     }
-    let digest = ctx.finish();
-    let out: Vec<_> = digest
+    ctx.finish()
         .as_ref()
         .iter()
-        .map(|byte| format!("{:02x}", byte))
-        .collect();
-    out.join("")
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
